@@ -1,0 +1,159 @@
+---
+# ================================================================
+#  MLStation article template
+#  Folders starting with "_" are never published, so this file is safe here.
+#  Create a new article with:  python new_article.py <section/topic> "Title"
+# ================================================================
+title: "{{TITLE}}"
+description: "One or two sentences that tell the reader exactly what they will learn."
+author: "MLStation"
+date: {{DATE}}
+categories: [{{CATEGORY}}]
+draft: true          # change to false (or delete) when ready to publish
+# image: thumbnail.png   # optional: social-share image placed next to this file
+---
+
+Open with two or three sentences: the problem, why it matters, and what the reader will be able to do by the end.
+
+::: {.callout-tip}
+## What you will learn
+- First key idea
+- Second key idea
+- Third key idea
+:::
+
+## Intuition
+
+Explain the idea in plain language first. Use a concrete example before any symbols.
+
+## The math
+
+Inline math uses single dollar signs: the sample mean is $\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i$.
+
+Display math uses double dollar signs. Add a label to number and reference it:
+
+$$
+\hat{\sigma}^2 = \frac{1}{n-1}\sum_{i=1}^{n}\left(x_i - \bar{x}\right)^2
+$$ {#eq-variance}
+
+Refer to it anywhere as @eq-variance.
+
+Multi-line derivations use `aligned`:
+
+$$
+\begin{aligned}
+\mathbb{E}[\bar{x}] &= \mathbb{E}\Big[\tfrac{1}{n}\textstyle\sum_i x_i\Big] \\
+                    &= \tfrac{1}{n}\textstyle\sum_i \mathbb{E}[x_i] \\
+                    &= \mu
+\end{aligned}
+$$
+
+::: {#def-estimator}
+## Unbiased estimator
+An estimator $\hat{\theta}$ is unbiased if $\mathbb{E}[\hat{\theta}] = \theta$.
+:::
+
+## The code
+
+A plain code block (shown, not run) with a copy button:
+
+```python
+import numpy as np
+x = np.array([2.1, 3.4, 1.9, 4.2])
+print(x.mean(), x.var(ddof=1))
+```
+
+A block with a file name:
+
+```{.python filename="variance.py"}
+def sample_variance(x):
+    m = sum(x) / len(x)
+    return sum((xi - m) ** 2 for xi in x) / (len(x) - 1)
+```
+
+The same idea in several languages, as tabs:
+
+::: {.panel-tabset}
+## Python
+```python
+df["value"].var(ddof=1)
+```
+## R
+```r
+var(df$value)
+```
+## SQL
+```sql
+SELECT VAR_SAMP(value) AS sample_variance FROM measurements;
+```
+:::
+
+## A figure from live code
+
+This cell runs on your computer when you render, and the chart is saved automatically.
+
+```{python}
+#| label: fig-sampling
+#| fig-cap: "Sample means cluster around the true mean as n grows."
+#| code-fold: true
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(7)
+ns = [5, 30, 200]
+fig, ax = plt.subplots(figsize=(7, 3.4))
+for n, c in zip(ns, ["#C7D2FE", "#818CF8", "#4F46E5"]):
+    means = rng.normal(0, 1, (4000, n)).mean(axis=1)
+    ax.hist(means, bins=60, density=True, alpha=.85, color=c, label=f"n = {n}")
+ax.set_xlabel("Sample mean"); ax.set_ylabel("Density")
+ax.spines[["top", "right"]].set_visible(False)
+ax.legend(frameon=False)
+plt.tight_layout(); plt.show()
+```
+
+See @fig-sampling for the effect of sample size.
+
+## A comparison table
+
+| Estimator | Formula | Unbiased? |
+|---|---|---|
+| Sample mean | $\bar{x}$ | Yes |
+| Variance with $n$ | $\frac{1}{n}\sum (x_i-\bar{x})^2$ | No |
+| Variance with $n-1$ | $\frac{1}{n-1}\sum (x_i-\bar{x})^2$ | Yes |
+
+: Common estimators {#tbl-estimators}
+
+## Callouts
+
+::: {.callout-note}
+## Note
+Background or a helpful aside.
+:::
+
+::: {.callout-warning}
+## Common mistake
+Something readers often get wrong.
+:::
+
+::: {.callout-important collapse="true"}
+## Deep dive (click to expand)
+Optional detail that advanced readers can open.
+:::
+
+## Diagram
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A[Data] --> B[Estimate] --> C[Uncertainty] --> D[Decision]
+```
+
+## Summary
+
+- Restate the key idea in one line.
+- Give the single most important formula or command.
+- Point to the next article to read.
+
+Footnotes look like this.[^1] Citations from `references.bib` look like this [@casella2002].
+
+[^1]: A footnote appears as a hover preview.

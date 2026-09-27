@@ -450,3 +450,60 @@ form.oi-3a86ea, .observablehq form { font-family: $font-family-sans-serif; font-
   .eyebrow { font-size: .68rem; letter-spacing: .08em; }
   .hero-title { font-size: 2.35rem; }
 }
+
+/* ---------- Step 4: authoring components ---------- */
+/* Figures from code never overflow the column */
+.cell-output-display img, figure img, .quarto-figure img { max-width: 100% !important; height: auto !important; }
+.quarto-figure { margin: 1.75rem 0; }
+
+/* Tables: left-aligned, readable */
+main table td, main table th { text-align: left !important; vertical-align: top; }
+main table caption, .table-caption, figcaption.quarto-float-caption-top {
+  caption-side: top; font-size: .82rem; color: var(--ms-muted); text-align: left !important; margin-bottom: .5rem;
+}
+
+/* Tabsets (Python / R / SQL) */
+.panel-tabset { margin: 1.75rem 0; }
+.panel-tabset .nav-tabs {
+  border: 0; gap: .35rem; padding: .3rem; background: var(--ms-surface);
+  border: 1px solid var(--ms-border); border-radius: 12px; display: inline-flex; margin-bottom: .75rem;
+}
+.panel-tabset .nav-tabs .nav-link {
+  border: 0 !important; border-radius: 8px !important; padding: .35rem .9rem;
+  font-size: .85rem; font-weight: 600; color: var(--ms-muted); background: transparent;
+}
+.panel-tabset .nav-tabs .nav-link:hover { color: var(--ms-text); }
+.panel-tabset .nav-tabs .nav-link.active {
+  background: var(--ms-surface-2) !important; color: var(--ms-accent) !important; box-shadow: var(--ms-shadow);
+}
+.panel-tabset .tab-content { border: 0 !important; padding: 0 !important; }
+.panel-tabset .tab-content div.sourceCode { margin-top: 0; }
+
+/* Definitions, theorems, examples */
+div[id^="def-"], div[id^="thm-"], div[id^="lem-"], div[id^="exm-"], div[id^="prp-"], div[id^="cor-"] {
+  border: 1px solid var(--ms-border); border-radius: 14px; background: var(--ms-surface);
+  padding: 1rem 1.25rem; margin: 1.75rem 0;
+}
+div[id^="def-"] .definition-title, div[id^="thm-"] .theorem-title,
+div[id^="exm-"] .example-title { color: var(--sec, var(--ms-accent)); font-weight: 700; }
+div[id^="def-"] p:last-child, div[id^="thm-"] p:last-child { margin-bottom: 0; }
+
+/* Equation numbers and cross-references */
+.katex-display .eqn-num, span.math.display + .eqn-num { color: var(--ms-faint); }
+a.quarto-xref { font-weight: 600; text-decoration: none !important; }
+
+/* Code folding */
+details.code-fold > summary {
+  font-size: .82rem; font-weight: 600; color: var(--ms-muted); cursor: pointer; margin: .5rem 0;
+  list-style: none; display: inline-flex; align-items: center; gap: .4rem;
+}
+details.code-fold > summary::before { content: "\F4FE"; font-family: "bootstrap-icons"; }
+details.code-fold[open] > summary::before { content: "\F2EA"; }
+
+/* Mermaid diagrams */
+.cell-output-display .mermaid, pre.mermaid, .mermaid-js { display: flex; justify-content: center; }
+.quarto-figure-center .mermaid svg, .mermaid svg { max-width: 100%; }
+
+/* References and footnotes */
+#quarto-bibliography, section.footnotes { font-size: .88rem; color: var(--ms-muted); border-top: 1px solid var(--ms-border); padding-top: 1.25rem; margin-top: 3rem; }
+section.footnotes h2, #quarto-bibliography h2 { font-size: .72rem !important; text-transform: uppercase; letter-spacing: .09em; color: var(--ms-faint); margin-top: 0 !important; }

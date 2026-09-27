@@ -274,10 +274,18 @@ format:
     fig-responsive: true
     lightbox: true
     title-block-banner: false
+    code-fold: false
+    code-summary: "Show the code"
+    fig-dpi: 160
+    mermaid:
+      theme: neutral
 
 language:
   listing-page-no-matches: "New articles are on the way. Check back soon."
   search-no-results-text: "Nothing found. Try another term."
+
+bibliography: references.bib
+link-citations: true
 
 execute:
   freeze: auto
