@@ -1,9 +1,9 @@
 /.quarto/
 _site/
-_freeze/
 .venv/
 __pycache__/
 *.ipynb_checkpoints
 .DS_Store
 
 **/*.quarto_ipynb
+.venv_mywebspace/

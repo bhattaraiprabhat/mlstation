@@ -1,22 +1,25 @@
 # ============================================================
-#  MLStation — site configuration (Step 2)
+#  MLStation — site configuration
 # ============================================================
 project:
   type: website
   output-dir: _site
   render:
-    - "**/*.qmd"          # render only Quarto pages (skips README.md)
+    - "**/*.qmd"
   resources:
-    - CNAME               # keeps the custom domain on every publish
+    - CNAME
+    - assets/img/*
 
 website:
   title: "MLStation"
   description: "A clear, practical station for Machine Learning, AI, Statistics and Deployment."
   site-url: "https://mlstation.com"
   repo-url: "https://github.com/YOUR-USERNAME/mlstation"
+  favicon: assets/img/favicon.svg
   search:
     location: navbar
     type: overlay
+    copy-button: true
   reader-mode: true
   page-navigation: true
   back-to-top-navigation: true
@@ -25,8 +28,9 @@ website:
   twitter-card: true
 
   navbar:
+    logo: assets/img/logo.svg
+    logo-alt: "MLStation logo"
     title: "MLStation"
-    background: light
     collapse-below: lg
     left:
       - text: "Home"
@@ -34,66 +38,189 @@ website:
       - text: "ML"
         menu:
           - text: "Overview"
+            icon: cpu
             href: ml/index.qmd
           - text: "---"
-          - text: "Tools"
-            href: ml/tools/index.qmd
+          - text: "Foundations"
+          - text: "Supervised Learning"
+            icon: bullseye
+            href: ml/supervised/index.qmd
+          - text: "Unsupervised Learning"
+            icon: diagram-2
+            href: ml/unsupervised/index.qmd
+          - text: "Deep Learning"
+            icon: layers
+            href: ml/deep-learning/index.qmd
+          - text: "Feature Engineering"
+            icon: sliders
+            href: ml/feature-engineering/index.qmd
+          - text: "---"
+          - text: "Practice"
           - text: "Algorithms"
+            icon: braces
             href: ml/algorithms/index.qmd
           - text: "Evaluation"
+            icon: clipboard-check
             href: ml/evaluation/index.qmd
+          - text: "Tools"
+            icon: tools
+            href: ml/tools/index.qmd
       - text: "AI"
         menu:
           - text: "Overview"
+            icon: stars
             href: ai/index.qmd
           - text: "---"
-          - text: "Tools"
-            href: ai/tools/index.qmd
-          - text: "Agentic AI"
-            href: ai/agentic-ai/index.qmd
-          - text: "LLMs"
+          - text: "Models"
+          - text: "Large Language Models"
+            icon: chat-square-text
             href: ai/llms/index.qmd
+          - text: "Prompt Engineering"
+            icon: pencil-square
+            href: ai/prompt-engineering/index.qmd
+          - text: "Computer Vision"
+            icon: eye
+            href: ai/computer-vision/index.qmd
+          - text: "NLP"
+            icon: translate
+            href: ai/nlp/index.qmd
+          - text: "---"
+          - text: "Systems"
           - text: "RAG"
+            icon: database
             href: ai/rag/index.qmd
+          - text: "Agentic AI"
+            icon: robot
+            href: ai/agentic-ai/index.qmd
+          - text: "MCP & Tool Use"
+            icon: plug
+            href: ai/mcp/index.qmd
+          - text: "Tools"
+            icon: tools
+            href: ai/tools/index.qmd
       - text: "Statistics"
         menu:
           - text: "Overview"
+            icon: bar-chart-line
             href: statistics/index.qmd
           - text: "---"
+          - text: "Foundations"
+          - text: "Descriptive Statistics"
+            icon: table
+            href: statistics/descriptive/index.qmd
           - text: "Probability"
+            icon: dice-5
             href: statistics/probability/index.qmd
+          - text: "Distributions"
+            icon: graph-up
+            href: statistics/distributions/index.qmd
+          - text: "---"
           - text: "Inference"
+          - text: "Statistical Inference"
+            icon: search
             href: statistics/inference/index.qmd
+          - text: "Hypothesis Testing"
+            icon: check2-square
+            href: statistics/hypothesis-testing/index.qmd
           - text: "Regression"
+            icon: graph-up-arrow
             href: statistics/regression/index.qmd
-          - text: "Bayesian"
+          - text: "Bayesian Methods"
+            icon: diagram-3
             href: statistics/bayesian/index.qmd
+          - text: "---"
+          - text: "Applied"
+          - text: "Time Series"
+            icon: clock-history
+            href: statistics/time-series/index.qmd
+          - text: "Experimentation & A/B Testing"
+            icon: toggles
+            href: statistics/experimentation/index.qmd
       - text: "Software"
         menu:
           - text: "Overview"
+            icon: code-slash
             href: software/index.qmd
           - text: "---"
+          - text: "Languages"
           - text: "Python"
+            icon: filetype-py
             href: software/python/index.qmd
           - text: "SQL"
+            icon: database
             href: software/sql/index.qmd
           - text: "R"
+            icon: r-circle
             href: software/r/index.qmd
-          - text: "Git"
+          - text: "---"
+          - text: "Workflow"
+          - text: "Git & GitHub"
+            icon: git
             href: software/git/index.qmd
+          - text: "Linux & CLI"
+            icon: terminal
+            href: software/linux/index.qmd
+          - text: "Spark & Big Data"
+            icon: hdd-stack
+            href: software/big-data/index.qmd
       - text: "Deployment"
         menu:
           - text: "Overview"
+            icon: rocket-takeoff
             href: deployment/index.qmd
           - text: "---"
+          - text: "Build"
           - text: "Tools"
+            icon: tools
             href: deployment/tools/index.qmd
+          - text: "MLOps"
+            icon: arrow-repeat
+            href: deployment/mlops/index.qmd
+          - text: "Docker & Containers"
+            icon: box-seam
+            href: deployment/containers/index.qmd
+          - text: "Cloud Platforms"
+            icon: cloud
+            href: deployment/cloud/index.qmd
+          - text: "---"
+          - text: "Operate"
           - text: "Scale"
+            icon: arrows-angle-expand
             href: deployment/scale/index.qmd
+          - text: "Monitoring"
+            icon: activity
+            href: deployment/monitoring/index.qmd
           - text: "Maintenance"
+            icon: wrench-adjustable
             href: deployment/maintenance/index.qmd
-          - text: "Update"
+          - text: "Updates & Versioning"
+            icon: arrow-up-circle
             href: deployment/update/index.qmd
+      - text: "Resources"
+        menu:
+          - text: "Overview"
+            icon: journal-bookmark
+            href: resources/index.qmd
+          - text: "---"
+          - text: "Learn"
+          - text: "Learning Paths"
+            icon: signpost-split
+            href: resources/learning-paths/index.qmd
+          - text: "Cheat Sheets"
+            icon: file-earmark-text
+            href: resources/cheat-sheets/index.qmd
+          - text: "Glossary"
+            icon: book
+            href: resources/glossary/index.qmd
+          - text: "---"
+          - text: "Explore"
+          - text: "Paper Notes"
+            icon: journal-text
+            href: resources/papers/index.qmd
+          - text: "Datasets"
+            icon: collection
+            href: resources/datasets/index.qmd
+
     right:
       - text: "About"
         href: about.qmd
@@ -102,7 +229,8 @@ website:
         aria-label: GitHub
 
   page-footer:
-    left: "© 2026 MLStation · Machine Learning, AI & Statistics"
+    left: |
+      **MLStation** · Machine Learning, AI & Statistics, explained clearly.
     center:
       - text: "About"
         href: about.qmd
@@ -110,15 +238,21 @@ website:
         href: privacy.qmd
       - text: "Contact"
         href: contact.qmd
-    right: "Built with Quarto · Hosted on GitHub Pages"
+    right: "© 2026 MLStation"
 
 format:
   html:
-    # Temporary built-in themes. Step 3 replaces them with the MLStation design system.
     theme:
-      light: cosmo
-      dark: darkly
-    # Reading experience
+      light: [assets/css/light.scss, assets/css/common.scss]
+      dark:  [assets/css/dark.scss,  assets/css/common.scss]
+    respect-user-color-scheme: true
+    include-in-header: _includes/head.html
+    include-after-body: _includes/after-body.html
+    grid:
+      body-width: 760px
+      sidebar-width: 260px
+      margin-width: 260px
+      gutter-width: 2.5rem
     toc: true
     toc-depth: 3
     toc-location: right
@@ -128,21 +262,24 @@ format:
     link-external-newwindow: true
     footnotes-hover: true
     citations-hover: true
-    # Math (LaTeX)
     html-math-method: katex
-    # Code
     code-copy: true
-    code-overflow: wrap
+    code-overflow: scroll
     code-line-numbers: false
+    code-block-bg: true
     highlight-style:
       light: github
       dark: github-dark
-    # Figures
     fig-align: center
     fig-responsive: true
     lightbox: true
+    title-block-banner: false
+
+language:
+  listing-page-no-matches: "New articles are on the way. Check back soon."
+  search-no-results-text: "Nothing found. Try another term."
 
 execute:
-  freeze: auto        # run code once locally; GitHub reuses saved results
+  freeze: auto
   echo: true
   warning: false

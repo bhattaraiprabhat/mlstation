@@ -1,0 +1,52 @@
+---
+title: "The Agent Loop: How AI Agents Think and Act"
+description: "A clear mental model of agentic AI: the observe, reason, act loop, tool calling, and a minimal Python implementation."
+author: "MLStation"
+date: 2026-09-25
+categories: [AI, Agentic AI]
+---
+
+An AI agent is a language model placed inside a loop. Instead of answering once, it can **decide to use tools**, read the results, and continue until the task is done.
+
+## The loop
+
+1. **Observe** the goal and everything learned so far.
+2. **Reason** about the next best step.
+3. **Act** by calling a tool, or finish with an answer.
+4. Append the result to memory and repeat.
+
+Formally, at step $t$ the policy $\pi$ chooses an action from the history $h_t$:
+
+$$
+a_t \sim \pi_\theta(a \mid h_t), \qquad h_{t+1} = h_t \oplus (a_t, o_t)
+$$
+
+where $o_t$ is the observation returned by the tool.
+
+## A minimal agent in Python
+
+```python
+TOOLS = {
+    "add": lambda a, b: a + b,
+    "multiply": lambda a, b: a * b,
+}
+
+def run_agent(llm, goal, max_steps=5):
+    history = [{"role": "user", "content": goal}]
+    for _ in range(max_steps):
+        reply = llm(history, tools=list(TOOLS))        # model decides
+        if reply.get("tool") is None:
+            return reply["content"]                      # final answer
+        result = TOOLS[reply["tool"]](**reply["args"])  # act
+        history.append({"role": "tool", "content": str(result)})
+    return "Stopped: step limit reached."
+```
+
+::: {.callout-caution}
+## Always cap the loop
+Agents can get stuck repeating actions. A step limit, a cost budget and clear stop conditions are essential in production.
+:::
+
+## Where MCP fits
+
+The **Model Context Protocol (MCP)** standardises how tools are described and called, so one agent can connect to many services without custom glue code for each.

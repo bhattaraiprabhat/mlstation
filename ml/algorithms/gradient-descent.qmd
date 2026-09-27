@@ -1,0 +1,78 @@
+---
+title: "Gradient Descent, Visually Explained"
+description: "See how the learning rate shapes the path to a minimum with an interactive chart you can adjust."
+author: "MLStation"
+date: 2026-09-26
+categories: [ML, Optimization]
+---
+
+Almost every modern model, from logistic regression to large language models, is trained by some variant of gradient descent. The idea is simple: **walk downhill**.
+
+## The update rule
+
+Given a loss $\mathcal{L}(\theta)$, we repeatedly step against the gradient:
+
+$$
+\theta_{t+1} = \theta_t - \eta \, \nabla_\theta \mathcal{L}(\theta_t)
+$$
+
+Here $\eta$ is the **learning rate**. Too small and training crawls; too large and it overshoots or diverges.
+
+## Try it yourself
+
+Move the slider to change $\eta$ and watch 15 steps on $f(x) = x^2$, starting from $x_0 = 4$.
+
+```{ojs}
+//| echo: false
+viewof lr = Inputs.range([0.02, 1.05], {value: 0.3, step: 0.01, label: "Learning rate η"})
+```
+
+```{ojs}
+//| echo: false
+steps = {
+  let x = 4, out = [{step: 0, x, y: x * x}];
+  for (let i = 1; i <= 15; i++) { x = x - lr * 2 * x; out.push({step: i, x, y: x * x}); }
+  return out;
+}
+curve = d3.range(-5, 5.01, 0.05).map(x => ({x, y: x * x}))
+Plot.plot({
+  height: 340, marginLeft: 44,
+  x: {domain: [-5, 5], label: "θ"}, y: {domain: [0, 26], label: "Loss"},
+  style: {fontFamily: "Inter, system-ui, sans-serif", fontSize: "12px", background: "transparent"},
+  marks: [
+    Plot.ruleY([0], {stroke: "currentColor", strokeOpacity: 0.2}),
+    Plot.line(curve, {x: "x", y: "y", stroke: "currentColor", strokeOpacity: 0.35, strokeWidth: 2}),
+    Plot.line(steps.filter(d => Math.abs(d.x) < 5.2), {x: "x", y: "y", stroke: "#6366F1", strokeWidth: 1.5, strokeDasharray: "4,3"}),
+    Plot.dot(steps.filter(d => Math.abs(d.x) < 5.2), {x: "x", y: "y", fill: "#6366F1", r: 4.5, tip: true})
+  ]
+})
+```
+
+::: {.callout-important}
+## What to notice
+For $f(x) = x^2$ the update is $x_{t+1} = (1 - 2\eta)\,x_t$. It converges only when $|1 - 2\eta| < 1$, meaning $0 < \eta < 1$. Push the slider past 1.0 and the steps fly apart.
+:::
+
+## In code
+
+```python
+def gradient_descent(grad, theta0, lr=0.1, steps=100, tol=1e-8):
+    theta = theta0
+    for t in range(steps):
+        step = lr * grad(theta)
+        theta -= step
+        if abs(step) < tol:
+            break
+    return theta
+
+gradient_descent(lambda x: 2 * x, theta0=4.0, lr=0.3)   # → ~0.0
+```
+
+## Variants you will meet
+
+| Variant | Gradient computed on | Typical use |
+|---|---|---|
+| Batch GD | Full dataset | Small, convex problems |
+| Stochastic GD | One example | Online learning |
+| Mini-batch GD | A small batch | Deep learning (default) |
+| Adam | Mini-batch + adaptive moments | Transformers, most modern nets |

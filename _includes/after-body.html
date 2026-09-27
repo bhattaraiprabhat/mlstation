@@ -1,0 +1,40 @@
+<!-- MLStation · reading progress, reading time, code language labels -->
+<div id="ms-progress" aria-hidden="true"></div>
+<script>
+(function () {
+  // 1. Reading progress bar (articles only)
+  var bar = document.getElementById("ms-progress");
+  var isArticle = !!document.querySelector("#title-block-header") && !!document.querySelector("nav#TOC");
+  if (bar && isArticle) {
+    var tick = function () {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.transform = "scaleX(" + (max > 0 ? Math.min(h.scrollTop / max, 1) : 0) + ")";
+    };
+    document.addEventListener("scroll", tick, { passive: true }); tick();
+  }
+
+  // 2. Reading time in the title block
+  var meta = document.querySelector(".quarto-title-meta");
+  var main = document.querySelector("main.content");
+  if (meta && main && isArticle) {
+    var words = (main.innerText || "").trim().split(/\s+/).length;
+    var mins = Math.max(1, Math.round(words / 220));
+    var el = document.createElement("div");
+    el.innerHTML = '<div class="quarto-title-meta-heading">Reading time</div>' +
+                   '<div class="quarto-title-meta-contents"><p>' + mins + ' min</p></div>';
+    meta.appendChild(el);
+  }
+
+  // 3. Language label on every code block
+  var names = { python: "Python", sql: "SQL", r: "R", bash: "Bash", sh: "Shell", yaml: "YAML",
+                json: "JSON", javascript: "JavaScript", js: "JavaScript", html: "HTML", css: "CSS",
+                dockerfile: "Dockerfile", toml: "TOML", markdown: "Markdown", latex: "LaTeX", text: "Text" };
+  document.querySelectorAll("div.sourceCode").forEach(function (div) {
+    var pre = div.querySelector("pre.sourceCode");
+    if (!pre) return;
+    var lang = Array.from(pre.classList).find(function (c) { return names[c]; });
+    if (lang) div.setAttribute("data-lang", names[lang]);
+  });
+})();
+</script>

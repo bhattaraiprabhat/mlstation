@@ -1,0 +1,91 @@
+---
+title: "Linear Regression from First Principles"
+description: "Derive the ordinary least squares estimator, understand what it assumes, and implement it in a few lines of NumPy."
+author: "MLStation"
+date: 2026-09-27
+categories: [Statistics, Regression]
+---
+
+Linear regression is the quiet workhorse of statistics and machine learning. It is simple enough to derive by hand, yet it underpins everything from A/B test analysis to the final layer of a neural network.
+
+::: {.callout-tip}
+## What you will learn
+- How the least squares objective is built
+- How to derive the closed-form solution $\hat{\beta} = (X^\top X)^{-1} X^\top y$
+- How to implement and check it in Python
+:::
+
+## The model
+
+We assume each outcome $y_i$ is a linear function of $p$ features plus noise:
+
+$$
+y_i = \beta_0 + \beta_1 x_{i1} + \dots + \beta_p x_{ip} + \varepsilon_i,
+\qquad \varepsilon_i \sim \mathcal{N}(0, \sigma^2)
+$$
+
+Stacking all $n$ observations gives the compact matrix form $y = X\beta + \varepsilon$, where $X \in \mathbb{R}^{n \times (p+1)}$ includes a column of ones for the intercept.
+
+## The objective
+
+Ordinary least squares chooses $\beta$ to minimise the sum of squared residuals:
+
+$$
+\mathcal{L}(\beta) = \lVert y - X\beta \rVert_2^2 = (y - X\beta)^\top (y - X\beta)
+$$
+
+### Deriving the solution
+
+Expand the loss and take the gradient with respect to $\beta$:
+
+$$
+\nabla_\beta \mathcal{L} = -2X^\top y + 2X^\top X\beta
+$$
+
+Setting the gradient to zero gives the **normal equations**, and solving them gives the estimator:
+
+$$
+X^\top X \hat{\beta} = X^\top y
+\quad\Longrightarrow\quad
+\boxed{\hat{\beta} = (X^\top X)^{-1} X^\top y}
+$$
+
+::: {.callout-note}
+## Why it is a minimum
+The Hessian $\nabla^2_\beta \mathcal{L} = 2X^\top X$ is positive semi-definite, so the loss is convex and any stationary point is a global minimum.
+:::
+
+## Implementation
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(42)
+n = 200
+x = rng.uniform(0, 10, n)
+y = 2.5 + 1.8 * x + rng.normal(0, 1.5, n)
+
+X = np.column_stack([np.ones(n), x])      # add intercept column
+beta_hat = np.linalg.solve(X.T @ X, X.T @ y)
+
+print(f"intercept = {beta_hat[0]:.3f}, slope = {beta_hat[1]:.3f}")
+# intercept ≈ 2.5, slope ≈ 1.8
+```
+
+::: {.callout-warning}
+## Use `solve`, not `inv`
+Computing $(X^\top X)^{-1}$ explicitly is slower and numerically less stable. `np.linalg.solve` or `np.linalg.lstsq` solves the system directly.
+:::
+
+## Key assumptions
+
+| Assumption | Meaning | What breaks if violated |
+|---|---|---|
+| Linearity | $E[y \mid X]$ is linear in $\beta$ | Biased estimates |
+| Independence | Errors are uncorrelated | Wrong standard errors |
+| Homoscedasticity | Constant error variance | Inefficient estimates |
+| No perfect collinearity | $X^\top X$ is invertible | No unique solution |
+
+## Summary
+
+The whole method fits in one line of algebra: $\hat{\beta} = (X^\top X)^{-1} X^\top y$. The real skill is checking the assumptions that make that line trustworthy.

@@ -1,5 +1,15 @@
 ---
-title: "About"
+title: "About MLStation"
+description: "A station for Machine Learning, AI, Statistics and Deployment."
+toc: false
 ---
 
-Coming soon.
+**MLStation** is an independent learning site that explains machine learning, artificial intelligence and statistics with clarity and care.
+
+Every article follows the same principles:
+
+- **Intuition first**, then rigorous math.
+- **Working code** you can copy and run.
+- **Practical focus** on how models behave in production.
+
+The name says it all: a *station* for ML, AI, Statistics and the deployment work that brings them to life.

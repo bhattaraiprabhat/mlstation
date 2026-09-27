@@ -1,5 +1,6 @@
 ---
 title: "Contact"
+toc: false
 ---
 
-Coming soon.
+For questions, corrections or partnership and advertising enquiries, email **hello@mlstation.com**.

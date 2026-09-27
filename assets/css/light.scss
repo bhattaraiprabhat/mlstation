@@ -1,0 +1,54 @@
+/*-- scss:defaults --*/
+// ===== MLStation · Light theme tokens =====
+$ms-bg:          #FCFCFD;
+$ms-surface:     #F5F6F8;
+$ms-surface-2:   #FFFFFF;
+$ms-border:      #E4E7EC;
+$ms-text:        #161B26;
+$ms-muted:       #5A6272;
+$ms-faint:       #98A1B0;
+$ms-accent:      #4F46E5;
+$ms-accent-hover:#3F37C9;
+$ms-accent-soft: #EEF0FF;
+$ms-code-bg:     #F6F8FA;
+
+$body-bg: $ms-bg;
+$body-color: $ms-text;
+$primary: $ms-accent;
+$link-color: $ms-accent;
+$border-color: $ms-border;
+$text-muted: $ms-muted;
+
+$navbar-bg: rgba(252, 252, 253, 0.82);
+$navbar-fg: $ms-text;
+$navbar-hl: $ms-accent;
+$footer-bg: $ms-bg;
+$footer-fg: $ms-muted;
+
+$code-color: #B4235A;
+$code-bg: #F1F3F6;
+$code-block-bg: $ms-code-bg;
+$code-block-border-left: false;
+
+$toc-color: $ms-muted;
+$toc-active-border: $ms-accent;
+
+/*-- scss:rules --*/
+:root {
+  --ms-bg: #{$ms-bg};
+  --ms-surface: #{$ms-surface};
+  --ms-surface-2: #{$ms-surface-2};
+  --ms-border: #{$ms-border};
+  --ms-text: #{$ms-text};
+  --ms-muted: #{$ms-muted};
+  --ms-faint: #{$ms-faint};
+  --ms-accent: #{$ms-accent};
+  --ms-accent-hover: #{$ms-accent-hover};
+  --ms-accent-soft: #{$ms-accent-soft};
+  --ms-code-bg: #{$ms-code-bg};
+  --ms-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px -12px rgba(16, 24, 40, .12);
+  --ms-shadow-lg: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 48px -16px rgba(16, 24, 40, .18);
+  --ms-hero-glow: radial-gradient(60% 60% at 50% 0%, rgba(79, 70, 229, .10) 0%, rgba(79, 70, 229, 0) 70%);
+  --ms-ml: #4F46E5;   --ms-ai: #7C3AED;   --ms-stats: #0E7C86;
+  --ms-soft: #B45309; --ms-deploy: #BE185D; --ms-res: #475569;
+}

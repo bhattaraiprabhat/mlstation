@@ -1,5 +1,6 @@
 ---
-title: "Privacy"
+title: "Privacy Policy"
+toc: false
 ---
 
-Coming soon.
+The full privacy policy is added in the advertising step, before ads are enabled.
