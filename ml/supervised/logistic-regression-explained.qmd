@@ -1,154 +1,186 @@
 ---
 title: "Logistic Regression Explained"
-description: "One or two sentences that tell the reader exactly what they will learn."
+description: "How logistic regression turns a linear score into a probability, how it is trained, and how to read its decision boundary."
 author: "MLStation"
 date: 2026-09-27
 categories: [ML, Supervised]
-draft: true          # change to false (or delete) when ready to publish
-# image: thumbnail.png   # optional: social-share image placed next to this file
+draft: false          # change to false (or delete) when ready to publish
 ---
 
-Open with two or three sentences: the problem, why it matters, and what the reader will be able to do by the end.
+Logistic regression is the go-to model for yes/no questions: will a customer churn, is an email spam, will a loan default. It is simple, fast and easy to explain, which is why it remains a strong baseline.
 
 ::: {.callout-tip}
 ## What you will learn
-- First key idea
-- Second key idea
-- Third key idea
+- How the sigmoid turns any score into a probability
+- How the model is trained with log-loss
+- How to read the decision boundary
 :::
 
 ## Intuition
 
-Explain the idea in plain language first. Use a concrete example before any symbols.
+A linear model gives a score $z$ that can be any number. We need a probability between 0 and 1. The sigmoid function squashes the score into that range.
 
 ## The math
 
-Inline math uses single dollar signs: the sample mean is $\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i$.
-
-Display math uses double dollar signs. Add a label to number and reference it:
+The model computes a linear score and passes it through the sigmoid:
 
 $$
-\hat{\sigma}^2 = \frac{1}{n-1}\sum_{i=1}^{n}\left(x_i - \bar{x}\right)^2
-$$ {#eq-variance}
+z = \mathbf{w}^\top \mathbf{x} + b, \qquad
+\sigma(z) = \frac{1}{1 + e^{-z}}
+$$ {#eq-sigmoid}
 
-Refer to it anywhere as @eq-variance.
-
-Multi-line derivations use `aligned`:
+Training minimises the log-loss (binary cross-entropy):
 
 $$
-\begin{aligned}
-\mathbb{E}[\bar{x}] &= \mathbb{E}\Big[\tfrac{1}{n}\textstyle\sum_i x_i\Big] \\
-                    &= \tfrac{1}{n}\textstyle\sum_i \mathbb{E}[x_i] \\
-                    &= \mu
-\end{aligned}
-$$
+\mathcal{L}(\mathbf{w}, b) = -\frac{1}{n}\sum_{i=1}^{n}\Big[y_i \log \hat{p}_i + (1-y_i)\log(1-\hat{p}_i)\Big]
+$$ {#eq-logloss}
 
-::: {#def-estimator}
-## Unbiased estimator
-An estimator $\hat{\theta}$ is unbiased if $\mathbb{E}[\hat{\theta}] = \theta$.
+where $\hat{p}_i = \sigma(z_i)$ from @eq-sigmoid.
+
+::: {#def-boundary}
+## Decision boundary
+The set of points where $\hat{p} = 0.5$, which is exactly where $z = 0$. For two features it is a straight line.
 :::
+
+## Try it yourself
+
+Move the slider to change the weight $w$. A larger weight makes the model more confident.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof w = Inputs.range([0.2, 5], {value: 1, step: 0.1, label: "Steepness w"})
+```
+
+```{ojs}
+//| echo: false
+data = d3.range(-8, 8.01, 0.05).map(z => ({z, p: 1 / (1 + Math.exp(-w * z))}))
+Plot.plot({
+  ...msStyle,
+  y: {domain: [0, 1], label: "Probability"},
+  x: {label: "z"},
+  marks: [
+    Plot.line(data, {x: "z", y: "p", stroke: ms.indigo, strokeWidth: 2.5}),
+    Plot.ruleY([0.5], {strokeDasharray: "4,4", strokeOpacity: 0.4})
+  ]
+})
+```
+
+## The sigmoid, interactively
+
+Hover over the curve to read exact probabilities. Drag to zoom and double-click to reset.
+
+```{python}
+#| label: fig-sigmoid
+#| fig-cap: "The sigmoid maps any score to a probability between 0 and 1."
+#| code-fold: true
+import numpy as np
+import plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG   # also turns on the site theme
+
+z = np.linspace(-8, 8, 300)
+fig = go.Figure()
+fig.add_scatter(x=z, y=1 / (1 + np.exp(-z)), mode="lines", name="σ(z)",
+                line=dict(color=COLORS["indigo"], width=3),
+                hovertemplate="z = %{x:.2f}<br>p = %{y:.3f}<extra></extra>")
+fig.add_hline(y=0.5, line_dash="dash", line_color="#8A93A3", opacity=0.6)
+fig.update_layout(height=360, xaxis_title="Score z", yaxis_title="Probability",
+                  yaxis_range=[-0.03, 1.03], showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+As @fig-sigmoid shows, large positive scores give probabilities near 1.
+
+## A real classifier
+
+We train a model on two features and colour the plane by predicted probability. Hover any point to see its class.
+
+```{python}
+#| label: fig-boundary
+#| fig-cap: "Predicted probability across the feature space. The dashed line is the 0.5 decision boundary."
+#| code-fold: true
+import numpy as np
+import plotly.graph_objects as go
+from sklearn.datasets import make_classification
+from sklearn.linear_model import LogisticRegression
+from ms_charts import COLORS, PLOTLY_CONFIG
+
+X, y = make_classification(n_samples=300, n_features=2, n_redundant=0,
+                           n_clusters_per_class=1, class_sep=1.2, random_state=4)
+model = LogisticRegression().fit(X, y)
+
+g1 = np.linspace(X[:, 0].min() - .5, X[:, 0].max() + .5, 150)
+g2 = np.linspace(X[:, 1].min() - .5, X[:, 1].max() + .5, 150)
+G1, G2 = np.meshgrid(g1, g2)
+P = model.predict_proba(np.c_[G1.ravel(), G2.ravel()])[:, 1].reshape(G1.shape)
+
+fig = go.Figure()
+fig.add_contour(x=g1, y=g2, z=P, colorscale=[[0, COLORS["teal"]], [0.5, "rgba(138,147,163,0.08)"], [1, COLORS["indigo"]]],
+                opacity=0.45, contours=dict(start=0, end=1, size=0.1), line_width=0,
+                colorbar=dict(title="p(y=1)", thickness=12, len=0.8), hoverinfo="skip")
+fig.add_contour(x=g1, y=g2, z=P, contours=dict(start=0.5, end=0.5, coloring="none"),
+                line=dict(color="#8A93A3", dash="dash", width=2), showscale=False, hoverinfo="skip",
+                name="Decision boundary", showlegend=True)
+for cls, color, name in [(0, COLORS["teal"], "Class 0"), (1, COLORS["indigo"], "Class 1")]:
+    m = y == cls
+    fig.add_scatter(x=X[m, 0], y=X[m, 1], mode="markers", name=name,
+                    marker=dict(color=color, size=7, line=dict(color="white", width=0.8)))
+fig.update_layout(height=440, xaxis_title="Feature 1", yaxis_title="Feature 2")
+fig.show(config=PLOTLY_CONFIG)
+```
 
 ## The code
 
-A plain code block (shown, not run) with a copy button:
+Training a model takes three lines with scikit-learn:
 
-```python
-import numpy as np
-x = np.array([2.1, 3.4, 1.9, 4.2])
-print(x.mean(), x.var(ddof=1))
+```{.python filename="train.py"}
+from sklearn.linear_model import LogisticRegression
+
+model = LogisticRegression().fit(X_train, y_train)
+probs = model.predict_proba(X_test)[:, 1]      # probability of class 1
 ```
 
-A block with a file name:
-
-```{.python filename="variance.py"}
-def sample_variance(x):
-    m = sum(x) / len(x)
-    return sum((xi - m) ** 2 for xi in x) / (len(x) - 1)
-```
-
-The same idea in several languages, as tabs:
+The same idea in other languages:
 
 ::: {.panel-tabset}
 ## Python
 ```python
-df["value"].var(ddof=1)
+from sklearn.linear_model import LogisticRegression
+LogisticRegression().fit(X, y)
 ```
 ## R
 ```r
-var(df$value)
+glm(churn ~ tenure + spend, data = df, family = binomial)
 ```
 ## SQL
 ```sql
-SELECT VAR_SAMP(value) AS sample_variance FROM measurements;
+-- Scoring a trained model inside the warehouse
+SELECT customer_id,
+       1 / (1 + EXP(-(0.8 * tenure - 0.03 * spend + 1.2))) AS churn_probability
+FROM customers;
 ```
 :::
 
-## A figure from live code
+## Metrics to report
 
-This cell runs on your computer when you render, and the chart is saved automatically.
+| Metric | What it tells you |
+|---|---|
+| Accuracy | Share of correct predictions, misleading when classes are imbalanced |
+| Precision / Recall | Quality of positive predictions and share of positives found |
+| ROC AUC | Ranking quality across all thresholds |
+| Log-loss | How well calibrated the probabilities are |
 
-```{python}
-#| label: fig-sampling
-#| fig-cap: "Sample means cluster around the true mean as n grows."
-#| code-fold: true
-import numpy as np
-import matplotlib.pyplot as plt
-
-rng = np.random.default_rng(7)
-ns = [5, 30, 200]
-fig, ax = plt.subplots(figsize=(7, 3.4))
-for n, c in zip(ns, ["#C7D2FE", "#818CF8", "#4F46E5"]):
-    means = rng.normal(0, 1, (4000, n)).mean(axis=1)
-    ax.hist(means, bins=60, density=True, alpha=.85, color=c, label=f"n = {n}")
-ax.set_xlabel("Sample mean"); ax.set_ylabel("Density")
-ax.spines[["top", "right"]].set_visible(False)
-ax.legend(frameon=False)
-plt.tight_layout(); plt.show()
-```
-
-See @fig-sampling for the effect of sample size.
-
-## A comparison table
-
-| Estimator | Formula | Unbiased? |
-|---|---|---|
-| Sample mean | $\bar{x}$ | Yes |
-| Variance with $n$ | $\frac{1}{n}\sum (x_i-\bar{x})^2$ | No |
-| Variance with $n-1$ | $\frac{1}{n-1}\sum (x_i-\bar{x})^2$ | Yes |
-
-: Common estimators {#tbl-estimators}
-
-## Callouts
-
-::: {.callout-note}
-## Note
-Background or a helpful aside.
-:::
+: Common classification metrics {#tbl-metrics}
 
 ::: {.callout-warning}
 ## Common mistake
-Something readers often get wrong.
+Always scale features (for example with `StandardScaler`) before fitting with regularisation, otherwise features with large units dominate the penalty.
 :::
-
-::: {.callout-important collapse="true"}
-## Deep dive (click to expand)
-Optional detail that advanced readers can open.
-:::
-
-## Diagram
-
-```{mermaid}
-%%| echo: false
-flowchart LR
-  A[Data] --> B[Estimate] --> C[Uncertainty] --> D[Decision]
-```
 
 ## Summary
 
-- Restate the key idea in one line.
-- Give the single most important formula or command.
-- Point to the next article to read.
+- Logistic regression is a linear score passed through the sigmoid.
+- It is trained by minimising log-loss (@eq-logloss).
+- The decision boundary is where $z = 0$, a straight line in feature space.
 
-Footnotes look like this.[^1] Citations from `references.bib` look like this [@casella2002].
-
-[^1]: A footnote appears as a hover preview.
+For a rigorous treatment, see @hastie2009.

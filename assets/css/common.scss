@@ -507,3 +507,32 @@ details.code-fold[open] > summary::before { content: "\F2EA"; }
 /* References and footnotes */
 #quarto-bibliography, section.footnotes { font-size: .88rem; color: var(--ms-muted); border-top: 1px solid var(--ms-border); padding-top: 1.25rem; margin-top: 3rem; }
 section.footnotes h2, #quarto-bibliography h2 { font-size: .72rem !important; text-transform: uppercase; letter-spacing: .09em; color: var(--ms-faint); margin-top: 0 !important; }
+
+/* ---------- Step 5: interactive charts ---------- */
+/* Observable inputs (sliders) */
+.observablehq form, form[class^="oi-"], form[class*=" oi-"] {
+  --input-width: 220px; font-family: $font-family-sans-serif !important; font-size: .86rem !important; margin: .35rem 0 !important;
+}
+form[class^="oi-"] > label, form[class*=" oi-"] > label { color: var(--ms-muted); font-weight: 500; width: 130px !important; }
+form[class^="oi-"] input[type="range"], form[class*=" oi-"] input[type="range"] { accent-color: var(--ms-accent); }
+form[class^="oi-"] input[type="number"], form[class*=" oi-"] input[type="number"] {
+  border: 1px solid var(--ms-border); border-radius: 6px; background: var(--ms-surface-2); color: var(--ms-text);
+  padding: .1rem .35rem; font-variant-numeric: tabular-nums;
+}
+.ms-readout {
+  display: inline-flex; align-items: baseline; gap: .8rem; margin: .75rem 0 .25rem;
+  padding: .55rem 1rem; border: 1px solid var(--ms-border); border-radius: 12px; background: var(--ms-surface);
+}
+.ms-readout span { font-size: .85rem; color: var(--ms-muted); }
+.ms-readout b { font-family: $headings-font-family; font-size: 1.35rem; color: var(--ms-accent); font-variant-numeric: tabular-nums; }
+
+/* Chart cards: every chart output sits on a soft surface */
+.cell-output-display:has(.plotly-graph-div),
+.cell-output-display:has(svg[class^="plot-"]) {
+  background: var(--ms-surface-2); border: 1px solid var(--ms-border); border-radius: 16px; padding: .75rem .75rem .25rem;
+}
+.quarto-figure .plotly-graph-div, .cell-output-display .plotly-graph-div { width: 100% !important; }
+.js-plotly-plot .plotly .modebar { background: transparent !important; }
+.js-plotly-plot .plotly .modebar-btn path { fill: var(--ms-faint) !important; }
+.js-plotly-plot .plotly .modebar-btn:hover path { fill: var(--ms-accent) !important; }
+[aria-label="tip"] { font-family: $font-family-sans-serif; }

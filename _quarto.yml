@@ -4,17 +4,19 @@
 project:
   type: website
   output-dir: _site
+  execute-dir: project
   render:
     - "**/*.qmd"
   resources:
     - CNAME
     - assets/img/*
+    - assets/js/*
 
 website:
   title: "MLStation"
   description: "A clear, practical station for Machine Learning, AI, Statistics and Deployment."
   site-url: "https://mlstation.com"
-  repo-url: "https://github.com/YOUR-USERNAME/mlstation"
+  repo-url: "https://github.com/bhattaraiprabhat/mlstation"
   favicon: assets/img/favicon.svg
   search:
     location: navbar
@@ -225,7 +227,7 @@ website:
       - text: "About"
         href: about.qmd
       - icon: github
-        href: "https://github.com/YOUR-USERNAME/mlstation"
+        href: "https://github.com/bhattaraiprabhat/mlstation"
         aria-label: GitHub
 
   page-footer:
