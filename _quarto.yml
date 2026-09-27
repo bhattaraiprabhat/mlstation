@@ -1,0 +1,148 @@
+# ============================================================
+#  MLStation — site configuration (Step 2)
+# ============================================================
+project:
+  type: website
+  output-dir: _site
+  render:
+    - "**/*.qmd"          # render only Quarto pages (skips README.md)
+  resources:
+    - CNAME               # keeps the custom domain on every publish
+
+website:
+  title: "MLStation"
+  description: "A clear, practical station for Machine Learning, AI, Statistics and Deployment."
+  site-url: "https://mlstation.com"
+  repo-url: "https://github.com/YOUR-USERNAME/mlstation"
+  search:
+    location: navbar
+    type: overlay
+  reader-mode: true
+  page-navigation: true
+  back-to-top-navigation: true
+  bread-crumbs: true
+  open-graph: true
+  twitter-card: true
+
+  navbar:
+    title: "MLStation"
+    background: light
+    collapse-below: lg
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "ML"
+        menu:
+          - text: "Overview"
+            href: ml/index.qmd
+          - text: "---"
+          - text: "Tools"
+            href: ml/tools/index.qmd
+          - text: "Algorithms"
+            href: ml/algorithms/index.qmd
+          - text: "Evaluation"
+            href: ml/evaluation/index.qmd
+      - text: "AI"
+        menu:
+          - text: "Overview"
+            href: ai/index.qmd
+          - text: "---"
+          - text: "Tools"
+            href: ai/tools/index.qmd
+          - text: "Agentic AI"
+            href: ai/agentic-ai/index.qmd
+          - text: "LLMs"
+            href: ai/llms/index.qmd
+          - text: "RAG"
+            href: ai/rag/index.qmd
+      - text: "Statistics"
+        menu:
+          - text: "Overview"
+            href: statistics/index.qmd
+          - text: "---"
+          - text: "Probability"
+            href: statistics/probability/index.qmd
+          - text: "Inference"
+            href: statistics/inference/index.qmd
+          - text: "Regression"
+            href: statistics/regression/index.qmd
+          - text: "Bayesian"
+            href: statistics/bayesian/index.qmd
+      - text: "Software"
+        menu:
+          - text: "Overview"
+            href: software/index.qmd
+          - text: "---"
+          - text: "Python"
+            href: software/python/index.qmd
+          - text: "SQL"
+            href: software/sql/index.qmd
+          - text: "R"
+            href: software/r/index.qmd
+          - text: "Git"
+            href: software/git/index.qmd
+      - text: "Deployment"
+        menu:
+          - text: "Overview"
+            href: deployment/index.qmd
+          - text: "---"
+          - text: "Tools"
+            href: deployment/tools/index.qmd
+          - text: "Scale"
+            href: deployment/scale/index.qmd
+          - text: "Maintenance"
+            href: deployment/maintenance/index.qmd
+          - text: "Update"
+            href: deployment/update/index.qmd
+    right:
+      - text: "About"
+        href: about.qmd
+      - icon: github
+        href: "https://github.com/YOUR-USERNAME/mlstation"
+        aria-label: GitHub
+
+  page-footer:
+    left: "© 2026 MLStation · Machine Learning, AI & Statistics"
+    center:
+      - text: "About"
+        href: about.qmd
+      - text: "Privacy"
+        href: privacy.qmd
+      - text: "Contact"
+        href: contact.qmd
+    right: "Built with Quarto · Hosted on GitHub Pages"
+
+format:
+  html:
+    # Temporary built-in themes. Step 3 replaces them with the MLStation design system.
+    theme:
+      light: cosmo
+      dark: darkly
+    # Reading experience
+    toc: true
+    toc-depth: 3
+    toc-location: right
+    toc-title: "On this page"
+    anchor-sections: true
+    smooth-scroll: true
+    link-external-newwindow: true
+    footnotes-hover: true
+    citations-hover: true
+    # Math (LaTeX)
+    html-math-method: katex
+    # Code
+    code-copy: true
+    code-overflow: wrap
+    code-line-numbers: false
+    highlight-style:
+      light: github
+      dark: github-dark
+    # Figures
+    fig-align: center
+    fig-responsive: true
+    lightbox: true
+
+execute:
+  freeze: auto        # run code once locally; GitHub reuses saved results
+  echo: true
+  warning: false

@@ -1,0 +1,16 @@
+---
+title: "Test page"
+---
+
+Inline math: $\hat{\beta} = (X^\top X)^{-1} X^\top y$
+
+Display math:
+
+$$
+\mathcal{L}(\theta) = -\sum_{i=1}^{n} y_i \log p_\theta(x_i)
+$$
+
+```python
+import numpy as np
+print(np.mean())[1][2][3]
+```
