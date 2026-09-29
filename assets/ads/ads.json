@@ -1,18 +1,26 @@
 {
   "_readme": "MLStation ad manager. Add, pause or remove ads here, then run ./publish.sh. Per slot: active sponsor first, then Google AdSense (if enabled), then house ads. Never add a company's name or logo until it has agreed to advertise.",
-
   "settings": {
     "enabled": true,
     "utm": true,
-    "houseAdsIn": ["sidebar", "in-article", "article-end", "home"]
+    "houseAdsIn": [
+      "sidebar",
+      "in-article",
+      "article-end",
+      "home"
+    ]
   },
-
   "adsense": {
     "enabled": false,
-    "client": "",
-    "slots": { "leaderboard": "", "sidebar": "", "in-article": "", "article-end": "", "home": "" }
+    "client": "ca-pub-1905108189269301",
+    "slots": {
+      "leaderboard": "",
+      "sidebar": "",
+      "in-article": "",
+      "article-end": "",
+      "home": ""
+    }
   },
-
   "ads": [
     {
       "id": "house-advertise",
@@ -23,7 +31,11 @@
       "cta": "Advertise here",
       "url": "advertise.html",
       "image": "assets/ads/samples/house-spotlight.svg",
-      "placements": ["sidebar", "in-article", "article-end"],
+      "placements": [
+        "sidebar",
+        "in-article",
+        "article-end"
+      ],
       "weight": 2
     },
     {
@@ -34,7 +46,9 @@
       "text": "Leaderboard placement on the home page.",
       "url": "advertise.html",
       "banner": "assets/ads/samples/house-leaderboard.svg",
-      "placements": ["home"],
+      "placements": [
+        "home"
+      ],
       "weight": 1
     },
     {
@@ -45,10 +59,11 @@
       "text": "Short explanations with the math, the code and the intuition. Suggest a topic.",
       "cta": "Get in touch",
       "url": "contact.html",
-      "placements": ["article-end"],
+      "placements": [
+        "article-end"
+      ],
       "weight": 1
     },
-
     {
       "id": "TEMPLATE-copy-me",
       "_note": "Copy this block for each real sponsor, fill it in, set active to true. Fields you do not have can be deleted.",
@@ -61,8 +76,18 @@
       "text": "Description up to 140 characters, supplied by the sponsor.",
       "cta": "Learn more",
       "url": "https://company.example/landing-page",
-      "placements": ["leaderboard", "sidebar", "in-article", "article-end", "home", "partners"],
-      "sections": ["ml", "ai"],
+      "placements": [
+        "leaderboard",
+        "sidebar",
+        "in-article",
+        "article-end",
+        "home",
+        "partners"
+      ],
+      "sections": [
+        "ml",
+        "ai"
+      ],
       "start": "2026-11-01",
       "end": "2026-11-30",
       "weight": 3

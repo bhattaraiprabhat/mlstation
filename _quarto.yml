@@ -8,6 +8,7 @@ project:
   render:
     - "**/*.qmd"
   resources:
+    - ads.txt
     - CNAME
     - assets/img/*
     - assets/js/*
