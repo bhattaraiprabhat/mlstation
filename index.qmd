@@ -163,6 +163,8 @@ listing:
 
 ```{=html}
 <div class="ms-wrap">
+  <div class="ms-ad-slot" data-placement="home"></div>
+  <div class="ms-ad-slot" data-placement="partners"></div>
   <section class="cta-band">
     <div>
       <h3>Learn one idea deeply, every week.</h3>

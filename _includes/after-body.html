@@ -38,3 +38,13 @@
   });
 })();
 </script>
+
+<!-- MLStation · ad manager (edit assets/ads/ads.json) -->
+<script>
+(function () {
+  var m = document.querySelector('meta[name="quarto:offset"]');
+  var s = document.createElement("script");
+  s.src = (m ? m.getAttribute("content") : "./") + "assets/js/ads.js";
+  s.defer = true; document.body.appendChild(s);
+})();
+</script>

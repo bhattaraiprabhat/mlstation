@@ -11,6 +11,7 @@ project:
     - CNAME
     - assets/img/*
     - assets/js/*
+    - assets/ads/**
 
 website:
   title: "MLStation"
@@ -236,6 +237,8 @@ website:
     center:
       - text: "About"
         href: about.qmd
+      - text: "Advertise"
+        href: advertise.qmd
       - text: "Privacy"
         href: privacy.qmd
       - text: "Contact"

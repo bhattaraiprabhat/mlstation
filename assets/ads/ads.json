@@ -1,0 +1,71 @@
+{
+  "_readme": "MLStation ad manager. Add, pause or remove ads here, then run ./publish.sh. Per slot: active sponsor first, then Google AdSense (if enabled), then house ads. Never add a company's name or logo until it has agreed to advertise.",
+
+  "settings": {
+    "enabled": true,
+    "utm": true,
+    "houseAdsIn": ["sidebar", "in-article", "article-end", "home"]
+  },
+
+  "adsense": {
+    "enabled": false,
+    "client": "ca-pub-0000000000000000",
+    "slots": { "leaderboard": "", "sidebar": "", "in-article": "", "article-end": "", "home": "" }
+  },
+
+  "ads": [
+    {
+      "id": "house-advertise",
+      "house": true,
+      "sponsor": "MLStation",
+      "headline": "Reach engineers who build with AI",
+      "text": "Put your product in front of ML, AI and data practitioners. Clean, clearly labelled placements.",
+      "cta": "Advertise here",
+      "url": "advertise.html",
+      "image": "assets/ads/samples/house-spotlight.svg",
+      "placements": ["sidebar", "in-article", "article-end"],
+      "weight": 2
+    },
+    {
+      "id": "house-home-banner",
+      "house": true,
+      "sponsor": "MLStation",
+      "headline": "Your brand here",
+      "text": "Leaderboard placement on the home page.",
+      "url": "advertise.html",
+      "banner": "assets/ads/samples/house-leaderboard.svg",
+      "placements": ["home"],
+      "weight": 1
+    },
+    {
+      "id": "house-contact",
+      "house": true,
+      "sponsor": "MLStation",
+      "headline": "One clear ML idea at a time",
+      "text": "Short explanations with the math, the code and the intuition. Suggest a topic.",
+      "cta": "Get in touch",
+      "url": "contact.html",
+      "placements": ["article-end"],
+      "weight": 1
+    },
+
+    {
+      "id": "TEMPLATE-copy-me",
+      "_note": "Copy this block for each real sponsor, fill it in, set active to true. Fields you do not have can be deleted.",
+      "active": false,
+      "sponsor": "Company name",
+      "logo": "assets/ads/sponsors/company-logo.svg",
+      "image": "assets/ads/sponsors/company-spotlight-1200x628.png",
+      "banner": "assets/ads/sponsors/company-leaderboard-1456x180.png",
+      "headline": "Headline up to 60 characters",
+      "text": "Description up to 140 characters, supplied by the sponsor.",
+      "cta": "Learn more",
+      "url": "https://company.example/landing-page",
+      "placements": ["leaderboard", "sidebar", "in-article", "article-end", "home", "partners"],
+      "sections": ["ml", "ai"],
+      "start": "2026-11-01",
+      "end": "2026-11-30",
+      "weight": 3
+    }
+  ]
+}

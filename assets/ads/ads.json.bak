@@ -1,0 +1,62 @@
+{
+  "_readme": "MLStation ad manager. Edit this file to add, pause or remove ads, then run ./publish.sh. Priority per slot: active sponsor > Google AdSense (if enabled) > house ad.",
+
+  "settings": {
+    "enabled": true,
+    "utm": true
+  },
+
+  "adsense": {
+    "enabled": false,
+    "client": "ca-pub-0000000000000000",
+    "slots": {
+      "sidebar": "",
+      "in-article": "",
+      "article-end": "",
+      "home": ""
+    }
+  },
+
+  "ads": [
+    {
+      "id": "house-advertise",
+      "house": true,
+      "sponsor": "MLStation",
+      "headline": "Reach engineers who build with AI",
+      "text": "Put your product in front of ML, AI and data practitioners. Clean, clearly labelled placements.",
+      "cta": "Advertise here",
+      "url": "advertise.html",
+      "placements": ["sidebar", "in-article", "article-end", "home"],
+      "weight": 1
+    },
+    {
+      "id": "house-newsletter",
+      "house": true,
+      "sponsor": "MLStation",
+      "headline": "One clear ML idea, every week",
+      "text": "Short explanations with the math, the code and the intuition. No spam.",
+      "cta": "Get in touch",
+      "url": "contact.html",
+      "placements": ["sidebar", "article-end"],
+      "weight": 1
+    },
+
+    {
+      "id": "example-sponsor-template",
+      "_note": "TEMPLATE: copy this block for a real sponsor, fill it in and set active to true. Only use a company's name or logo after they have agreed to advertise.",
+      "active": false,
+      "sponsor": "Example Company",
+      "logo": "assets/ads/example-logo.svg",
+      "image": "",
+      "headline": "Headline supplied by the sponsor",
+      "text": "One or two sentences of copy supplied by the sponsor.",
+      "cta": "Learn more",
+      "url": "https://example.com",
+      "placements": ["sidebar", "in-article"],
+      "sections": ["ml", "ai"],
+      "start": "2026-10-01",
+      "end": "2026-12-31",
+      "weight": 3
+    }
+  ]
+}
