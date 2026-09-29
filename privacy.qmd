@@ -1,6 +1,54 @@
 ---
 title: "Privacy Policy"
-toc: false
+description: "How MLStation handles information, cookies and advertising."
+toc: true
+body-classes: ms-no-ads
 ---
 
-The full privacy policy is added in the advertising step, before ads are enabled.
+*Last updated: 29 September 2026*
+
+This policy explains what information is collected when you visit **mlstation.com** ("MLStation", "we", "us"), how it is used, and the choices you have.
+
+## Information we collect
+
+**You do not need an account to read MLStation.** We do not ask for your name, email or payment details to use the site.
+
+- **Information you send us.** If you email us (for example at hello@mlstation.com), we receive your email address and message, and use them only to reply.
+- **Technical information.** Like most websites, our hosting provider (GitHub Pages) may process your IP address, browser type and pages requested in server logs for security and reliability.
+- **Analytics.** We may use Google Analytics to understand which pages are read, using cookies or similar technologies. This data is aggregated and helps us improve the content.
+- **Preferences.** The site stores your light or dark theme choice in your browser's local storage. It is never sent to us.
+
+## Advertising
+
+MLStation is free to read and is supported by advertising.
+
+- **Google AdSense.** Third-party vendors, including Google, use cookies to serve ads based on your previous visits to this and other websites. Google's use of advertising cookies enables it and its partners to serve ads based on your visits to this site and/or other sites on the Internet.
+- You may opt out of personalised advertising by visiting [Google's My Ad Center](https://myadcenter.google.com/). You can also opt out of some third-party vendors' use of cookies for personalised advertising at [aboutads.info](https://www.aboutads.info/choices/).
+- To learn how Google uses information from sites that use its services, see [How Google uses information from sites or apps that use our services](https://policies.google.com/technologies/partner-sites).
+- **Direct sponsors.** Some placements are sold directly to companies and are labelled "Sponsored". These cards do not load third-party trackers. Links to sponsors include campaign tags (for example `utm_source=mlstation`) so sponsors can count visits from MLStation; they do not identify you personally.
+
+Visitors in the European Economic Area, the United Kingdom and Switzerland are asked for consent before personalised ads are shown, through a consent message.
+
+## Third-party services
+
+Pages load fonts from Google Fonts and Fontshare, and some interactive charts load code libraries from public content delivery networks. These providers may receive your IP address as part of delivering the files.
+
+## Cookies
+
+You can block or delete cookies in your browser settings. The site works without cookies, although ads may be less relevant.
+
+## Children
+
+MLStation is not directed at children under 13, and we do not knowingly collect personal information from children.
+
+## Your rights
+
+Depending on where you live (for example under the GDPR in Europe or the CCPA in California), you may have rights to access, correct or delete personal information and to object to certain processing. Because we hold very little personal information, most requests relate to emails you have sent us. Contact us and we will respond within 30 days.
+
+## Changes
+
+We may update this policy. The date at the top shows the latest version.
+
+## Contact
+
+Questions about this policy: [hello@mlstation.com](mailto:hello@mlstation.com?subject=Privacy).

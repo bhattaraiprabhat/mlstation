@@ -9,7 +9,7 @@
 
   "adsense": {
     "enabled": false,
-    "client": "ca-pub-0000000000000000",
+    "client": "",
     "slots": { "leaderboard": "", "sidebar": "", "in-article": "", "article-end": "", "home": "" }
   },
 
