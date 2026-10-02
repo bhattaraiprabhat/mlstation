@@ -232,7 +232,7 @@ website:
       - text: "About"
         href: about.qmd
       - icon: github
-        href: "https://github.com/bhattaraiprabhat/mlstation"
+        #href: "https://github.com/bhattaraiprabhat/mlstation"
         aria-label: GitHub
 
   page-footer:
