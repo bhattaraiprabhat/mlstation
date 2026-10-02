@@ -1,0 +1,569 @@
+---
+title: "CNNs Explained: From Pixels to ResNet and YOLO"
+description: "Why plain neural networks fail on images, how convolution fixes it, the classic architectures from AlexNet to ResNet, and how YOLO finds objects in real time."
+author: "MLStation"
+date: 2026-10-01
+categories: [ML, Deep Learning, Computer Vision]
+draft: false
+---
+
+A factory camera photographs every metal part on a conveyor belt and has to sort it into one of four bins: **washer**, **hex nut**, **plate** or **bracket**. Parts arrive at random angles, in slightly different places, under changing light. A person does this without thinking. In this article we teach a computer to do it, first the naive way, then the way modern vision systems really work.
+
+::: {.callout-tip}
+## What you will learn
+- Why a plain neural network (ANN) on raw pixels breaks as soon as the object moves
+- What a **convolution**, a **filter**, **ReLU** and **pooling** do, with live demos
+- How AlexNet, VGG16, VGG19, GoogLeNet and ResNet changed computer vision
+- How **transfer learning** lets you reuse those models on your own images
+- How **YOLO** goes from "what is this?" to "what is where?" in one pass
+:::
+
+## Step 1: what the computer sees
+
+To a computer, an image is just a grid of numbers. Our camera produces 32 × 32 grayscale images, so each picture is **1,024 numbers** between 0 (black) and 1 (white). We simulate 3,200 of them.
+
+```{python}
+#| label: setup
+#| code-fold: true
+#| code-summary: "Simulate the factory camera (click to see how)"
+import numpy as np, pandas as pd, warnings
+warnings.filterwarnings("ignore")
+from scipy.ndimage import convolve
+from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from ms_charts import COLORS, PLOTLY_CONFIG
+
+rng = np.random.default_rng(1)
+S = 32
+yy, xx = np.mgrid[0:S, 0:S]
+CLASSES = ["Washer", "Hex nut", "Plate", "Bracket"]
+
+def draw_part(c, cx, cy, r, angle):
+    """Return a 32x32 mask of one part centred at (cx, cy), radius r, rotated by angle."""
+    dx, dy = xx - cx, yy - cy
+    a = np.deg2rad(angle)
+    u, v = dx * np.cos(a) + dy * np.sin(a), -dx * np.sin(a) + dy * np.cos(a)
+    d = np.hypot(dx, dy)
+    if c == 0:                                   # washer: a ring
+        m = (d < r) & (d > r * 0.55)
+    elif c == 1:                                 # hex nut: hexagon with a hole
+        th = np.arctan2(v, u)
+        edge = r * np.cos(np.pi / 6) / np.cos((th % (np.pi / 3)) - np.pi / 6)
+        m = (d < edge) & (d > r * 0.35)
+    elif c == 2:                                 # plate: a square
+        m = (np.abs(u) < r * 0.85) & (np.abs(v) < r * 0.85)
+    else:                                        # bracket: an L shape
+        m = ((np.abs(u) < r * .85) & (v > r * .35) & (v < r * .85)) | ((u > -r * .85) & (u < -r * .35) & (np.abs(v) < r * .85))
+    return m.astype(float)
+
+def camera(n, where="centre"):
+    X, y = [], []
+    for _ in range(n):
+        c, r = rng.integers(4), rng.uniform(6, 9)
+        if where == "centre":
+            cx, cy = rng.uniform(13, 19, 2)                      # belt guide keeps parts near the middle
+        else:
+            cx, cy = [rng.choice([rng.uniform(9, 11), rng.uniform(21, 23)]) for _ in range(2)]  # guide broke
+        img = draw_part(c, cx, cy, r, rng.uniform(0, 360)) * rng.uniform(.6, 1) + rng.uniform(0, .3)
+        X.append(np.clip(img + rng.normal(0, .08, (S, S)), 0, 1)); y.append(c)
+    return np.array(X), np.array(y)
+
+X_train, y_train = camera(2000)                 # training images, parts near the centre
+X_test, y_test = camera(600)                    # new images, same conditions
+X_shift, y_shift = camera(600, where="corner")  # new images, parts pushed towards the corners
+```
+
+```{python}
+#| label: fig-samples
+#| fig-cap: "Eight simulated camera images. Same four parts, different angles, sizes and lighting."
+#| code-fold: true
+fig = make_subplots(rows=2, cols=4, subplot_titles=[CLASSES[c] for c in y_train[:8]],
+                    horizontal_spacing=0.02, vertical_spacing=0.1)
+for i in range(8):
+    fig.add_trace(go.Heatmap(z=X_train[i], colorscale="gray", showscale=False, hoverinfo="skip"),
+                  row=i // 4 + 1, col=i % 4 + 1)
+fig.update_xaxes(visible=False); fig.update_yaxes(visible=False, autorange="reversed", scaleanchor="x")
+fig.update_layout(height=380, margin=dict(t=30, b=0, l=0, r=0))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## Step 2: the naive way, an ANN on raw pixels
+
+The obvious idea: **flatten** the 32 × 32 grid into a list of 1,024 numbers and feed it to a normal neural network. We train one with two hidden layers.
+
+```{python}
+#| code-fold: false
+ann = MLPClassifier(hidden_layer_sizes=(128, 64), max_iter=300,
+                    early_stopping=True, random_state=0)
+# flatten each 32x32 image into 1,024 numbers
+ann.fit(X_train.reshape(len(X_train), -1), y_train)
+
+acc_ann_same = ann.score(X_test.reshape(len(X_test), -1), y_test)
+acc_ann_shift = ann.score(X_shift.reshape(len(X_shift), -1), y_shift)
+```
+
+On new images taken under the same conditions it scores **`{python} f"{acc_ann_same:.0%}"`**. Impressive. Then the belt guide breaks and parts start arriving near the corners. Accuracy drops to **`{python} f"{acc_ann_shift:.0%}"`**, which is close to random guessing among four classes (25%).
+
+::: {.callout-warning}
+## Why the ANN breaks
+When you flatten an image, pixel 300 is just "input number 300". The network learns that a washer means *these particular inputs are bright*. Move the washer a few pixels and completely different inputs light up, so the network sees something it has never met. It also has no idea that pixel 300 and pixel 301 are neighbours. An ANN is **blind to space**.
+:::
+
+It is also wasteful. A colour photo of 224 × 224 pixels has 150,528 inputs. Connecting those to just 256 hidden neurons already needs `{python} f"{224*224*3*256:,}"` weights.
+
+## Step 3: convolution, a small window that slides
+
+A **convolutional neural network (CNN)** looks at the image through a small window, typically 3 × 3 pixels, called a **filter** or **kernel**. The filter holds 9 weights. It slides across the whole image and, at every position, multiplies the 9 pixels under it by its 9 weights and adds them up:
+
+$$
+\text{out}(i,j) = \sum_{m=-1}^{1}\sum_{n=-1}^{1} w_{m,n}\; x_{i+m,\,j+n} + b
+$$ {#eq-conv}
+
+The result is a new image called a **feature map**, which is bright wherever the pattern the filter is looking for appears. The key ideas:
+
+- **The same 9 weights are used everywhere** (weight sharing). A filter that detects a vertical edge in the top-left corner detects it in the bottom-right too.
+- **Neighbours stay neighbours.** The filter always looks at pixels that touch each other.
+- In a CNN the filter weights are **learned**, exactly like the weights in our [earlier neural network article](ann-to-dnn-first-neural-network.qmd). Below we use classic hand-made filters so you can see what they do.
+
+Pick a filter and move the window with the sliders. The left panel is the camera image, the right panel is the feature map.
+
+```{python}
+#| echo: false
+sample = X_train[np.where(y_train == 3)[0][0]]
+ojs_define(img=np.round(sample, 3).tolist())
+```
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+kernels = ({
+  "Vertical edge":   [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+  "Horizontal edge": [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+  "Outline (Laplacian)": [[0, 1, 0], [1, -4, 1], [0, 1, 0]],
+  "Blur": [[1/9, 1/9, 1/9], [1/9, 1/9, 1/9], [1/9, 1/9, 1/9]],
+  "Sharpen": [[0, -1, 0], [-1, 5, -1], [0, -1, 0]]
+})
+viewof kname = Inputs.select(Object.keys(kernels), {value: "Vertical edge", label: "Filter"})
+viewof col = Inputs.range([1, 30], {value: 10, step: 1, label: "Window column"})
+viewof row = Inputs.range([1, 30], {value: 12, step: 1, label: "Window row"})
+viewof relu = Inputs.toggle({label: "Apply ReLU (keep positives only)", value: false})
+```
+
+```{ojs}
+//| echo: false
+K = kernels[kname]
+fmap = img.map((r, i) => r.map((_, j) => {
+  let s = 0;
+  for (let m = -1; m <= 1; m++) for (let n = -1; n <= 1; n++) {
+    const ii = Math.min(31, Math.max(0, i + m)), jj = Math.min(31, Math.max(0, j + n));
+    s += K[m + 1][n + 1] * img[ii][jj];
+  }
+  return relu ? Math.max(0, s) : s;
+}))
+cells = (M) => M.flatMap((r, i) => r.map((v, j) => ({i, j, v})))
+win = [{x1: col - 1.5, x2: col + 1.5, y1: row - 1.5, y2: row + 1.5}]
+panel = (M, scheme, title) => Plot.plot({
+  width: 300, height: 300, margin: 6,
+  style: {background: "transparent", color: "currentColor", fontFamily: "Inter, system-ui, sans-serif", fontSize: "12px"},
+  x: {axis: null, domain: [-0.5, 31.5]}, y: {axis: null, domain: [31.5, -0.5]},
+  color: scheme,
+  marks: [
+    Plot.rect(cells(M), {x1: d => d.j - 0.5, x2: d => d.j + 0.5, y1: d => d.i - 0.5, y2: d => d.i + 0.5, fill: "v"}),
+    Plot.rect(win, {x1: "x1", x2: "x2", y1: "y1", y2: "y2", stroke: ms.amber, strokeWidth: 3, fill: "none"})
+  ]
+})
+html`<div style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;text-align:center;font-size:.85rem">
+  <div><div style="opacity:.75;margin-bottom:.25rem">Camera image</div>${panel(img, {scheme: "greys", reverse: true})}</div>
+  <div><div style="opacity:.75;margin-bottom:.25rem">Feature map (${kname})</div>${panel(fmap, relu ? {scheme: "purples"} : {type: "diverging", scheme: "PuOr", pivot: 0})}</div>
+</div>`
+```
+
+```{ojs}
+//| echo: false
+patch = [-1, 0, 1].map(m => [-1, 0, 1].map(n => img[row + m][col + n]))
+outv = d3.sum([0, 1, 2], a => d3.sum([0, 1, 2], b => K[a][b] * patch[a][b]))
+html`<div class="ms-readout"><span>9 pixels × 9 weights, added up</span><b>${outv.toFixed(2)}</b>${relu ? html`<span>after ReLU</span><b>${Math.max(0, outv).toFixed(2)}</b>` : ""}</div>
+<div style="display:flex;gap:2rem;flex-wrap:wrap;margin-top:.6rem;font-size:.85rem">
+  ${[["Pixels under the window", patch], ["Filter weights", K]].map(([t, M]) => html`<div><div style="opacity:.75;margin-bottom:.3rem">${t}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,3.6rem);gap:3px;font-family:var(--bs-font-monospace,monospace)">
+      ${M.flat().map(v => html`<div style="padding:.3rem;text-align:center;border:1px solid var(--ms-border,#ddd);border-radius:6px">${(+v).toFixed(2)}</div>`)}
+    </div></div>`)}
+</div>`
+```
+
+Notice how the vertical-edge filter lights up the left and right sides of the bracket in opposite colours, and stays near zero on flat areas. Turn on **ReLU** ($\max(0, z)$) and only the positive responses survive, exactly like in a normal neural network.
+
+## Step 4: pooling, and why it gives tolerance to movement
+
+After convolution and ReLU, a CNN usually **pools**: it divides the feature map into small blocks (often 2 × 2) and keeps only the largest value in each. This:
+
+- shrinks the map, so later layers have less to process,
+- keeps the strongest evidence ("there is an edge somewhere here"),
+- makes the network care less about the **exact** position of a pattern.
+
+Repeat **convolution → ReLU → pooling** a few times, and early layers find edges, middle layers combine edges into corners and curves, and deep layers respond to whole parts like "ring" or "L shape".
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A["Image<br/>32×32"] --> B["Conv + ReLU<br/>edges"] --> C["Pool<br/>16×16"] --> D["Conv + ReLU<br/>corners, curves"] --> E["Pool<br/>8×8"] --> F["Dense layer"] --> G["Washer / Nut /<br/>Plate / Bracket"]
+```
+
+## Step 5: does it help? A mini-CNN test
+
+Real CNNs learn their filters with frameworks like Keras or PyTorch. To keep this page light, we build a **mini-CNN** with eleven fixed filters (the edge, outline and blur filters above, in both polarities), apply ReLU and max pooling, summarise each feature map, and train a simple classifier on top. Then we run the broken-belt test again.
+
+```{python}
+#| code-fold: true
+#| code-summary: "Mini-CNN: fixed filters + ReLU + pooling + classifier"
+BASE = [np.array(k, float) for k in (
+    [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],      # vertical edge
+    [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],      # horizontal edge
+    [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]],      # diagonal edge
+    [[2, 1, 0], [1, 0, -1], [0, -1, -2]],      # other diagonal
+    [[0, 1, 0], [1, -4, 1], [0, 1, 0]])]       # outline (Laplacian)
+FILTERS = BASE + [-k for k in BASE] + [np.ones((3, 3)) / 9]   # both polarities + blur = 11 filters
+
+def mini_cnn_features(X):
+    out = []
+    for img in X:
+        f = []
+        for k in FILTERS:
+            fmap = np.maximum(convolve(img, k, mode="nearest"), 0)        # convolution + ReLU
+            pooled = fmap.reshape(8, 4, 8, 4).max(axis=(1, 3))            # 4x4 max pooling -> 8x8
+            hist = np.histogram(fmap, bins=6, range=(0, fmap.max() + 1e-6))[0] / fmap.size
+            f += [pooled.mean(), pooled.max(), (pooled > pooled.mean()).mean(), pooled.std(), *hist]
+        out.append(f)
+    return np.array(out)
+
+F_train, F_test, F_shift = map(mini_cnn_features, (X_train, X_test, X_shift))
+scaler = StandardScaler().fit(F_train)
+head = LogisticRegression(max_iter=3000).fit(scaler.transform(F_train), y_train)
+acc_cnn_same = head.score(scaler.transform(F_test), y_test)
+acc_cnn_shift = head.score(scaler.transform(F_shift), y_shift)
+```
+
+```{python}
+#| label: fig-shift
+#| fig-cap: "The ANN memorises pixel positions and collapses when parts move. Convolution and pooling look for patterns wherever they are. Dotted line: random guessing (25%)."
+#| code-fold: true
+fig = go.Figure()
+for name, vals, c in [("ANN on raw pixels", [acc_ann_same, acc_ann_shift], COLORS["slate"]),
+                      ("Mini-CNN", [acc_cnn_same, acc_cnn_shift], COLORS["indigo"])]:
+    fig.add_bar(x=["Same conditions", "Parts moved to corners"], y=vals, name=name, marker_color=c,
+                text=[f"{v:.0%}" for v in vals], textposition="outside")
+fig.add_hline(y=0.25, line_dash="dot", line_color="#8A93A3")
+fig.update_layout(barmode="group", height=360, yaxis=dict(tickformat=".0%", range=[0, 1.12], title="Accuracy"))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The mini-CNN scores **`{python} f"{acc_cnn_same:.0%}"`** in normal conditions and **`{python} f"{acc_cnn_shift:.0%}"`** after the parts move. The ANN fell to `{python} f"{acc_ann_shift:.0%}"`. That robustness to position, with far fewer weights, is the whole reason CNNs took over computer vision.
+
+### A real, trainable CNN in Keras
+
+This is how you would build a CNN that learns its own filters. The code is shown, not run, so the page builds without TensorFlow installed.
+
+```{.python filename="cnn_keras.py"}
+from tensorflow import keras
+from tensorflow.keras import layers
+
+model = keras.Sequential([
+    keras.Input(shape=(32, 32, 1)),
+    layers.Conv2D(16, 3, activation="relu", padding="same"),  # 16 filters
+    layers.MaxPooling2D(2),                                     # -> 16x16
+    layers.Conv2D(32, 3, activation="relu", padding="same"),  # 32 filters
+    layers.MaxPooling2D(2),                                     # -> 8x8
+    layers.GlobalAveragePooling2D(),                            # 1 per filter
+    layers.Dense(4, activation="softmax"),                      # 4 parts
+])
+model.compile(optimizer="adam",
+              loss="sparse_categorical_crossentropy",
+              metrics=["accuracy"])
+model.fit(X_train[..., None], y_train, validation_split=0.2, epochs=15)
+```
+
+A convolution layer has $(k \times k \times C_{in} + 1) \times C_{out}$ parameters, where $k$ is the filter size and $C$ the number of channels:
+
+```{python}
+#| echo: false
+from IPython.display import Markdown
+conv1 = (3*3*1 + 1) * 16; conv2 = (3*3*16 + 1) * 32; dense = (32 + 1) * 4
+ann_p = sum((a + 1) * b for a, b in [(1024, 128), (128, 64), (64, 4)])
+Markdown(f"""
+| Model | Parameters |
+|---|---|
+| ANN on flattened pixels (1024 → 128 → 64 → 4) | {ann_p:,} |
+| Small CNN above (Conv 16, Conv 32, Dense 4) | {conv1 + conv2 + dense:,} |
+""")
+```
+
+About **`{python} f"{ann_p / (conv1 + conv2 + dense):.0f}"`× fewer weights**, because each filter's few weights are reused at every position.
+
+## Step 6: the famous architectures
+
+Between 2012 and 2015, the yearly ImageNet challenge (1.2 million photos, 1,000 classes) turned CNNs from a research idea into the standard. The headline metric is **top-5 error**: how often the right answer is not among the model's five best guesses.
+
+| Year | Model | Big idea | ImageNet top-5 error |
+|---|---|---|---|
+| 2012 | **AlexNet** | First deep CNN trained on GPUs; ReLU and dropout at scale | 15.3%, won by over 10 points ([Wikipedia](https://en.wikipedia.org/wiki/AlexNet)) |
+| 2014 | **VGG16 / VGG19** | Only 3 × 3 filters, stacked deep (16 or 19 weight layers) | 7.3%, 2nd place ([AI Wiki](https://aiwiki.ai/wiki/vgg)) |
+| 2014 | **GoogLeNet (Inception)** | Parallel filters of several sizes; about 12× fewer parameters than AlexNet | 6.67%, 1st place ([Szegedy et al.](https://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/43022.pdf)) |
+| 2015 | **ResNet** | Skip connections make 152-layer networks trainable | 3.57%, 1st place ([He et al.](https://ar5iv.labs.arxiv.org/html/1512.03385)) |
+| 2017 to 2019 | **MobileNet, EfficientNet** | Small and fast enough for phones and edge devices | |
+| 2020 onward | **Vision Transformer, ConvNeXt** | Attention-based and modernised CNN designs | |
+
+: Milestones in image classification {#tbl-history}
+
+### VGG16 and VGG19: simple and deep
+
+VGG's recipe is easy to remember: blocks of 3 × 3 convolutions, then a 2 × 2 max pool, with the number of filters doubling each block (64, 128, 256, 512, 512), and three large dense layers at the end. VGG16 has 13 convolution layers + 3 dense; VGG19 has 16 + 3. Let us count the parameters from the recipe:
+
+```{python}
+#| label: fig-vgg
+#| fig-cap: "Where VGG16's parameters live. The convolution blocks do the seeing; the dense layers at the end hold most of the weights."
+#| code-fold: true
+def vgg_params(convs_per_block):
+    rows, c_in = [], 3
+    for b, (n, c_out) in enumerate(zip(convs_per_block, [64, 128, 256, 512, 512]), 1):
+        p = 0
+        for _ in range(n):
+            p += (3 * 3 * c_in + 1) * c_out; c_in = c_out
+        rows.append((f"Conv block {b}", p))
+    rows += [("Dense 4096 (fc6)", (7 * 7 * 512 + 1) * 4096), ("Dense 4096 (fc7)", (4096 + 1) * 4096),
+             ("Dense 1000 (fc8)", (4096 + 1) * 1000)]
+    return pd.DataFrame(rows, columns=["layer", "params"])
+
+vgg16, vgg19 = vgg_params([2, 2, 3, 3, 3]), vgg_params([2, 2, 4, 4, 4])
+fig = go.Figure(go.Bar(x=vgg16.params / 1e6, y=vgg16.layer, orientation="h",
+                       marker_color=[COLORS["teal"]] * 5 + [COLORS["indigo"]] * 3,
+                       text=[f"{p / 1e6:.1f}M" for p in vgg16.params], textposition="outside"))
+fig.update_layout(height=360, xaxis_title="Parameters (millions)", yaxis=dict(autorange="reversed"), margin=dict(l=130))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Total: **`{python} f"{vgg16.params.sum():,}"`** parameters for VGG16 and **`{python} f"{vgg19.params.sum():,}"`** for VGG19, matching the published 138.4M and 143.7M ([Keras Applications](https://keras.io/api/applications/)). The first dense layer alone holds `{python} f"{vgg16.params.iloc[5] / vgg16.params.sum():.0%}"` of VGG16. Later designs replaced those giant dense layers with global pooling.
+
+### ResNet: the shortcut that made depth work
+
+Stacking more layers should help, but before 2015 very deep plain networks trained *worse*. The learning signal (the gradient) is multiplied layer after layer on its way back to the start, and it fades away. ResNet adds a **skip connection**: each block learns only a correction $\mathcal{F}(x)$ and adds the input back ([He et al.](https://ar5iv.labs.arxiv.org/html/1512.03385)):
+
+$$
+y = \mathcal{F}(x) + x
+$$ {#eq-resnet}
+
+Because of the "+ x", the signal always has a direct path backwards. This toy model shows the effect. Each plain layer passes back a fraction of the signal; each residual block passes back the same fraction **plus the shortcut**.
+
+```{ojs}
+//| echo: false
+viewof depth = Inputs.range([5, 150], {value: 50, step: 1, label: "Number of layers"})
+viewof gain = Inputs.range([0.5, 0.99], {value: 0.85, step: 0.01, label: "Signal kept per plain layer"})
+```
+
+```{ojs}
+//| echo: false
+sig = d3.range(depth + 1).flatMap(l => [
+  {layer: l, value: Math.pow(gain, l), net: "Plain network"},
+  {layer: l, value: Math.pow(1 + (gain - 1) * 0.02, l), net: "ResNet (with shortcuts)"}
+])
+Plot.plot({
+  ...msStyle, height: 320, marginLeft: 60,
+  x: {label: "Layers travelled back from the output →"},
+  y: {type: "log", label: "↑ Learning signal remaining", domain: [1e-12, 1.5], tickFormat: "~e"},
+  color: {domain: ["Plain network", "ResNet (with shortcuts)"], range: [ms.rose, ms.teal], legend: true},
+  marks: [Plot.line(sig, {x: "layer", y: d => Math.max(d.value, 1e-12), stroke: "net", strokeWidth: 3})]
+})
+```
+
+With 50 layers at 85%, the plain network keeps about `{ojs} Math.pow(gain, depth).toExponential(1)` of its learning signal; the early layers barely learn. The residual network keeps most of it. This is why ResNet-50 and ResNet-152 are still standard backbones a decade later.
+
+### Accuracy vs size of ready-made models
+
+All of these come pre-trained on ImageNet in Keras. Hover a bubble for details.
+
+```{python}
+#| label: fig-zoo
+#| fig-cap: "Top-1 ImageNet accuracy against size for pre-trained Keras models. Bubble size shows parameter count. Data from Keras Applications (keras.io/api/applications)."
+#| code-fold: true
+zoo = pd.DataFrame([
+    ("VGG16", 138.4, 71.3, 528), ("VGG19", 143.7, 71.3, 549), ("ResNet50", 25.6, 74.9, 98),
+    ("ResNet152", 60.4, 76.6, 232), ("InceptionV3", 23.9, 77.9, 92), ("MobileNetV2", 3.5, 71.3, 14),
+    ("EfficientNetB0", 5.3, 77.1, 29), ("ConvNeXtTiny", 28.6, 81.3, 109)],
+    columns=["model", "params_m", "top1", "size_mb"])
+fig = go.Figure(go.Scatter(
+    x=zoo.params_m, y=zoo.top1, mode="markers+text", text=zoo.model,
+    textposition=["bottom center", "top center", "bottom center", "top center", "top center", "top center", "top center", "top center"],
+    textfont=dict(size=12),
+    marker=dict(size=np.sqrt(zoo.params_m) * 4 + 8, color=COLORS["indigo"], opacity=.7, line=dict(color="white", width=1)),
+    customdata=zoo[["size_mb"]], hovertemplate="%{text}<br>%{x}M parameters<br>Top-1 %{y}%<br>%{customdata[0]} MB<extra></extra>"))
+fig.update_layout(height=420, xaxis=dict(type="log", title="Parameters (millions, log scale)", tickvals=[3, 5, 10, 25, 50, 100, 150], range=[0.35, 2.35]),
+                  yaxis=dict(title="Top-1 accuracy (%)", range=[69, 83]))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Bigger is not better: VGG19 has 40 times the parameters of MobileNetV2 for the same accuracy, and newer designs like EfficientNet and ConvNeXt beat both.
+
+## Step 7: transfer learning, the practical shortcut
+
+You rarely train a large CNN from scratch. Instead you take a network pre-trained on ImageNet, keep its convolution layers (which already know edges, textures and shapes), and train only a small new head for your classes. A few hundred images per class are often enough.
+
+::: {.panel-tabset}
+## ResNet50
+```{.python filename="transfer_resnet.py"}
+from tensorflow import keras
+base = keras.applications.ResNet50(
+    weights="imagenet", include_top=False,
+    input_shape=(224, 224, 3), pooling="avg")
+base.trainable = False                      # keep the learned filters
+
+model = keras.Sequential([
+    base,
+    keras.layers.Dense(4, activation="softmax"),   # new 4-class head
+])
+model.compile("adam", "sparse_categorical_crossentropy",
+              metrics=["accuracy"])
+```
+## VGG16
+```{.python filename="transfer_vgg.py"}
+from tensorflow import keras
+base = keras.applications.VGG16(
+    weights="imagenet", include_top=False,
+    input_shape=(224, 224, 3), pooling="avg")
+base.trainable = False
+
+model = keras.Sequential([
+    base,
+    keras.layers.Dense(4, activation="softmax"),
+])
+```
+## PyTorch
+```{.python filename="transfer_torch.py"}
+import torch, torchvision
+model = torchvision.models.resnet50(weights="IMAGENET1K_V2")
+for p in model.parameters():
+    p.requires_grad = False                             # freeze the backbone
+model.fc = torch.nn.Linear(model.fc.in_features, 4)     # new 4-class head
+```
+:::
+
+## Step 8: from "what" to "what and where": YOLO
+
+Classification answers **what is in the picture**. A real factory belt carries several parts at once, so we need **object detection**: a box around every part, with a label and a confidence score.
+
+Older detectors worked in two stages: propose thousands of candidate regions, then classify each one. **YOLO (You Only Look Once)** does it in a **single pass** of one CNN, which made it the first truly real-time detector at 45 frames per second ([Redmon et al., 2016](https://www.cv-foundation.org/openaccess/content_cvpr_2016/html/Redmon_You_Only_Look_CVPR_2016_paper.html)). The idea:
+
+1. Divide the image into a **grid**.
+2. Each grid cell predicts a few **boxes** (centre, width, height), a **confidence** and a **class**.
+3. Many boxes overlap the same object, so keep the most confident one and delete boxes that overlap it too much. This clean-up is **non-maximum suppression (NMS)**.
+
+Overlap is measured with **Intersection over Union**:
+
+$$
+\text{IoU} = \frac{\text{area of overlap}}{\text{area of union}}
+$$ {#eq-iou}
+
+Try it. The detector has proposed many boxes on a belt with three parts. Raise the **confidence threshold** to drop weak guesses, and lower the **NMS IoU threshold** to remove duplicates more aggressively.
+
+```{python}
+#| echo: false
+truth = [dict(x=60, y=70, w=90, h=90, cls="Washer"), dict(x=230, y=120, w=110, h=80, cls="Plate"),
+         dict(x=400, y=60, w=85, h=100, cls="Bracket")]
+cands = []
+for t in truth:
+    for k in range(7):
+        j = rng.normal(0, 4, 4)
+        cands.append(dict(x=t["x"] + j[0], y=t["y"] + j[1], w=t["w"] + j[2], h=t["h"] + j[3], cls=t["cls"],
+                          score=float(np.clip(0.95 - 0.11 * k + rng.normal(0, .03), 0.05, 0.99))))
+for _ in range(6):
+    cands.append(dict(x=rng.uniform(0, 460), y=rng.uniform(0, 160), w=rng.uniform(50, 90), h=rng.uniform(50, 90),
+                      cls=str(rng.choice(["Washer", "Plate", "Bracket", "Hex nut"])), score=float(rng.uniform(.08, .4))))
+ojs_define(truth=truth, cands=cands)
+```
+
+```{ojs}
+//| echo: false
+viewof conf = Inputs.range([0, 0.95], {value: 0.3, step: 0.05, label: "Confidence threshold"})
+viewof nmsT = Inputs.range([0.1, 1], {value: 0.5, step: 0.05, label: "NMS IoU threshold"})
+viewof grid = Inputs.toggle({label: "Show YOLO grid", value: true})
+```
+
+```{ojs}
+//| echo: false
+iou = (a, b) => {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const inter = ix * iy;
+  return inter / (a.w * a.h + b.w * b.h - inter);
+}
+kept = {
+  const pool = cands.filter(c => c.score >= conf).sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const c of pool) if (keep.every(k => k.cls !== c.cls || iou(k, c) < nmsT)) keep.push(c);
+  return {pool, keep};
+}
+clsColor = ({"Washer": ms.indigo, "Plate": ms.teal, "Bracket": ms.amber, "Hex nut": ms.rose})
+htl.svg`<svg viewBox="0 0 540 240" style="width:100%;max-width:720px;font-family:Inter,system-ui,sans-serif;background:var(--ms-surface,#f4f4f7);border-radius:14px">
+  <rect x="0" y="0" width="540" height="240" fill="#64748B" fill-opacity="0.12"/>
+  ${(([a, b, c]) => htl.svg`
+    <circle cx="${a.x + a.w / 2}" cy="${a.y + a.h / 2}" r="${a.w / 2 - 12}" fill="none" stroke="#94A3B8" stroke-width="16"/>
+    <rect x="${b.x + 8}" y="${b.y + 8}" width="${b.w - 16}" height="${b.h - 16}" fill="#94A3B8"/>
+    <path d="M${c.x + 10} ${c.y + 8} h22 v${c.h - 38} h${c.w - 42} v22 h${-(c.w - 20)} z" fill="#94A3B8"/>`)(truth)}
+  ${grid ? d3.range(1, 7).map(i => htl.svg`<line x1="${i * 540 / 7}" y1="0" x2="${i * 540 / 7}" y2="240" stroke="currentColor" stroke-opacity="0.15"/>
+           <line x1="0" y1="${i * 240 / 7}" x2="540" y2="${i * 240 / 7}" stroke="currentColor" stroke-opacity="0.15"/>`) : ""}
+  ${kept.pool.filter(c => !kept.keep.includes(c)).map(c => htl.svg`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="3,3"/>`)}
+  ${kept.keep.map(c => htl.svg`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="none" stroke="${clsColor[c.cls]}" stroke-width="3"/>
+      <rect x="${c.x}" y="${c.y - 18}" width="${c.cls.length * 7 + 38}" height="18" fill="${clsColor[c.cls]}"/>
+      <text x="${c.x + 4}" y="${c.y - 5}" font-size="12" fill="white" font-weight="600">${c.cls} ${(c.score * 100).toFixed(0)}%</text>`)}
+</svg>`
+```
+
+```{ojs}
+//| echo: false
+html`<div class="ms-readout"><span>Proposed boxes</span><b>${cands.length}</b><span>above confidence</span><b>${kept.pool.length}</b><span>kept after NMS</span><b>${kept.keep.length}</b></div>`
+```
+
+With sensible settings you end with exactly three boxes, one per part. Set the confidence threshold too low and false alarms appear; set the NMS threshold near 1 and duplicates survive.
+
+### Where detection is today
+
+YOLO has been refined many times. The current Ultralytics release, **YOLO26** (January 2026), is designed for edge devices, offers **NMS-free** end-to-end prediction by default, and covers detection, segmentation, classification, pose, depth and oriented boxes in one family ([Ultralytics docs](https://docs.ultralytics.com/models/yolo26/)). Other notable approaches include two-stage detectors such as **Faster R-CNN** (accurate, slower) and transformer-based detectors such as **DETR** and **RT-DETR**, which treat detection as a set-prediction problem without hand-made anchors.
+
+```{.python filename="detect_parts.py"}
+from ultralytics import YOLO
+
+model = YOLO("yolo26n.pt")              # small pre-trained model
+results = model("conveyor_belt.jpg")    # boxes, classes, confidences
+
+# fine-tune on your own labelled images
+model.train(data="factory_parts.yaml", epochs=50, imgsz=640)
+```
+
+## The big picture
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A["ANN on pixels<br/>blind to space"] --> B["CNN<br/>filters + pooling"] --> C["Deep CNNs<br/>AlexNet, VGG, ResNet"] --> D["Transfer learning<br/>reuse backbones"] --> E["Detection<br/>YOLO, DETR"]
+```
+
+## Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| Flattening images into an ANN | Use convolution layers, or a pre-trained CNN |
+| Training only on tidy, centred images | Augment: random shifts, rotations, flips, brightness |
+| Training a huge model from scratch on little data | Transfer learning from an ImageNet backbone |
+| Forgetting to scale pixels | Divide by 255, or use the backbone's own preprocessing |
+| Judging a detector by accuracy alone | Use mean average precision (mAP) and check IoU thresholds |
+
+## Summary
+
+- An image is a grid of numbers. An **ANN** on flattened pixels memorises positions and breaks when objects move.
+- A **CNN** slides small learned filters over the image (@eq-conv), reuses the same weights everywhere, and pools to tolerate movement.
+- **AlexNet** started the deep learning era, **VGG16/19** showed that stacked 3 × 3 filters work, and **ResNet**'s skip connections (@eq-resnet) made very deep networks trainable.
+- **Transfer learning** lets you reuse these networks on your own images with little data.
+- **YOLO** detects many objects in one pass using a grid, confidence scores and IoU (@eq-iou); modern versions such as YOLO26 drop the NMS step entirely.
+
+For the theory behind convolutional networks, see @goodfellow2016.

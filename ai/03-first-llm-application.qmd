@@ -1,0 +1,323 @@
+---
+title: "Your First LLM Application: Prompt → Response → Save"
+description: "Turn a prompt into a small reproducible application with configuration, inference, output, and saved experiment artifacts."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, Application]
+draft: false
+---
+
+Article 1 introduced the model. Article 2 introduced prompts. Now we connect the pieces into a tiny **application**.
+
+The goal is deliberately small:
+
+> Give the application a prompt, generate a response, and save enough information to reproduce the run.
+
+::: {.callout-tip}
+## What you will learn
+- The minimum pieces of an LLM application
+- How to separate configuration from application logic
+- How generation settings affect output
+- How to save prompts, settings and responses together
+- Why reproducibility matters even for small demos
+:::
+
+## Start from the output
+
+Instead of beginning with code, begin with the artifact we want at the end:
+
+```text
+runs/
+└── run_001/
+    ├── config.json
+    ├── prompt.txt
+    └── response.txt
+```
+
+If these files exist, another person can answer three useful questions:
+
+1. **Which model did we use?**
+2. **What did we ask it?**
+3. **What did it return?**
+
+That gives us our application design.
+
+```text
+Configuration ─┐
+               ├──▶ LLM Application ───▶ Response
+Prompt ────────┘             │
+                             ▼
+                         Saved Run
+```
+
+## The smallest useful architecture
+
+An LLM application does not need agents, databases or orchestration.
+
+```text
+User text
+   ↓
+Prompt
+   ↓
+Tokenizer
+   ↓
+Model
+   ↓
+Generation
+   ↓
+Response
+   ↓
+Save
+```
+
+We will use a small pretrained model so the entire flow remains visible.
+
+## Generation settings
+
+The model is only one part of generation. Settings also influence the result.
+
+Two common settings are:
+
+- `max_new_tokens` — maximum number of new tokens to generate
+- `do_sample` — whether to sample from possible next tokens
+
+For our first reproducible example, we use:
+
+```python
+"max_new_tokens": 50
+"do_sample": False
+```
+
+With sampling disabled, repeated runs are easier to compare.
+
+::: {.callout-note}
+## Deterministic does not mean universally identical
+Hardware, library versions, model implementation and other settings can still matter. The purpose here is to reduce unnecessary variation while learning the pipeline.
+:::
+
+## Build the application
+
+Install:
+
+```bash
+pip install transformers torch
+```
+
+Create:
+
+```{.python filename="llm_app.py"}
+import json
+from pathlib import Path
+from transformers import pipeline
+
+# -------------------------
+# 1. Configuration
+# -------------------------
+config = {
+    "model": "distilgpt2",
+    "max_new_tokens": 50,
+    "do_sample": False,
+}
+
+# -------------------------
+# 2. Input
+# -------------------------
+prompt = """
+Machine learning is useful in healthcare because
+""".strip()
+
+# -------------------------
+# 3. Load model
+# -------------------------
+generator = pipeline(
+    "text-generation",
+    model=config["model"]
+)
+
+# -------------------------
+# 4. Inference
+# -------------------------
+result = generator(
+    prompt,
+    max_new_tokens=config["max_new_tokens"],
+    do_sample=config["do_sample"],
+)
+
+response = result[0]["generated_text"]
+
+# -------------------------
+# 5. Display
+# -------------------------
+print(response)
+
+# -------------------------
+# 6. Save the run
+# -------------------------
+run_dir = Path("runs/run_001")
+run_dir.mkdir(parents=True, exist_ok=True)
+
+(run_dir / "config.json").write_text(
+    json.dumps(config, indent=2)
+)
+
+(run_dir / "prompt.txt").write_text(prompt)
+(run_dir / "response.txt").write_text(response)
+```
+
+The application has six visible stages:
+
+$$
+\text{Configure}
+\rightarrow
+\text{Input}
+\rightarrow
+\text{Load}
+\rightarrow
+\text{Infer}
+\rightarrow
+\text{Display}
+\rightarrow
+\text{Save}
+$$
+
+## Why separate configuration?
+
+You could write:
+
+```python
+generator(prompt, max_new_tokens=50, do_sample=False)
+```
+
+and stop there.
+
+But a configuration object makes important choices explicit:
+
+```python
+config = {
+    "model": "distilgpt2",
+    "max_new_tokens": 50,
+    "do_sample": False,
+}
+```
+
+Later you can compare runs without rewriting the application:
+
+```text
+run_001 → model A, 50 tokens
+run_002 → model A, 100 tokens
+run_003 → model B, 50 tokens
+```
+
+This is the beginning of **experiment management**.
+
+## One change, one observation
+
+A useful learning habit is to change one thing at a time.
+
+Try:
+
+```python
+config["max_new_tokens"] = 100
+```
+
+Run again and save to `run_002`.
+
+Then compare:
+
+```text
+run_001/response.txt
+run_002/response.txt
+```
+
+Next, experiment with sampling:
+
+```python
+config["do_sample"] = True
+```
+
+Do not ask only, "Which response sounds better?" Also ask:
+
+> **Which configuration produced this response?**
+
+That question turns experimentation into engineering.
+
+::: {.callout-tip}
+## A small but powerful habit
+Whenever an LLM output surprises you, preserve the **input + configuration + output** before changing anything.
+:::
+
+## Model weights vs. application state
+
+We are using an existing pretrained model. We have not changed its weights.
+
+Therefore:
+
+```text
+Need to save again?
+Pretrained model weights   → usually NO
+Model identifier/version   → YES
+Prompt                     → YES
+Generation settings        → YES
+Generated response         → YES
+```
+
+If you later fine-tune the model, the answer changes: the modified weights become an artifact that should also be saved.
+
+## From script to function
+
+Once the flow is understood, package the inference step:
+
+```python
+def generate_text(generator, prompt, config):
+    result = generator(
+        prompt,
+        max_new_tokens=config["max_new_tokens"],
+        do_sample=config["do_sample"],
+    )
+    return result[0]["generated_text"]
+```
+
+Now the application has a reusable unit:
+
+```text
+prompt + config
+      ↓
+generate_text(...)
+      ↓
+response
+```
+
+This pattern will survive the next chapters. RAG will add **retrieval before generation**, but the model call itself remains familiar.
+
+## What should you save?
+
+A clean run directory might look like:
+
+```text
+runs/
+├── run_001/
+│   ├── config.json
+│   ├── prompt.txt
+│   └── response.txt
+└── run_002/
+    ├── config.json
+    ├── prompt.txt
+    └── response.txt
+```
+
+For serious experiments, also record package versions, timestamps, input data versions and evaluation results.
+
+::: {.callout-warning}
+## A saved response is not a validated response
+Saving makes a run reproducible. It does **not** make the generated content correct. Reliability and validation are separate problems that we will address later.
+:::
+
+## Summary
+
+- A minimal LLM application needs **input, model inference, output and reproducibility**.
+- Keep important generation settings in configuration rather than hiding them in code.
+- Change one variable at a time when learning or debugging.
+- Save **model identifier + prompt + configuration + response**.
+- If model weights are modified, save those modified weights as well.
+
+**Next:** *RAG I — Why Retrieval-Augmented Generation?*

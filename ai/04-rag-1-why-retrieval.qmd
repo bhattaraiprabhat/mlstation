@@ -1,0 +1,271 @@
+---
+title: "RAG I: Why Retrieval-Augmented Generation?"
+description: "Why an LLM sometimes needs external knowledge, what retrieval adds, and how RAG changes the generation pipeline."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, RAG]
+draft: false
+---
+
+Imagine an excellent librarian who has read an enormous number of books—but has **never seen the private handbook sitting on your desk**.
+
+You ask:
+
+> What is our company's reimbursement limit for a hotel?
+
+The librarian may know how expense policies usually work, but cannot reliably know the number in your private handbook.
+
+This is the problem **Retrieval-Augmented Generation (RAG)** is designed to address.
+
+::: {.callout-tip}
+## What you will learn
+- Why model knowledge alone is sometimes insufficient
+- What **retrieval** means
+- What "augmented generation" means
+- The basic RAG pipeline
+- What RAG can and cannot solve
+:::
+
+## The closed-book problem
+
+A normal LLM request looks roughly like:
+
+```text
+Question
+   ↓
+  LLM
+   ↓
+Answer
+```
+
+The model generates from its learned parameters and the context supplied in the prompt.
+
+But suppose the answer lives in:
+
+- your company's PDF,
+- a product manual,
+- an internal knowledge base,
+- today's report, or
+- another source not available in the model's current context.
+
+Then asking the model directly is like giving someone a **closed-book exam**.
+
+## Turn it into an open-book exam
+
+Instead, find the relevant material first and place it beside the question.
+
+```text
+Question
+   │
+   ├──────────────▶ Search documents
+   │                      │
+   │                      ▼
+   │               Relevant passage
+   │                      │
+   └──────────┬───────────┘
+              ▼
+      Question + Context
+              ↓
+             LLM
+              ↓
+            Answer
+```
+
+That is the central idea of RAG.
+
+::: {#def-rag}
+## Retrieval-Augmented Generation
+**Retrieval-Augmented Generation (RAG)** is an application pattern in which relevant information is retrieved from an external knowledge source and supplied to a generative model as context for answering a request.
+:::
+
+The name becomes easier if we split it:
+
+```text
+Retrieval   → find relevant information
+Augmented   → add that information to the model's context
+Generation  → let the LLM produce the response
+```
+
+## A tiny example
+
+Suppose our private policy document contains:
+
+```text
+Travel Policy:
+Employees may claim up to $220 per night for a hotel,
+excluding taxes.
+```
+
+The user asks:
+
+```text
+What is the hotel reimbursement limit?
+```
+
+Without the document, the model should not invent the company's number.
+
+With retrieval, the application can construct something like:
+
+```text
+CONTEXT:
+Employees may claim up to $220 per night for a hotel,
+excluding taxes.
+
+QUESTION:
+What is the hotel reimbursement limit?
+
+ANSWER USING THE CONTEXT:
+```
+
+The model now has the evidence needed to answer.
+
+$$
+\text{Answer}
+=
+\text{LLM}(\text{Question} + \text{Retrieved Context})
+$$
+
+## RAG changes the application, not necessarily the model
+
+This distinction is important.
+
+```text
+                    SAME LLM
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+   Plain prompting                  RAG
+        │                             │
+ Question → LLM             Question → Retrieve
+                                      ↓
+                                  Context
+                                      ↓
+                                Context + Question
+                                      ↓
+                                     LLM
+```
+
+We can add RAG **without retraining the LLM**.
+
+The external knowledge remains outside the model weights.
+
+::: {.callout-tip}
+## A useful mental model
+Think of an LLM as the **reader and writer**.
+
+Think of retrieval as the **research assistant** that finds pages worth reading before the answer is written.
+:::
+
+## A deliberately simple RAG prototype
+
+Before learning embeddings, we can understand the architecture using a tiny keyword retriever.
+
+```{.python filename="simple_rag.py"}
+from pathlib import Path
+
+documents = [
+    "Employees may claim up to $220 per night for a hotel.",
+    "Meal reimbursement is limited to $65 per day.",
+    "Taxi expenses require a receipt when the fare exceeds $25.",
+]
+
+question = "What is the hotel reimbursement limit?"
+
+# Very simple retrieval for teaching purposes:
+relevant = [
+    doc for doc in documents
+    if "hotel" in doc.lower()
+]
+
+context = "\n".join(relevant)
+
+prompt = f"""
+Use only the context below to answer the question.
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+""".strip()
+
+print(prompt)
+
+Path("outputs").mkdir(exist_ok=True)
+Path("outputs/retrieved_context.txt").write_text(context)
+Path("outputs/rag_prompt.txt").write_text(prompt)
+```
+
+This is **not** a production-quality retriever. It exists to expose the architecture.
+
+The important part is:
+
+```text
+documents
+   ↓
+retrieve relevant information
+   ↓
+context
+   ↓
+context + question
+   ↓
+LLM
+```
+
+In the next article, we replace the crude keyword search with **embeddings and vector similarity**.
+
+## What RAG helps with
+
+RAG is useful when answers depend on information that is:
+
+- private,
+- domain-specific,
+- frequently updated,
+- too large to place entirely in every prompt, or
+- important to connect to source evidence.
+
+But RAG is not magic.
+
+::: {.callout-warning}
+## RAG can still fail
+A RAG system can fail because:
+
+1. the right document was never indexed,
+2. the retriever found the wrong passage,
+3. the relevant passage was poorly chunked,
+4. the LLM ignored or misinterpreted the context, or
+5. the source itself was wrong.
+
+RAG reduces some knowledge problems; it does not remove the need for evaluation.
+:::
+
+## What should you save?
+
+For a RAG run, the response alone is no longer enough.
+
+Save:
+
+```text
+rag_run/
+├── question.txt
+├── retrieved_context.txt
+├── final_prompt.txt
+├── response.txt
+└── config.json
+```
+
+Why save the retrieved context?
+
+Because if the answer is wrong, one of the first debugging questions is:
+
+> **What information did the model actually receive?**
+
+## Summary
+
+- A model cannot reliably use information it does not know or receive in context.
+- RAG turns a closed-book generation problem into an **open-book** one.
+- RAG consists of **retrieve → augment → generate**.
+- RAG usually adds an external knowledge layer without changing the underlying model weights.
+- Debugging RAG requires saving the retrieved evidence, not just the final response.
+
+**Next:** *RAG II — Embeddings, Vector Databases, and Retrieval*

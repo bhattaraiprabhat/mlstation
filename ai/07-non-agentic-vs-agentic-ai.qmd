@@ -1,0 +1,374 @@
+---
+title: "From Non-Agentic AI to Agentic AI"
+description: "Contrast fixed AI pipelines with systems that can choose actions, use tools, observe results and decide what to do next."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, LLM]
+draft: false
+---
+
+So far, every system we built follows a path that **we designed in advance**.
+
+A prompt application:
+
+```text
+Prompt → LLM → Response
+```
+
+A RAG application:
+
+```text
+Question → Retrieve → Context → LLM → Response
+```
+
+These systems can be powerful, but the application determines the steps.
+
+Agentic AI introduces a different idea:
+
+> What if the system can decide **which action should happen next**?
+
+::: {.callout-tip}
+## What you will learn
+- What we mean by **non-agentic** and **agentic** AI
+- The difference between a fixed workflow and a decision loop
+- Why tools matter
+- A simple agent-style example
+- When an agent is unnecessary
+:::
+
+## Two ways to plan a trip
+
+Consider a travel assistant.
+
+### Fixed workflow
+
+A programmer defines:
+
+```text
+User request
+   ↓
+Search flights
+   ↓
+Search hotels
+   ↓
+Summarize
+   ↓
+Return answer
+```
+
+Every request follows the same route.
+
+### Agentic workflow
+
+Instead, the system receives a goal:
+
+> Help me plan a three-day trip under $1,000.
+
+It may reason operationally:
+
+```text
+What do I need?
+   ↓
+Check flights
+   ↓
+Observe price
+   ↓
+Too expensive?
+   ├── YES → try different dates
+   └── NO  → check hotel
+                  ↓
+             Observe price
+                  ↓
+             Budget remains?
+                  ↓
+             choose next action
+```
+
+The important difference is not simply "more AI." It is **control over the next action**.
+
+::: {#def-agentic}
+## Agentic AI
+In this introductory series, **agentic AI** refers to an AI application in which a model participates in deciding which actions or tools to use, observes the results, and can repeat this process toward a goal.
+
+A **non-agentic** workflow follows application steps that are primarily predetermined by the developer.
+:::
+
+## Fixed pipeline vs. decision loop
+
+Put the two architectures side by side.
+
+```text
+NON-AGENTIC                         AGENTIC
+
+Input                               Goal
+  ↓                                   ↓
+Step A                              Decide
+  ↓                                   ↓
+Step B                              Action
+  ↓                                   ↓
+Step C                              Observe
+  ↓                                   ↓
+Output                         Done? ──┬── No
+                                      │
+                                     Yes
+                                      ↓
+                                    Output
+```
+
+Mathematically, a fixed pipeline can be imagined as:
+
+$$
+y = f_3(f_2(f_1(x)))
+$$
+
+The sequence $f_1 \rightarrow f_2 \rightarrow f_3$ is predetermined.
+
+An agentic loop is closer to:
+
+$$
+a_t = \pi(g, s_t)
+$$
+
+where:
+
+- $g$ = goal,
+- $s_t$ = current state or observations,
+- $a_t$ = next action,
+- $\pi$ = decision policy implemented partly or wholly using the model.
+
+The chosen action can change as new information arrives.
+
+## A concrete example: weather question
+
+User asks:
+
+> What is the weather in Austin today?
+
+A plain LLM could generate an answer from its internal knowledge, but current weather requires fresh data.
+
+A non-agentic application might always call a weather API first:
+
+```text
+Question
+   ↓
+Weather API
+   ↓
+LLM formats result
+```
+
+An agentic application may have several tools:
+
+```text
+TOOLS
+├── weather(city)
+├── calculator(expression)
+└── search_documents(query)
+```
+
+The model receives the request and chooses:
+
+```text
+"What is the weather in Austin today?"
+                  ↓
+        choose weather("Austin")
+                  ↓
+             observe result
+                  ↓
+              answer user
+```
+
+If the user instead asks:
+
+> What is 18% of 240?
+
+the same system may choose the calculator rather than the weather tool.
+
+## A tiny agent loop
+
+The following example does not depend on a specific LLM provider. It exposes the **control pattern**.
+
+```{.python filename="tiny_agent.py"}
+import json
+from pathlib import Path
+
+def calculator(expression):
+    # Teaching example only:
+    allowed = set("0123456789.+-*/() ")
+    if not set(expression) <= allowed:
+        raise ValueError("Unsupported expression")
+    return eval(expression, {"__builtins__": {}})
+
+def choose_action(user_request):
+    """
+    Placeholder for an LLM decision.
+    A real agent would ask the model for a structured action.
+    """
+    if "18%" in user_request and "240" in user_request:
+        return {
+            "tool": "calculator",
+            "input": "0.18 * 240"
+        }
+
+    return {
+        "tool": "none",
+        "input": None
+    }
+
+request = "What is 18% of 240?"
+
+action = choose_action(request)
+
+if action["tool"] == "calculator":
+    observation = calculator(action["input"])
+    answer = f"The result is {observation}."
+else:
+    observation = None
+    answer = "No tool was selected."
+
+trace = {
+    "request": request,
+    "action": action,
+    "observation": observation,
+    "answer": answer,
+}
+
+print(answer)
+
+Path("agent_runs").mkdir(exist_ok=True)
+Path("agent_runs/run_001.json").write_text(
+    json.dumps(trace, indent=2)
+)
+```
+
+The hard-coded `choose_action()` is intentionally a placeholder. In the next chapter, an LLM will make that structured choice.
+
+For now, notice the architecture:
+
+```text
+Request
+   ↓
+Choose action
+   ↓
+Execute tool
+   ↓
+Observe result
+   ↓
+Produce answer
+```
+
+That is the skeleton of an agent.
+
+## RAG and agents are not opposites
+
+RAG answers:
+
+> **What information should I retrieve?**
+
+Agentic control answers:
+
+> **What should I do next?**
+
+An agent can use retrieval as one of its tools:
+
+```text
+                    Agent
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+      Retriever   Calculator   External API
+          │           │           │
+          └───────────┴───────────┘
+                      │
+                  Observations
+                      │
+                      ▼
+                 Next decision
+```
+
+So RAG can become a component **inside** an agentic system.
+
+## When not to use an agent
+
+Agentic architecture is not automatically superior.
+
+Suppose the task is always:
+
+```text
+Upload invoice
+   ↓
+Extract fields
+   ↓
+Validate schema
+   ↓
+Store result
+```
+
+A deterministic workflow may be easier to test, cheaper, faster and safer.
+
+::: {.callout-warning}
+## Do not add autonomy without a reason
+Use agentic control when the next useful action genuinely depends on the request or on intermediate observations.
+
+If the correct sequence is already known, a fixed workflow may be the better design.
+:::
+
+## A practical comparison
+
+| Question | Non-Agentic | Agentic |
+|---|---|---|
+| Who chooses the workflow? | Mostly developer | Model participates in choosing next action |
+| Path through system | Usually fixed | Can change dynamically |
+| Tools | Called at predetermined steps | Can be selected based on state/request |
+| Intermediate observations | Used by fixed logic | Can influence the next model decision |
+| Testing | Often simpler | Requires testing decisions and tool use |
+| Best fit | Predictable processes | Variable, multi-step goals |
+
+: The architectural distinction is primarily about control flow {#tbl-agentic-comparison}
+
+## What should you save?
+
+Agentic systems introduce a particularly important artifact: the **execution trace**.
+
+```text
+agent_run/
+├── goal.txt
+├── system_prompt.txt
+├── available_tools.json
+├── actions.jsonl
+├── observations.jsonl
+└── final_response.txt
+```
+
+A useful trace answers:
+
+```text
+What did the agent know?
+What action did it choose?
+Which tool did it call?
+What did the tool return?
+Why did another step occur?
+What final answer was produced?
+```
+
+Without traces, debugging an agent can become guesswork.
+
+::: {.callout-tip}
+## The conceptual jump
+An LLM **generates**.
+
+A RAG system **retrieves, then generates**.
+
+An agentic system can **decide, act, observe and decide again**.
+:::
+
+## Summary
+
+- Non-agentic systems generally follow workflows predetermined by the application.
+- Agentic systems allow the model to participate in selecting the next action.
+- The basic agent loop is **decide → act → observe → repeat**.
+- Tools give an agent capabilities beyond text generation.
+- RAG can be one tool or subsystem inside an agent.
+- Use a fixed workflow when the sequence is already known.
+- Save the agent's action/observation trace so behavior can be reproduced and debugged.
+
+**Next:** *Agentic AI — Building Your First AI Agent*

@@ -1,0 +1,315 @@
+---
+title: "RAG II: Embeddings, Vector Databases, and Retrieval"
+description: "How text becomes vectors, how semantic similarity supports retrieval, and why vector databases are useful in RAG systems."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, RAG, Embeddings, Vector Database]
+draft: false
+---
+
+In RAG I, we retrieved a document using the literal word `hotel`. That worked because the question and document happened to share the same word.
+
+But consider:
+
+> **Question:** What can I spend on lodging?
+
+and:
+
+> **Document:** Employees may claim up to $220 per night for a hotel.
+
+A simple keyword search may miss the connection between **lodging** and **hotel**.
+
+We need a representation based more on **meaning** than exact spelling.
+
+::: {.callout-tip}
+## What you will learn
+- What an **embedding** is
+- Why similar meanings can be represented by nearby vectors
+- How similarity search works
+- What a vector database contributes
+- How documents are prepared for retrieval
+:::
+
+## From sentences to coordinates
+
+An embedding model converts text into a numerical vector:
+
+$$
+f(\text{text}) =
+[v_1,v_2,\ldots,v_d]
+$$
+
+For example, imagine a simplified three-dimensional embedding:
+
+```text
+"hotel reimbursement"  → [0.82, 0.14, 0.71]
+"lodging allowance"    → [0.79, 0.18, 0.68]
+"python programming"   → [0.05, 0.91, 0.12]
+```
+
+Real embeddings usually have many more dimensions. The three numbers above are only an illustration.
+
+The useful idea is:
+
+> Texts with related meaning are often represented by vectors that are relatively close in the embedding space.
+
+::: {#def-embedding}
+## Embedding
+An **embedding** is a numerical vector representation learned so that useful relationships in the original data—such as semantic similarity between pieces of text—can be reflected in the vector space.
+:::
+
+## Think of a semantic map
+
+Imagine a map where location is determined by meaning rather than geography.
+
+```text
+                         programming
+                              ●
+                             /
+                            /
+        hotel ●────● lodging
+               \
+                ● accommodation
+
+
+     ● reimbursement
+```
+
+Words and sentences concerning similar ideas tend to occupy related neighborhoods.
+
+This gives us a new retrieval strategy:
+
+```text
+Question
+   ↓
+Embedding model
+   ↓
+Question vector
+   ↓
+Find nearby document vectors
+   ↓
+Relevant chunks
+```
+
+## Measuring closeness
+
+One common similarity measure is **cosine similarity**:
+
+$$
+\operatorname{cosine}(a,b)
+=
+\frac{a\cdot b}
+{\lVert a\rVert \lVert b\rVert}
+$$ {#eq-cosine}
+
+It compares the direction of two vectors.
+
+For many embedding systems, a larger cosine similarity indicates that two vectors are more similar according to the representation.
+
+::: {.callout-note}
+## Similar vector does not mean identical fact
+Embedding similarity is a retrieval signal. It does not prove that a document is correct, sufficient, or truly relevant to the user's intent.
+:::
+
+## Why chunk documents?
+
+Suppose a handbook contains 100 pages.
+
+Embedding the entire handbook as one vector would make retrieval coarse. Instead, we divide documents into smaller pieces called **chunks**.
+
+```text
+Document
+   ↓
+┌───────────┐
+│ Chunk 1   │ → embedding → vector
+├───────────┤
+│ Chunk 2   │ → embedding → vector
+├───────────┤
+│ Chunk 3   │ → embedding → vector
+└───────────┘
+```
+
+Now the retriever can return only the sections most related to the question.
+
+Chunking introduces a tradeoff:
+
+```text
+Too large  → more unrelated text in each retrieved chunk
+Too small  → important context may be split apart
+```
+
+There is no universally perfect chunk size.
+
+## What is a vector database?
+
+After embedding thousands or millions of chunks, we need a system that can store and search those vectors efficiently.
+
+A **vector database** or vector index typically stores:
+
+```text
+Vector
++ original text
++ metadata
+```
+
+For example:
+
+```text
+vector:   [0.82, 0.14, ...]
+text:     "Employees may claim up to $220..."
+source:   "travel_policy.pdf"
+page:     7
+```
+
+When a question arrives:
+
+```text
+Question
+   ↓
+Embed question
+   ↓
+Search vector store
+   ↓
+Top-k similar chunks
+   ↓
+Return text + metadata
+```
+
+The metadata is valuable because retrieval should ideally preserve **where the evidence came from**.
+
+## A small semantic retrieval example
+
+Install:
+
+```bash
+pip install sentence-transformers
+```
+
+Then:
+
+```{.python filename="semantic_retrieval.py"}
+import json
+from pathlib import Path
+from sentence_transformers import SentenceTransformer, util
+
+documents = [
+    "Employees may claim up to $220 per night for a hotel.",
+    "Meal reimbursement is limited to $65 per day.",
+    "Taxi expenses require a receipt above $25.",
+]
+
+question = "What can I spend on lodging?"
+
+model_name = "all-MiniLM-L6-v2"
+model = SentenceTransformer(model_name)
+
+document_embeddings = model.encode(
+    documents,
+    convert_to_tensor=True
+)
+
+question_embedding = model.encode(
+    question,
+    convert_to_tensor=True
+)
+
+scores = util.cos_sim(
+    question_embedding,
+    document_embeddings
+)[0]
+
+best_index = int(scores.argmax())
+best_document = documents[best_index]
+
+print("Question:", question)
+print("Retrieved:", best_document)
+print("Score:", float(scores[best_index]))
+
+Path("outputs").mkdir(exist_ok=True)
+
+metadata = {
+    "embedding_model": model_name,
+    "question": question,
+    "retrieved_document": best_document,
+    "similarity_score": float(scores[best_index]),
+}
+
+Path("outputs/retrieval.json").write_text(
+    json.dumps(metadata, indent=2)
+)
+```
+
+This example keeps the vectors in memory so the mechanism is visible. A vector database becomes useful when the collection grows, needs persistence, metadata filtering, or efficient repeated search.
+
+## The complete retrieval side
+
+We can now separate RAG into an **offline** and an **online** path.
+
+```text
+OFFLINE / INDEXING
+
+Documents
+   ↓
+Clean + chunk
+   ↓
+Embedding model
+   ↓
+Vectors + metadata
+   ↓
+Vector store
+
+
+ONLINE / QUERY
+
+Question
+   ↓
+Same embedding model
+   ↓
+Question vector
+   ↓
+Similarity search
+   ↓
+Top-k chunks
+```
+
+The two paths meet at retrieval.
+
+::: {.callout-warning}
+## Keep the embedding space consistent
+Document vectors and query vectors must be meaningfully comparable. In a basic RAG system, use the same compatible embedding model and preprocessing assumptions for indexing and querying.
+:::
+
+## What should you save?
+
+Now our application has new persistent artifacts:
+
+```text
+rag_project/
+├── source_documents/
+├── chunks.json
+├── vector_index/
+├── index_config.json
+└── runs/
+```
+
+Save or record:
+
+- source identity/version,
+- chunk text and metadata,
+- embedding model name/version,
+- chunking configuration,
+- vector index,
+- retrieval parameters such as `top_k`.
+
+If you change the embedding model, you will generally need to **re-embed the indexed documents**.
+
+## Summary
+
+- Embeddings convert text into numerical vectors.
+- Semantically related text can be retrieved by comparing vectors.
+- Cosine similarity (@eq-cosine) is one common similarity measure.
+- Documents are usually split into chunks before indexing.
+- Vector databases/indexes store vectors together with text and metadata for efficient retrieval.
+- Reproducible RAG requires saving the indexing and retrieval configuration, not only the LLM response.
+
+**Next:** *Build a Complete RAG Application*

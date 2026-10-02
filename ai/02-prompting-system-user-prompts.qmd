@@ -1,0 +1,250 @@
+---
+title: "Prompting an LLM: System Prompts and User Prompts"
+description: "How instructions and requests work together, what belongs in each prompt, and how to build prompts that are clear and reusable."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, Prompting]
+draft: false
+---
+
+A Large Language Model can generate text, but **the prompt determines the job we are asking it to do**. Good prompting is less about finding magical words and more about separating *stable instructions* from *the current request*.
+
+::: {.callout-tip}
+## What you will learn
+- What a **prompt** is
+- The roles of **system** and **user** prompts
+- What information belongs in each
+- How to write clearer instructions
+- How to build and save a reusable prompt configuration
+:::
+
+## Two voices in one conversation
+
+Imagine hiring a tutor.
+
+The school gives the tutor a standing instruction:
+
+> Teach statistics accurately. Explain intuition before equations. Do not invent facts.
+
+Then a student arrives and asks:
+
+> Explain standard deviation with a simple example.
+
+These two messages serve different purposes.
+
+```text
+SYSTEM PROMPT                         USER PROMPT
+"How should you behave?"             "What do I need now?"
+        │                                    │
+        └──────────────┬─────────────────────┘
+                       ▼
+                      LLM
+                       ▼
+                    Response
+```
+
+The **system prompt** establishes persistent behavior or constraints.  
+The **user prompt** contains the current task, question, or data.
+
+::: {#def-system-user}
+## System and user prompts
+A **system prompt** describes the model's role, behavioral rules, output expectations, and other instructions that should remain stable across requests.
+
+A **user prompt** contains the user's current request and the information needed to answer it.
+:::
+
+## What belongs where?
+
+A useful test is:
+
+> **Would this instruction still apply if the user asked a different question?**
+
+If yes, it often belongs in the system prompt.
+
+| Information | Better location |
+|---|---|
+| "You are a statistics tutor." | System |
+| "Use concise explanations." | System |
+| "Return valid JSON." | System |
+| "Explain logistic regression." | User |
+| "Summarize this paragraph: ..." | User |
+| "Use the following customer record: ..." | User |
+
+: Stable behavior usually belongs in the system prompt; changing tasks belong in the user prompt {#tbl-prompt-roles}
+
+::: {.callout-note}
+## Not every application exposes the same roles
+Chat-oriented APIs commonly support message roles such as `system` and `user`. Exact role names and precedence can vary by model and API. Always check the interface you are using.
+:::
+
+## A weak prompt and a stronger prompt
+
+Consider:
+
+```text
+Explain regression.
+```
+
+The request is valid, but many decisions are unspecified: audience, depth, format and purpose.
+
+A stronger version separates reusable teaching behavior from the current topic.
+
+```text
+SYSTEM
+You are a machine-learning tutor.
+Explain intuition before equations.
+Use one small numerical example.
+Keep the answer under 400 words.
+
+USER
+Explain linear regression to a beginner.
+```
+
+This is not merely "more words." It is **better structure**.
+
+A practical prompt can be designed as:
+
+$$
+\text{Prompt Quality}
+\approx
+\text{Task Clarity}
++
+\text{Relevant Context}
++
+\text{Useful Constraints}
+$$
+
+The equation is a mental model, not a mathematical law.
+
+## A four-part prompt recipe
+
+For many applications, think in four pieces:
+
+```text
+ROLE        → Who should the model act as?
+TASK        → What should it do?
+CONTEXT     → What information should it use?
+FORMAT      → How should the answer be returned?
+```
+
+Example:
+
+```text
+ROLE:
+You are a helpful statistics tutor.
+
+TASK:
+Explain the difference between mean and median.
+
+CONTEXT:
+The reader knows basic arithmetic but no statistics.
+
+FORMAT:
+Use one table and one numerical example.
+```
+
+You do not always need all four pieces. Use only what improves the task.
+
+::: {.callout-warning}
+## More instructions are not automatically better
+Long prompts can contain conflicting, irrelevant, or duplicated rules. Prefer **specific instructions with a reason to exist** over prompt length for its own sake.
+:::
+
+## End-to-end example
+
+The example below uses a chat-style interface. The same design idea applies across providers even when the exact Python library differs.
+
+```{.python filename="prompt_design.py"}
+import json
+from pathlib import Path
+
+system_prompt = """
+You are a machine-learning tutor.
+Explain intuition before technical detail.
+Use concise language and one example.
+"""
+
+user_prompt = """
+Explain overfitting to a beginner.
+"""
+
+messages = [
+    {"role": "system", "content": system_prompt.strip()},
+    {"role": "user", "content": user_prompt.strip()},
+]
+
+# `messages` is now ready to send to a compatible chat model.
+print(json.dumps(messages, indent=2))
+
+Path("outputs").mkdir(exist_ok=True)
+
+Path("outputs/prompt.json").write_text(
+    json.dumps(messages, indent=2)
+)
+```
+
+Notice that the prompt itself is now a **software artifact**. It can be versioned, tested and reused.
+
+## Prompts are part of the application
+
+A common beginner view is:
+
+```text
+Application = Model
+```
+
+A more useful engineering view is:
+
+```text
+Application
+   │
+   ├── Model
+   ├── System prompt
+   ├── User input
+   ├── Generation settings
+   └── Validation
+```
+
+Changing the system prompt can change application behavior even when the model remains exactly the same.
+
+## What should you save?
+
+At minimum, save enough information to reproduce an important generation:
+
+```text
+experiment/
+├── system_prompt.txt
+├── user_prompt.txt
+├── model_config.json
+└── response.txt
+```
+
+For larger projects, give prompts versions:
+
+```text
+prompts/
+├── tutor_v1.txt
+├── tutor_v2.txt
+└── tutor_v3.txt
+```
+
+This makes prompt changes inspectable instead of silently editing a string buried inside Python code.
+
+::: {.callout-tip}
+## The durable lesson
+**System prompt = relatively stable behavior.**
+
+**User prompt = current request and current context.**
+
+Keep the boundary clear and your LLM application becomes easier to reason about, test and maintain.
+:::
+
+## Summary
+
+- A prompt tells the LLM what task to perform and provides useful context.
+- System prompts are well suited to **stable behavior, role and constraints**.
+- User prompts are well suited to the **current question, task or data**.
+- Good prompting emphasizes clarity, relevant context and useful output constraints.
+- Prompts should be saved and versioned like other application artifacts.
+
+**Next:** *Your First LLM Application — Prompt → Response → Save*

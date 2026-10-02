@@ -1,0 +1,373 @@
+---
+title: "Build a Complete RAG Application"
+description: "Connect documents, chunking, embeddings, retrieval, prompting and generation into one end-to-end RAG pipeline."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, RAG, Application]
+draft: false
+---
+
+We now have all the pieces.
+
+RAG I gave us the reason for retrieval.  
+RAG II gave us embeddings and semantic search.
+
+This chapter connects them into one end-to-end system.
+
+::: {.callout-tip}
+## What you will learn
+- The full RAG lifecycle from documents to answer
+- The difference between **indexing time** and **query time**
+- How retrieved context enters the prompt
+- How to preserve evidence for debugging
+- How to save a complete RAG experiment
+:::
+
+## Assemble the machine
+
+Think of RAG as a machine with two doors.
+
+One door is used when knowledge enters the system:
+
+```text
+                 INDEXING DOOR
+                      │
+Documents → Chunks → Embeddings → Vector Index
+```
+
+The other is used when a question enters:
+
+```text
+                  QUERY DOOR
+                      │
+Question → Embedding → Retrieval
+                         │
+                         ▼
+                    Context
+                         │
+Question ────────────────┤
+                         ▼
+                        LLM
+                         ▼
+                       Answer
+```
+
+The key insight is that **documents are usually indexed ahead of time**, while retrieval and generation happen for each question.
+
+## Stage 1: Index the knowledge
+
+Suppose our knowledge base contains:
+
+```text
+Travel Policy:
+Employees may claim up to $220 per night for a hotel.
+
+Meal Policy:
+Employees may claim up to $65 per day for meals.
+
+Taxi Policy:
+A receipt is required when a taxi fare exceeds $25.
+```
+
+A real application might load PDFs, web pages or database records. For clarity, we start with small strings.
+
+## Stage 2: Retrieve evidence
+
+When the user asks:
+
+> How much can I spend on lodging?
+
+we embed the question and compare it with document embeddings.
+
+The retriever might return:
+
+```text
+Employees may claim up to $220 per night for a hotel.
+```
+
+That retrieved text becomes **evidence supplied to the generator**.
+
+## Stage 3: Build the grounded prompt
+
+A useful RAG prompt is explicit about the evidence boundary:
+
+```text
+Use the supplied context to answer the question.
+If the answer is not supported by the context, say that
+the available context is insufficient.
+
+CONTEXT:
+Employees may claim up to $220 per night for a hotel.
+
+QUESTION:
+How much can I spend on lodging?
+```
+
+The model is no longer being asked to answer from general memory alone.
+
+## End-to-end code
+
+Install:
+
+```bash
+pip install sentence-transformers transformers torch
+```
+
+Then:
+
+```{.python filename="complete_rag.py"}
+import json
+from pathlib import Path
+
+from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline
+
+# -------------------------------------------------
+# 1. Knowledge base
+# -------------------------------------------------
+documents = [
+    {
+        "id": "travel-1",
+        "text": "Employees may claim up to $220 per night for a hotel."
+    },
+    {
+        "id": "meal-1",
+        "text": "Employees may claim up to $65 per day for meals."
+    },
+    {
+        "id": "taxi-1",
+        "text": "A receipt is required when a taxi fare exceeds $25."
+    },
+]
+
+# -------------------------------------------------
+# 2. Configuration
+# -------------------------------------------------
+config = {
+    "embedding_model": "all-MiniLM-L6-v2",
+    "generation_model": "distilgpt2",
+    "top_k": 1,
+    "max_new_tokens": 50,
+}
+
+# -------------------------------------------------
+# 3. INDEXING
+# -------------------------------------------------
+embedder = SentenceTransformer(
+    config["embedding_model"]
+)
+
+document_texts = [doc["text"] for doc in documents]
+
+document_embeddings = embedder.encode(
+    document_texts,
+    convert_to_tensor=True
+)
+
+# -------------------------------------------------
+# 4. QUERY
+# -------------------------------------------------
+question = "How much can I spend on lodging?"
+
+question_embedding = embedder.encode(
+    question,
+    convert_to_tensor=True
+)
+
+scores = util.cos_sim(
+    question_embedding,
+    document_embeddings
+)[0]
+
+top_indices = scores.topk(
+    k=config["top_k"]
+).indices.tolist()
+
+retrieved = [documents[i] for i in top_indices]
+
+context = "\n".join(
+    doc["text"] for doc in retrieved
+)
+
+# -------------------------------------------------
+# 5. AUGMENT
+# -------------------------------------------------
+prompt = f"""
+Use the context to answer the question.
+If the context does not contain the answer,
+say that the available context is insufficient.
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+
+ANSWER:
+""".strip()
+
+# -------------------------------------------------
+# 6. GENERATE
+# -------------------------------------------------
+generator = pipeline(
+    "text-generation",
+    model=config["generation_model"]
+)
+
+result = generator(
+    prompt,
+    max_new_tokens=config["max_new_tokens"],
+    do_sample=False,
+)
+
+response = result[0]["generated_text"]
+
+print(response)
+
+# -------------------------------------------------
+# 7. SAVE THE RUN
+# -------------------------------------------------
+run_dir = Path("rag_runs/run_001")
+run_dir.mkdir(parents=True, exist_ok=True)
+
+(run_dir / "config.json").write_text(
+    json.dumps(config, indent=2)
+)
+
+(run_dir / "question.txt").write_text(question)
+
+(run_dir / "retrieved.json").write_text(
+    json.dumps(retrieved, indent=2)
+)
+
+(run_dir / "prompt.txt").write_text(prompt)
+(run_dir / "response.txt").write_text(response)
+```
+
+This is intentionally small. The architecture matters more than the sophistication of the individual components.
+
+## Follow one question through the system
+
+A good way to debug RAG is to trace one request as if it were a package moving through a delivery network.
+
+```text
+① QUESTION
+"How much can I spend on lodging?"
+          │
+          ▼
+② QUERY EMBEDDING
+[ ... numbers ... ]
+          │
+          ▼
+③ RETRIEVAL
+travel-1
+          │
+          ▼
+④ CONTEXT
+"$220 per night..."
+          │
+          ▼
+⑤ AUGMENTED PROMPT
+context + question
+          │
+          ▼
+⑥ GENERATION
+LLM response
+          │
+          ▼
+⑦ SAVED TRACE
+question + evidence + prompt + answer
+```
+
+If the final answer is wrong, inspect the stages **backward**.
+
+```text
+Wrong answer?
+    ↓
+Did the prompt contain the right evidence?
+    ↓
+Did retrieval return the right chunk?
+    ↓
+Was the right knowledge indexed?
+```
+
+This backward-debugging habit is extremely useful.
+
+::: {.callout-tip}
+## RAG is observable
+Unlike information hidden inside model weights, retrieved context can be inspected directly. Take advantage of that: log the retrieved chunks and their sources.
+:::
+
+## Production systems add more layers
+
+A larger RAG application may include:
+
+```text
+Documents
+   ↓
+Parsing
+   ↓
+Cleaning
+   ↓
+Chunking
+   ↓
+Embeddings
+   ↓
+Vector DB
+   ↓
+Retrieval
+   ↓
+Re-ranking
+   ↓
+Prompt construction
+   ↓
+LLM
+   ↓
+Validation / citations
+   ↓
+Response
+```
+
+Do not add every component on day one. Add complexity when a measured failure mode justifies it.
+
+## What should you save?
+
+There are now **two classes of artifacts**.
+
+### Index artifacts
+
+```text
+index/
+├── chunks.json
+├── vector_index/
+└── index_config.json
+```
+
+### Run artifacts
+
+```text
+rag_runs/run_001/
+├── config.json
+├── question.txt
+├── retrieved.json
+├── prompt.txt
+└── response.txt
+```
+
+This separation matters because one index can serve many questions.
+
+::: {.callout-warning}
+## A high similarity score is not an answer-quality score
+Retrieval similarity tells you something about vector closeness. It does not guarantee that the passage contains the correct answer or that the generated response faithfully uses it.
+:::
+
+## Summary
+
+- RAG has an **indexing path** and a **query path**.
+- Documents are prepared, embedded and stored before questions arrive.
+- At query time, the question is embedded and relevant chunks are retrieved.
+- Retrieved chunks are inserted into the prompt before generation.
+- Save both **index artifacts** and **per-question traces**.
+- When debugging, trace a bad answer backward from generation to retrieval to indexing.
+
+**Next:** *From Non-Agentic AI to Agentic AI*
