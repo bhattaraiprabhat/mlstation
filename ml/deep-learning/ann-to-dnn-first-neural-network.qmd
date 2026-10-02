@@ -1,0 +1,500 @@
+---
+title: "From Linear Regression to Deep Learning: Your First Neural Network"
+description: "What a weight really is, why a single neuron is just linear regression, and how hidden layers and depth let a network learn curves. Interactive, step by step."
+author: "MLStation"
+date: 2026-10-01
+categories: [ML, Deep Learning]
+draft: false
+---
+
+Deep learning sounds mysterious, but its building block is something you already know: **multiply inputs by weights, add them up**. That is linear regression. A neural network simply stacks many of these small calculations in **layers**, with a bend (an *activation*) in between. Stack enough layers and you have **deep learning**.
+
+::: {.callout-tip}
+## What you will learn
+- What a neuron and a **weight** are, with a live diagram
+- Why one neuron with no bend **is** linear regression, weight by weight
+- How a hidden layer lets the model learn a curve linear regression cannot
+- How an ANN and a deeper DNN solve a five-feature problem
+- How to **save** the trained model and load it again
+:::
+
+## The building block: one neuron
+
+A neuron takes inputs $x_1, x_2, \dots$, multiplies each by its own **weight**, adds a **bias**, then passes the total through an **activation function** $f$:
+
+$$
+z = w_1 x_1 + w_2 x_2 + w_3 x_3 + b, \qquad a = f(z)
+$$ {#eq-neuron}
+
+::: {.callout-important}
+## What is a weight, exactly?
+A **weight** is a single number attached to one connection. It answers one question: **if this input goes up by 1, how much does it push the neuron's total $z$, and in which direction?**
+
+- **Large** weight: the input matters a lot. **Near zero**: the input is almost ignored.
+- **Positive** weight: the input pushes the total **up**. **Negative**: it pushes it **down**.
+- The **bias** $b$ is the starting value before any input is added.
+
+Think of each weight as a volume knob on one microphone: it sets how loud, and with what sign, that input is heard. Training means turning all the knobs until the predictions match the data.
+:::
+
+Play with the knobs. Line thickness shows the **size** of each weight, colour shows its **sign**.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof x1 = Inputs.range([-2, 2], {value: 1.0, step: 0.1, label: "Input x₁"})
+viewof x2 = Inputs.range([-2, 2], {value: 0.5, step: 0.1, label: "Input x₂"})
+viewof x3 = Inputs.range([-2, 2], {value: -1.0, step: 0.1, label: "Input x₃"})
+viewof w1 = Inputs.range([-3, 3], {value: 2.0, step: 0.1, label: "Weight w₁"})
+viewof w2 = Inputs.range([-3, 3], {value: -1.0, step: 0.1, label: "Weight w₂"})
+viewof w3 = Inputs.range([-3, 3], {value: 0.3, step: 0.1, label: "Weight w₃"})
+viewof bias = Inputs.range([-3, 3], {value: 0.0, step: 0.1, label: "Bias b"})
+viewof act = Inputs.radio(["none (linear)", "ReLU", "sigmoid"], {value: "ReLU", label: "Activation f"})
+```
+
+```{ojs}
+//| echo: false
+neuron = {
+  const xs = [x1, x2, x3], ws = [w1, w2, w3];
+  const z = d3.sum(xs, (x, i) => x * ws[i]) + bias;
+  const a = act === "ReLU" ? Math.max(0, z) : act === "sigmoid" ? 1 / (1 + Math.exp(-z)) : z;
+  const W = 640, H = 270, cx = 400, cy = 135;
+  const ys = [55, 135, 215];
+  const col = w => w >= 0 ? ms.indigo : ms.rose;
+  return htl.svg`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif;color:currentColor">
+    ${ys.map((y, i) => htl.svg`
+      <line x1="95" y1="${y}" x2="${cx - 42}" y2="${cy}" stroke="${col(ws[i])}" stroke-width="${1 + Math.abs(ws[i]) * 2.6}" stroke-opacity="0.85"/>
+      <circle cx="70" cy="${y}" r="25" fill="var(--ms-surface, #f4f4f7)" stroke="currentColor" stroke-opacity="0.35"/>
+      <text x="70" y="${y + 5}" text-anchor="middle" font-size="14" fill="currentColor">${xs[i].toFixed(1)}</text>
+      <text x="22" y="${y + 5}" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.7">x${"₁₂₃"[i]}</text>
+      <text x="${(95 + cx - 42) / 2 + 10}" y="${(y + cy) / 2 - 8}" font-size="13" fill="${col(ws[i])}" font-weight="600">w${"₁₂₃"[i]} = ${ws[i].toFixed(1)}</text>`)}
+    <circle cx="${cx}" cy="${cy}" r="42" fill="${ms.indigo}" fill-opacity="0.12" stroke="${ms.indigo}" stroke-width="2"/>
+    <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="13" fill="currentColor">z = ${z.toFixed(2)}</text>
+    <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.7">b = ${bias.toFixed(1)}</text>
+    <line x1="${cx + 42}" y1="${cy}" x2="${W - 95}" y2="${cy}" stroke="currentColor" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="${(cx + W - 95) / 2 + 20}" y="${cy - 10}" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.7">f = ${act.split(" ")[0]}</text>
+    <circle cx="${W - 60}" cy="${cy}" r="32" fill="${ms.teal}" fill-opacity="0.15" stroke="${ms.teal}" stroke-width="2"/>
+    <text x="${W - 60}" y="${cy + 5}" text-anchor="middle" font-size="15" font-weight="700" fill="currentColor">${a.toFixed(2)}</text>
+  </svg>`
+}
+html`<div class="ms-readout"><span>z = (${w1})(${x1}) + (${w2})(${x2}) + (${w3})(${x3}) + (${bias})</span><b>${(w1*x1 + w2*x2 + w3*x3 + bias).toFixed(2)}</b></div>`
+```
+
+**ReLU** (rectified linear unit) is the most common activation: it outputs $\max(0, z)$, so it is zero until the total crosses zero, then rises in a straight line. That one bend is what gives neural networks their power.
+
+## Weights vs linear regression
+
+Linear regression with one feature is $\hat{y} = \beta_0 + \beta_1 x$. Now look at a neuron with one input and **no activation**: $\hat{y} = b + w\,x$. Same formula, different names.
+
+| | Linear regression | Neural network |
+|---|---|---|
+| Multiplier on an input | Coefficient $\beta_1$ (slope) | Weight $w$ |
+| Constant term | Intercept $\beta_0$ | Bias $b$ |
+| How it is found | One exact formula (least squares) | Gradual adjustment (gradient descent) |
+| Meaning of the multiplier | Fixed effect of $x$ everywhere | Effect of $x$ **on one neuron**; the total effect depends on all neurons |
+| Can it bend? | No, always a straight line | Yes, once a hidden layer with activation is added |
+| Number of parameters | Features + 1 | Can be thousands or billions |
+
+: Weights in linear regression vs a neural network {#tbl-compare}
+
+## Experiment 1: one feature, one target
+
+A building's electricity demand depends on the outside temperature. Below about 22 °C demand is flat. Above it, the air conditioning turns on and demand climbs. We simulate 120 days.
+
+```{python}
+#| label: setup-1
+#| code-fold: true
+#| code-summary: "Simulate 120 days of temperature and demand"
+import numpy as np, pandas as pd, warnings
+warnings.filterwarnings("ignore")
+from sklearn.linear_model import LinearRegression
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_absolute_error
+import plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+
+rng = np.random.default_rng(7)
+n = 120
+temp = rng.uniform(5, 40, n)                                   # °C
+cool = np.maximum(temp - 22, 0)                                # air conditioning kicks in at 22 °C
+demand = 50 + 2.6 * cool + 0.04 * cool**2 + rng.normal(0, 3, n)  # kW
+x = temp.reshape(-1, 1)
+grid = np.linspace(5, 40, 200)
+```
+
+### Model A: linear regression vs a single neuron
+
+We fit ordinary linear regression, then train **one neuron with no activation** using gradient descent: start with $w = 0, b = 0$, measure the error, nudge both numbers downhill, and repeat.
+
+```{python}
+#| code-fold: true
+#| code-summary: "Train both models"
+lr = LinearRegression().fit(x, demand)
+
+# a single neuron trained by gradient descent (on scaled x for stability, then converted back to °C)
+mu, sd = temp.mean(), temp.std()
+z = (temp - mu) / sd
+w, b, eta, path = 0.0, 0.0, 0.1, []
+for epoch in range(80):
+    pred = w * z + b
+    err = pred - demand
+    path.append(dict(epoch=epoch, w=w / sd, b=b - w * mu / sd, mse=float((err**2).mean())))
+    w -= eta * 2 * (err * z).mean()          # gradient of mean squared error w.r.t. w
+    b -= eta * 2 * err.mean()                # gradient w.r.t. b
+w_neuron, b_neuron = w / sd, b - w * mu / sd
+```
+
+```{python}
+#| echo: false
+ojs_define(pts1=pd.DataFrame({"t": temp, "y": demand}).round(2).to_dict(orient="records"),
+           path=pd.DataFrame(path).round(4).to_dict(orient="records"),
+           ols=dict(w=float(lr.coef_[0]), b=float(lr.intercept_)))
+```
+
+Drag the slider to watch the neuron learn. Its line starts flat at zero and settles exactly on the linear regression line.
+
+```{ojs}
+//| echo: false
+viewof ep = Inputs.range([0, 79], {value: 0, step: 1, label: "Training step"})
+```
+
+```{ojs}
+//| echo: false
+cur = path[ep]
+html`<div class="ms-readout"><span>Neuron weight w</span><b>${cur.w.toFixed(3)}</b><span>bias b</span><b>${cur.b.toFixed(2)}</b><span>Regression slope ${ols.w.toFixed(3)}, intercept ${ols.b.toFixed(2)}</span></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 340,
+  x: {label: "Temperature (°C) →", domain: [5, 40]}, y: {label: "↑ Demand (kW)", domain: [-5, 110]},
+  marks: [
+    Plot.dot(pts1, {x: "t", y: "y", r: 3, fill: ms.slate, fillOpacity: 0.55}),
+    Plot.line([5, 40].map(t => ({t, y: ols.b + ols.w * t})), {x: "t", y: "y", stroke: ms.amber, strokeWidth: 2, strokeDasharray: "6,4"}),
+    Plot.line([5, 40].map(t => ({t, y: cur.b + cur.w * t})), {x: "t", y: "y", stroke: ms.indigo, strokeWidth: 3}),
+    Plot.text([{t: 6, y: 104}], {x: "t", y: "y", text: () => "solid: neuron   dashed: linear regression", textAnchor: "start", fill: "currentColor", fontSize: 12})
+  ]
+})
+```
+
+```{python}
+#| echo: false
+from IPython.display import Markdown
+Markdown(f"""
+| Parameter | Linear regression | Single neuron | Same? |
+|---|---|---|---|
+| Slope / weight | {lr.coef_[0]:.3f} | {w_neuron:.3f} | Yes |
+| Intercept / bias | {lr.intercept_:.2f} | {b_neuron:.2f} | Yes |
+| R² | {lr.score(x, demand):.3f} | {r2_score(demand, w_neuron * temp + b_neuron):.3f} | Yes |
+""")
+```
+
+**Similarity:** with no hidden layer and no activation, the neuron's weight **is** the regression slope and its bias **is** the intercept. Both say "each extra degree adds about `{python} f"{lr.coef_[0]:.2f}"` kW, everywhere". **Difference:** regression solves it in one exact step, the neuron gets there by trial and correction. Both are wrong in the same way: the data bends, a straight line cannot.
+
+### Model B: add a hidden layer with two ReLU neurons
+
+Now we put **two hidden neurons** with ReLU between the input and the output:
+
+$$
+\hat{y} = v_1\,\text{ReLU}(w_1 x + b_1) + v_2\,\text{ReLU}(w_2 x + b_2) + c
+$$ {#eq-ann1}
+
+```{python}
+#| code-fold: true
+#| code-summary: "Train the 1-2-1 network"
+ann1 = MLPRegressor(hidden_layer_sizes=(2,), activation="relu", solver="lbfgs",
+                    max_iter=5000, random_state=5).fit(z.reshape(-1, 1), demand)
+W1 = ann1.coefs_[0][0] / sd                                   # input-to-hidden weights in °C units
+B1 = ann1.intercepts_[0] - ann1.coefs_[0][0] * mu / sd        # hidden biases
+V, C = ann1.coefs_[1].ravel(), float(ann1.intercepts_[1][0])  # hidden-to-output weights and bias
+hinge = -B1 / W1                                              # temperature where each neuron switches on/off
+parts = [V[j] * np.maximum(W1[j] * grid + B1[j], 0) for j in range(2)]
+r2_ann1 = r2_score(demand, sum(V[j] * np.maximum(W1[j] * temp + B1[j], 0) for j in range(2)) + C)
+```
+
+```{python}
+#| echo: false
+ojs_define(kink=float(max(hinge)), parts=[dict(t=float(t), n1=float(parts[0][i]), n2=float(parts[1][i]), total=float(parts[0][i] + parts[1][i] + C))
+                  for i, t in enumerate(grid)])
+```
+
+Each hidden neuron draws one **hinge**: flat on one side, a straight slope on the other. The output adds the hinges together. Toggle them to see how the curve is built.
+
+```{ojs}
+//| echo: false
+viewof show = Inputs.checkbox(["Neuron 1 × v₁", "Neuron 2 × v₂", "Network output"], {value: ["Network output"], label: "Show"})
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 340,
+  x: {label: "Temperature (°C) →"}, y: {label: "↑ kW"},
+  marks: [
+    Plot.dot(pts1, {x: "t", y: "y", r: 3, fill: ms.slate, fillOpacity: 0.45}),
+    show.includes("Neuron 1 × v₁") ? Plot.line(parts, {x: "t", y: "n1", stroke: ms.amber, strokeWidth: 2.5}) : null,
+    show.includes("Neuron 2 × v₂") ? Plot.line(parts, {x: "t", y: "n2", stroke: ms.rose, strokeWidth: 2.5}) : null,
+    show.includes("Network output") ? Plot.line(parts, {x: "t", y: "total", stroke: ms.indigo, strokeWidth: 3.5}) : null,
+    Plot.ruleX([kink], {stroke: "currentColor", strokeOpacity: 0.3, strokeDasharray: "4,4"})
+  ]
+})
+```
+
+Now compare the parameters **weight by weight**:
+
+```{python}
+#| echo: false
+Markdown(f"""
+| Parameter | What it does | Value | Linear regression equivalent |
+|---|---|---|---|
+| $w_1$, $b_1$ | Hidden neuron 1: switches at {hinge[0]:.1f} °C | {W1[0]:.2f}, {B1[0]:.1f} | None |
+| $w_2$, $b_2$ | Hidden neuron 2: switches at {hinge[1]:.1f} °C | {W1[1]:.2f}, {B1[1]:.1f} | None |
+| $v_1$, $v_2$ | How strongly each hinge counts in the output | {V[0]:.2f}, {V[1]:.2f} | None |
+| $c$ | Output bias | {C:.1f} | Like the intercept |
+| **Total** | | **7 parameters** | **2 parameters** |
+| **R²** | | **{r2_ann1:.3f}** | **{lr.score(x, demand):.3f}** |
+""")
+```
+
+::: {.callout-note}
+## The key difference
+In linear regression, the slope is **one number** that applies at every temperature. In the network, **no single weight is "the slope"**. The slope below `{python} f"{max(hinge):.0f}"` °C is $v_1 w_1 + v_2 w_2 \approx$ `{python} f"{V[0]*W1[0] + V[1]*W1[1]:.2f}"` kW per °C (flat), and above it is `{python} f"{V[[j for j in range(2) if W1[j] > 0][0]] * W1[[j for j in range(2) if W1[j] > 0][0]]:.2f}"` kW per °C. The network **discovered the air-conditioning threshold** near 22 °C without being told. That is the trade: more flexible, less directly readable.
+:::
+
+## Experiment 2: five features, one target
+
+Real buildings depend on more than temperature. We simulate 3,000 hourly readings with five features:
+
+| Feature | Meaning |
+|---|---|
+| `temp` | Outside temperature (°C) |
+| `humidity` | Relative humidity (%) |
+| `hour` | Hour of day (0 to 23) |
+| `weekend` | 1 on Saturday and Sunday |
+| `occupancy` | People in the building |
+
+```{python}
+#| code-fold: true
+#| code-summary: "Simulate 3,000 hourly readings"
+N = 3000
+F = pd.DataFrame({
+    "temp": rng.uniform(-5, 40, N),
+    "humidity": rng.uniform(20, 90, N),
+    "hour": rng.integers(0, 24, N),
+    "weekend": (rng.random(N) < 2 / 7).astype(int),
+})
+F["occupancy"] = rng.uniform(0, 200, N) * (1 - 0.7 * F.weekend)
+
+def true_demand(t, h, hr, wk, occ):
+    open_ = ((hr >= 8) & (hr < 19)).astype(float) * (1 - wk)        # office open on weekdays
+    return (60 + 0.10 * (t - 18)**2                                 # heating and cooling (U shape)
+            + 0.04 * h * np.maximum(t - 24, 0)                      # humid heat is extra costly
+            + 35 * open_ + 0.25 * occ * open_)                      # lights, computers, people
+
+y = true_demand(F.temp, F.humidity, F.hour, F.weekend, F.occupancy) + rng.normal(0, 6, N)
+Xtr, Xte, ytr, yte = train_test_split(F, y, test_size=0.25, random_state=0)
+```
+
+Linear regression first, then a network with **one hidden layer of 8 neurons**. We scale the inputs and the target, which helps the network train reliably.
+
+```{python}
+#| code-fold: false
+def network(layers, seed=0):
+    mlp = MLPRegressor(hidden_layer_sizes=layers, activation="relu",
+                       solver="lbfgs", alpha=1e-3, max_iter=3000,
+                       random_state=seed)
+    net = make_pipeline(StandardScaler(), mlp)            # scale inputs
+    return TransformedTargetRegressor(regressor=net,      # scale target
+                                      transformer=StandardScaler())
+
+linreg = make_pipeline(StandardScaler(), LinearRegression()).fit(Xtr, ytr)
+ann = network((8,)).fit(Xtr, ytr)
+```
+
+This is the map of the network we just trained: 5 inputs, 8 hidden neurons, 1 output. Hover any line to read its weight.
+
+```{python}
+#| echo: false
+def net_json(model):
+    mlp = model.regressor_[-1]
+    return dict(coefs=[c.round(3).tolist() for c in mlp.coefs_])
+ojs_define(annW=net_json(ann), feats=list(F.columns))
+```
+
+```{ojs}
+//| echo: false
+function drawNet(coefs, inLabels, title) {
+  const sizes = [coefs[0].length, ...coefs.map(c => c[0].length)];
+  const W = 700, H = 380, padX = 110, padY = 30;
+  const xs = sizes.map((_, i) => padX + i * (W - 2 * padX) / (sizes.length - 1));
+  const ysOf = n => d3.range(n).map(j => padY + (j + 0.5) * (H - 2 * padY) / n);
+  const Y = sizes.map(ysOf);
+  const maxW = d3.max(coefs.flat(2), Math.abs);
+  const names = i => i === 0 ? "Input" : i === sizes.length - 1 ? "Output" : `Hidden ${i}`;
+  return htl.svg`<svg viewBox="0 0 ${W} ${H + 20}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif;color:currentColor">
+    ${coefs.flatMap((M, l) => M.flatMap((row, a) => row.map((w, b) => htl.svg`
+      <line x1="${xs[l]}" y1="${Y[l][a]}" x2="${xs[l + 1]}" y2="${Y[l + 1][b]}"
+        stroke="${w >= 0 ? ms.indigo : ms.rose}" stroke-opacity="${0.15 + 0.75 * Math.abs(w) / maxW}"
+        stroke-width="${0.5 + 3.5 * Math.abs(w) / maxW}"><title>weight = ${w.toFixed(3)}</title></line>`)))}
+    ${sizes.flatMap((n, l) => Y[l].map((y, j) => htl.svg`
+      <circle cx="${xs[l]}" cy="${y}" r="${l === 0 || l === sizes.length - 1 ? 13 : 10}"
+        fill="${l === 0 ? ms.slate : l === sizes.length - 1 ? ms.teal : ms.indigo}" fill-opacity="0.9" stroke="white" stroke-width="1.5"/>
+      ${l === 0 ? htl.svg`<text x="${xs[0] - 22}" y="${y + 4}" text-anchor="end" font-size="13" fill="currentColor">${inLabels[j]}</text>` : ""}
+      ${l === sizes.length - 1 ? htl.svg`<text x="${xs[l] + 22}" y="${y + 4}" font-size="13" fill="currentColor">demand (kW)</text>` : ""}`))}
+    ${sizes.map((n, l) => htl.svg`<text x="${xs[l]}" y="${H + 12}" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.7">${names(l)} (${n})</text>`)}
+  </svg>`;
+}
+drawNet(annW.coefs, feats)
+```
+
+Blue lines are positive weights, red are negative, thicker means stronger. With 5 × 8 + 8 × 1 = 48 weights plus 9 biases, the ANN has **57 parameters**. Linear regression has **6**.
+
+## Going deep: the DNN
+
+A **deep neural network (DNN)** is simply a network with **two or more hidden layers**. The first layer learns simple patterns (for example "it is hot" or "the office is open"), the next layer combines them ("hot **and** open"). That stacking of simple ideas into richer ones is what the "deep" in deep learning means.
+
+```{python}
+#| code-fold: false
+# two hidden layers: 8 neurons, then 6 neurons
+dnn = network((8, 6)).fit(Xtr, ytr)
+```
+
+```{python}
+#| echo: false
+ojs_define(dnnW=net_json(dnn))
+```
+
+```{ojs}
+//| echo: false
+drawNet(dnnW.coefs, feats)
+```
+
+### How the three models compare
+
+```{python}
+#| echo: false
+rows = []
+for name, m in [("Linear regression", linreg), ("ANN (1 hidden layer: 8)", ann), ("DNN (2 hidden layers: 8, 6)", dnn)]:
+    p = m.predict(Xte)
+    k = 6 if m is linreg else sum(c.size for c in m.regressor_[-1].coefs_) + sum(i.size for i in m.regressor_[-1].intercepts_)
+    rows.append(f"| {name} | {k} | {r2_score(yte, p):.3f} | {mean_absolute_error(yte, p):.1f} kW |")
+Markdown("| Model | Parameters | Test R² | Mean error |\n|---|---|---|---|\n" + "\n".join(rows))
+```
+
+Linear regression cannot capture the U-shaped temperature effect or the office switching on and off, so it explains very little. The ANN captures most of it, and the extra layer in the DNN lifts accuracy further. On a small problem like this, a wider single layer can also get close. Depth pays off most on complex data such as images, audio and text.
+
+### Try it yourself
+
+Change the conditions and watch all three models respond. The "true" value comes from the simulation formula, without noise.
+
+```{python}
+#| echo: false
+def export(m):
+    sc, mlp, ys = m.regressor_[0], m.regressor_[-1], m.transformer_
+    return dict(mean=sc.mean_.tolist(), scale=sc.scale_.tolist(), coefs=[c.tolist() for c in mlp.coefs_],
+                ints=[i.tolist() for i in mlp.intercepts_], ym=float(ys.mean_[0]), ys=float(ys.scale_[0]))
+ojs_define(mANN=export(ann), mDNN=export(dnn),
+           mLR=dict(mean=linreg[0].mean_.tolist(), scale=linreg[0].scale_.tolist(),
+                    coef=linreg[-1].coef_.tolist(), b=float(linreg[-1].intercept_)))
+```
+
+```{ojs}
+//| echo: false
+viewof q = Inputs.form({
+  temp: Inputs.range([-5, 40], {value: 33, step: 1, label: "Temperature (°C)"}),
+  humidity: Inputs.range([20, 90], {value: 70, step: 1, label: "Humidity (%)"}),
+  hour: Inputs.range([0, 23], {value: 14, step: 1, label: "Hour of day"}),
+  weekend: Inputs.toggle({label: "Weekend", value: false}),
+  occupancy: Inputs.range([0, 200], {value: 120, step: 5, label: "Occupancy"})
+})
+```
+
+```{ojs}
+//| echo: false
+predict = (m, x) => {
+  let a = x.map((v, i) => (v - m.mean[i]) / m.scale[i]);
+  m.coefs.forEach((M, l) => {
+    a = M[0].map((_, j) => d3.sum(a, (v, i) => v * M[i][j]) + m.ints[l][j]);
+    if (l < m.coefs.length - 1) a = a.map(v => Math.max(0, v));
+  });
+  return a[0] * m.ys + m.ym;
+}
+xq = [q.temp, q.humidity, q.hour, q.weekend ? 1 : 0, q.occupancy]
+lrPred = mLR.b + d3.sum(xq, (v, i) => mLR.coef[i] * (v - mLR.mean[i]) / mLR.scale[i])
+truth = {
+  const open = (q.hour >= 8 && q.hour < 19 && !q.weekend) ? 1 : 0;
+  return 60 + 0.10 * (q.temp - 18) ** 2 + 0.04 * q.humidity * Math.max(q.temp - 24, 0) + 35 * open + 0.25 * q.occupancy * open;
+}
+html`<div class="ms-readout"><span>True</span><b>${truth.toFixed(0)}</b>
+  <span>Linear</span><b>${lrPred.toFixed(0)}</b>
+  <span>ANN</span><b>${predict(mANN, xq).toFixed(0)}</b>
+  <span>DNN</span><b>${predict(mDNN, xq).toFixed(0)}</b><span>kW</span></div>`
+```
+
+Set the hour to 2 (night) or switch on Weekend: the networks drop sharply, the linear model barely moves.
+
+## Save the model and load it later
+
+Training takes time, so you save the trained model once and reuse it. With scikit-learn, `joblib` stores the whole pipeline: the scalers, every weight and every bias.
+
+```{python}
+#| code-fold: false
+import joblib, os
+path = "models/building_demand_dnn.joblib"
+os.makedirs("models", exist_ok=True)
+
+joblib.dump(dnn, path)                 # save
+loaded = joblib.load(path)             # load, any time later
+
+new_hour = pd.DataFrame([{"temp": 33, "humidity": 70, "hour": 14,
+                          "weekend": 0, "occupancy": 120}])
+print(f"Saved file size: {os.path.getsize(path) / 1024:.0f} KB")
+print(f"Predicted demand: {loaded.predict(new_hour)[0]:.1f} kW")
+same = np.allclose(loaded.predict(Xte), dnn.predict(Xte))
+print("Same predictions as the original:", same)
+```
+
+The same idea in the two most popular deep learning libraries:
+
+::: {.panel-tabset}
+## Keras
+```{.python filename="keras_save.py"}
+model.save("building_demand_dnn.keras")
+model = keras.models.load_model("building_demand_dnn.keras")
+```
+## PyTorch
+```{.python filename="torch_save.py"}
+torch.save(model.state_dict(), "building_demand_dnn.pt")    # weights only
+model = DemandNet()                                          # same architecture
+model.load_state_dict(torch.load("building_demand_dnn.pt"))
+model.eval()
+```
+:::
+
+::: {.callout-warning}
+## Only load files you trust
+`joblib`, `pickle` and older PyTorch files can run code when loaded. Never load a model file from an unknown source.
+:::
+
+## The journey in one picture
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A["Linear regression<br/>y = b + w·x"] --> B["One neuron<br/>same thing"] --> C["Hidden layer + ReLU<br/>ANN: learns bends"] --> D["2+ hidden layers<br/>DNN: combines patterns"] --> E["Save with joblib<br/>reuse anywhere"]
+```
+
+## Summary
+
+- A **weight** is the number that says how much, and in which direction, one input pushes one neuron.
+- A neuron with no activation and no hidden layer **is linear regression**: weight = slope, bias = intercept.
+- A **hidden layer with ReLU** adds bends. No single weight is the slope any more; the effect of an input depends on which neurons are switched on.
+- A **DNN** stacks two or more hidden layers to combine simple patterns into richer ones.
+- **Save** the trained model so you can reuse it without retraining.
+
+For the full theory, see @goodfellow2016.
