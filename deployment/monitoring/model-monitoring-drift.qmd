@@ -1,0 +1,240 @@
+---
+title: "Model Monitoring: Catch Drift Before Your Users Do"
+description: "The four layers of ML monitoring, a simulated 120-day dashboard, data drift measured with PSI and the KS test, delayed labels and alerts that do not cry wolf."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Monitoring, Drift]
+draft: false
+---
+
+A normal web service fails loudly: it crashes or returns errors. A model fails **quietly**. It keeps answering, fast and with no errors, while the answers get worse because the world changed. **Monitoring** watches both kinds of failure. In this article PayGuard launches in a new country on day 60, and we watch what the dashboards show.
+
+::: {.callout-tip}
+## What you will learn
+- The four layers of monitoring, from servers to business results
+- How to read a 120-day monitoring dashboard
+- How to measure data drift with PSI and the KS test, interactively
+- Why labels arrive late, and how to set alerts that people trust
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Four layers to watch
+
+```{mermaid}
+%%| echo: false
+flowchart TB
+  A["Business: fraud losses, false declines, revenue"] --- B["Model quality: precision, recall, calibration"]
+  B --- C["Data: input drift, missing values, prediction drift"]
+  C --- D["System: latency, errors, CPU, memory, uptime"]
+  style A fill:#6366F1,color:#fff,stroke:none
+  style B fill:#A855F7,color:#fff,stroke:none
+  style C fill:#14B8A6,color:#fff,stroke:none
+  style D fill:#64748B,color:#fff,stroke:none
+```
+
+| Layer | Example metric | Available | Tool examples |
+|---|---|---|---|
+| System | p95 latency, 5xx error rate | Seconds | Prometheus, Grafana, CloudWatch |
+| Data | PSI of `amount`, share of missing values | Minutes to hours | Evidently, WhyLabs, custom jobs |
+| Model | Precision and recall | Days to weeks (needs labels) | MLflow, notebooks, dashboards |
+| Business | Fraud losses, false-decline rate | Weeks | BI dashboards |
+
+: Monitoring layers {#tbl-layers}
+
+The lower layers react fast but say little about quality. The upper layers matter most but arrive late. Good monitoring uses **fast signals as early warnings** for slow ones.
+
+## A 120-day dashboard
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd, plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy.stats import ks_2samp
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(42)
+DAYS, N = 120, 3000
+bins = np.quantile(rng.lognormal(3.5, 1.0, 200_000), np.linspace(0, 1, 11))
+bins[0], bins[-1] = 0, np.inf
+edges_plot = np.linspace(0, 8, 33)                    # log(amount) for histograms
+
+def day_amounts(d):
+    # new country from day 60: bigger, more varied payments, phased in over 20 days
+    share = np.clip((d - 60) / 20, 0, 1) * 0.5
+    k = rng.binomial(N, share)
+    return np.concatenate([rng.lognormal(3.5, 1.0, N - k), rng.lognormal(4.9, 1.1, k)])
+
+def psi(ref, cur):
+    r = np.histogram(ref, bins)[0] / len(ref) + 1e-6
+    c = np.histogram(cur, bins)[0] / len(cur) + 1e-6
+    return float(np.sum((c - r) * np.log(c / r)))
+
+ref = rng.lognormal(3.5, 1.0, 20_000)
+rows, hists = [], []
+for d in range(DAYS):
+    a = day_amounts(d)
+    share = np.clip((d - 60) / 20, 0, 1)
+    rows.append(dict(day=d,
+        p95_ms=float(62 + 4 * np.sin(d / 7 * 2 * np.pi) + rng.normal(0, 2) + (25 if d in (33, 34) else 0)),
+        err_pct=float(max(0, rng.normal(0.08, 0.03)) + (1.4 if d == 33 else 0)),
+        psi=psi(ref, a), ks=float(ks_2samp(ref, a).statistic),
+        precision=float(0.86 - 0.17 * share + rng.normal(0, 0.012))))
+    hists.append(np.histogram(np.log(a), edges_plot)[0].tolist())
+mon = pd.DataFrame(rows)
+mon["precision_known"] = mon.day <= DAYS - 1 - 30        # labels arrive 30 days late
+ref_hist = np.histogram(np.log(ref), edges_plot)[0] / len(ref) * N
+ojs_define(mon=mon.to_dict("records"), hists=hists, refHist=ref_hist.tolist(), edges=edges_plot.tolist())
+```
+
+```{python}
+#| label: fig-dash
+#| fig-cap: "Simulated PayGuard dashboard. The system incident on day 33 shows up in latency and errors. The day-60 drift shows up in PSI immediately, but in precision only once labels arrive."
+#| code-fold: true
+fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+                    subplot_titles=["p95 latency (ms)", "Error rate (%)", "Data drift: PSI of amount", "Precision (labels arrive 30 days late)"])
+fig.add_scatter(x=mon.day, y=mon.p95_ms, line=dict(color=COLORS["slate"]), row=1, col=1)
+fig.add_scatter(x=mon.day, y=mon.err_pct, line=dict(color=COLORS["slate"]), row=2, col=1)
+fig.add_scatter(x=mon.day, y=mon.psi, line=dict(color=COLORS["teal"], width=2.5), row=3, col=1)
+fig.add_hline(y=0.2, line_dash="dash", line_color=COLORS["rose"], row=3, col=1)
+k = mon[mon.precision_known]
+fig.add_scatter(x=k.day, y=k.precision, line=dict(color=COLORS["violet"], width=2.5), row=4, col=1)
+fig.add_vrect(x0=DAYS - 31, x1=DAYS - 1, fillcolor=COLORS["slate"], opacity=0.12, line_width=0, row=4, col=1,
+              annotation_text="labels not in yet", annotation_position="top left")
+for r in range(1, 5):
+    fig.add_vline(x=60, line_dash="dot", line_color=COLORS["amber"], row=r, col=1)
+fig.update_layout(height=720, showlegend=False)
+fig.update_xaxes(title_text="Day (amber line: new country launches)", row=4, col=1)
+fig.show(config=PLOTLY_CONFIG)
+first_alert = int(mon[mon.psi > 0.2].day.min())
+```
+
+Read it from top to bottom:
+
+- **Day 33:** a database slowdown pushes latency and errors up for two days. System monitoring catches this at once. The model itself was fine.
+- **Day 60 onward:** latency and errors look perfect, yet the inputs change. PSI crosses the 0.2 alert line on **day `{python} first_alert`**.
+- **Precision** falls too, but we only learn this about 30 days later, when chargebacks confirm which payments were fraud. Without drift monitoring, the team would be flying blind for a month.
+
+## Measuring drift: PSI and the KS test
+
+The **Population Stability Index** splits a feature into bins (here, 10 deciles of the training data) and compares the share of data in each bin, reference $r_i$ vs current $c_i$:
+
+$$
+\text{PSI} = \sum_{i=1}^{B} (c_i - r_i)\,\ln\frac{c_i}{r_i}
+$$ {#eq-psi}
+
+A common rule of thumb: below 0.1 is stable, 0.1 to 0.2 is a moderate shift, above 0.2 needs attention. The **Kolmogorov–Smirnov statistic** is the largest gap between the two cumulative distributions; it needs no bins.
+
+Drag the day slider and watch the live distribution pull away from the training distribution.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof day = Inputs.range([0, 119], {value: 75, step: 1, label: "Day"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const mids = d3.range(edges.length - 1).map(i => (edges[i] + edges[i + 1]) / 2);
+  const cur = hists[day].map((v, i) => ({x: Math.exp(mids[i]), v, s: "Today"}));
+  const ref = refHist.map((v, i) => ({x: Math.exp(mids[i]), v, s: "Training data"}));
+  const m = mon[day], level = m.psi < 0.1 ? "stable" : m.psi < 0.2 ? "moderate shift" : "significant drift";
+  return htl.html`<div>${Plot.plot({
+    ...msStyle, height: 300, width: 760, marginLeft: 50,
+    x: {type: "log", label: "Payment amount ($, log scale) →", tickFormat: "$,.0f"}, y: {label: "↑ payments", grid: true},
+    color: {domain: ["Training data", "Today"], range: [ms.slate, m.psi > 0.2 ? ms.rose : ms.teal], legend: true},
+    marks: [
+      Plot.areaY(ref, {x: "x", y: "v", fill: "s", fillOpacity: 0.25, curve: "step"}),
+      Plot.line(cur, {x: "x", y: "v", stroke: "s", strokeWidth: 2.5, curve: "step"})
+    ]})}
+  <div class="ms-readout"><span>Day ${day}</span><b>PSI ${m.psi.toFixed(3)}</b><span>KS ${m.ks.toFixed(3)} · ${level}</span></div></div>`;
+}
+```
+
+In code, both measures take a few lines:
+
+```{.python filename="drift_check.py"}
+import numpy as np
+from scipy.stats import ks_2samp
+
+def psi(ref, cur, n_bins=10):
+    edges = np.quantile(ref, np.linspace(0, 1, n_bins + 1))
+    edges[0], edges[-1] = -np.inf, np.inf
+    r = np.histogram(ref, edges)[0] / len(ref) + 1e-6
+    c = np.histogram(cur, edges)[0] / len(cur) + 1e-6
+    return np.sum((c - r) * np.log(c / r))
+
+score = psi(train_df.amount, today_df.amount)
+ks = ks_2samp(train_df.amount, today_df.amount).statistic
+if score > 0.2:
+    alert(f"amount drifted: PSI={score:.2f}, KS={ks:.2f}")
+```
+
+## Alerts that people trust
+
+An alert that fires every day gets ignored. One that never fires misses real problems. Move the threshold and see how many alerts the 120 days would have produced.
+
+```{ojs}
+//| echo: false
+viewof thr = Inputs.range([0.02, 0.4], {value: 0.2, step: 0.01, label: "PSI alert threshold"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const fired = mon.filter(d => d.psi > thr);
+  const falseAlarms = fired.filter(d => d.day < 60).length, firstReal = fired.find(d => d.day >= 60);
+  return htl.html`<div>${Plot.plot({
+    ...msStyle, height: 240, width: 760, marginLeft: 50,
+    x: {label: "Day →"}, y: {label: "↑ PSI", grid: true},
+    marks: [
+      Plot.ruleX([60], {stroke: ms.amber, strokeDasharray: "3,3"}),
+      Plot.line(mon, {x: "day", y: "psi", stroke: ms.teal, strokeWidth: 2}),
+      Plot.ruleY([thr], {stroke: ms.rose, strokeDasharray: "5,4"}),
+      Plot.dot(fired, {x: "day", y: "psi", r: 3.5, fill: d => d.day < 60 ? ms.amber : ms.rose})
+    ]})}
+  <div class="ms-readout"><span>${fired.length} alert-days</span><b>${falseAlarms} false alarms before day 60</b><span>${firstReal ? `real drift caught ${firstReal.day - 60} days after launch` : "real drift missed"}</span></div></div>`;
+}
+```
+
+Good alert design follows a few rules:
+
+| Rule | Example |
+|---|---|
+| Alert on symptoms users feel | p95 latency above 100 ms for 10 minutes |
+| Require persistence | PSI above 0.2 for 3 days in a row |
+| Route by severity | Errors page the on-call; drift opens a ticket |
+| Every alert has a runbook | "If PSI fires: check new markets, compare slices, consider retraining" |
+
+## Instrumenting the service
+
+Expose metrics from the FastAPI app with the Prometheus client, then chart them in Grafana.
+
+```{.python filename="app.py (additions)"}
+from prometheus_client import Counter, Histogram, make_asgi_app
+
+LATENCY = Histogram("payguard_latency_seconds", "Scoring latency")
+DECISIONS = Counter("payguard_decisions_total", "Decisions", ["decision"])
+SCORES = Histogram("payguard_fraud_prob", "Predicted probability",
+                   buckets=[0.01, 0.05, 0.1, 0.2, 0.5, 0.8, 1.0])
+
+app.mount("/metrics", make_asgi_app())
+
+@app.post("/score")
+@LATENCY.time()
+def score(payments: list[Payment]):
+    ...
+    for p in probs:
+        SCORES.observe(p)
+        DECISIONS.labels("review" if p > 0.5 else "approve").inc()
+```
+
+Logging each request's inputs and prediction (with privacy rules applied) is what makes drift checks and later retraining possible.
+
+## Summary
+
+- Models fail **quietly**; monitor four layers: **system, data, model, business**.
+- Labels often arrive late, so **data drift (PSI, KS) is the early warning**.
+- PSI above about 0.2 usually deserves a look; require persistence before alerting.
+- Instrument the service and **log inputs and predictions** from day one.
+- Next: act on what monitoring finds with [Maintenance](/deployment/maintenance/ml-model-maintenance.qmd).

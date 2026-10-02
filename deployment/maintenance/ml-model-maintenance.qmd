@@ -1,0 +1,216 @@
+---
+title: "Maintaining ML Models: Retraining, Dependencies and Incidents"
+description: "Keep a production model healthy for years: compare retraining strategies in a simulation, plan routine upkeep, and handle incidents with a clear runbook."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Maintenance, Retraining]
+draft: false
+---
+
+Shipping PayGuard was the start, not the finish. Fraudsters adapt, libraries age, servers get patched and the person who built the model moves to another team. **Maintenance** is the steady work that keeps a model useful. Machine learning systems are especially prone to this hidden cost, because they depend on data as well as code ([Sculley et al., 2015](https://papers.nips.cc/paper/5656-hidden-technical-debt-in-machine-learning-systems)).
+
+::: {.callout-tip}
+## What you will learn
+- The five things that decay in a production ML system
+- How scheduled, triggered and "never" retraining compare, in a simulation you control
+- A routine maintenance calendar
+- How to handle an incident, from alert to postmortem
+:::
+
+{{< include ../_series-nav.md >}}
+
+## What decays, and how fast
+
+| What decays | Example in PayGuard | Warning sign | Remedy |
+|---|---|---|---|
+| **Data drift** | New country, bigger payments | PSI rising | Retrain on recent data |
+| **Concept drift** | Fraudsters switch to small "test" payments | Precision falls, inputs look normal | Retrain, add new features |
+| **Dependencies** | Python or scikit-learn version reaches end of life | Security advisories | Scheduled upgrades with tests |
+| **Infrastructure** | Base image has known vulnerabilities | Image scan findings | Rebuild and redeploy regularly |
+| **Knowledge** | The builder leaves | Nobody can explain a feature | Model cards, runbooks, docs |
+
+: Sources of decay {#tbl-decay}
+
+**Concept drift** is the sneakiest. The inputs look the same, but their meaning changes: a $5 payment used to be harmless and is now a fraudster testing a stolen card. Only fresh labels reveal it.
+
+## Retraining strategies, simulated
+
+PayGuard's quality slowly decays as patterns shift, and on **day 200** fraudsters change tactics (a sudden concept drift). Compare three strategies over a year. Each retraining costs time and compute, so more is not free.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof every = Inputs.range([7, 180], {value: 60, step: 1, label: "Scheduled: retrain every N days"})
+viewof trigger = Inputs.range([0.84, 0.92], {value: 0.89, step: 0.005, label: "Triggered: retrain when AUC drops below"})
+viewof costEach = Inputs.range([10, 500], {value: 120, step: 10, label: "Cost per retraining ($, example)"})
+```
+
+```{ojs}
+//| echo: false
+simulate = (rule) => {
+  const rnd = d3.randomNormal.source(d3.randomLcg(9))(0, 0.003);
+  let last = 0, shockSeen = false, out = [], n = 0, pend = -1;
+  for (let d = 0; d < 365; d++) {
+    const age = d - last;
+    let q = 0.93 - 0.00035 * age - 0.0000009 * age * age;
+    if (d >= 200 && last < 200) q -= 0.05;          // new fraud tactic, unseen by the model
+    q += rnd();
+    out.push({d, q});
+    if (rule(d, age, q) && pend < 0) pend = d + 3;  // 3 days to retrain and ship
+    if (d === pend) { last = d; n++; pend = -1; }
+  }
+  return {series: out, n};
+}
+strategies = [
+  {name: "Never retrain", r: simulate(() => false), c: ms.rose},
+  {name: `Every ${every} days`, r: simulate((d, age) => age >= every), c: ms.indigo},
+  {name: `When AUC < ${trigger}`, r: simulate((d, age, q) => q < trigger), c: ms.teal}
+]
+Plot.plot({
+  ...msStyle, height: 360, width: 760, marginLeft: 55,
+  x: {label: "Day →"}, y: {label: "↑ AUC on live data", domain: [0.6, 0.95], grid: true},
+  color: {domain: strategies.map(s => s.name), range: strategies.map(s => s.c), legend: true},
+  marks: [
+    Plot.ruleX([200], {stroke: ms.amber, strokeDasharray: "4,4"}),
+    Plot.text([200], {x: d => d, y: 0.935, text: () => "new fraud tactic", dx: 6, textAnchor: "start", fill: "currentColor", fontSize: 11.5}),
+    ...strategies.map(s => Plot.line(s.r.series, {x: "d", y: "q", stroke: () => s.name, strokeWidth: 2.2}))
+  ]
+})
+```
+
+```{ojs}
+//| echo: false
+Inputs.table(strategies.map(s => ({
+  Strategy: s.name, "Avg AUC": d3.mean(s.r.series, d => d.q).toFixed(3),
+  "Retrains": s.r.n, "Cost ($)": s.r.n * costEach,
+  "Days < 0.85": s.r.series.filter(d => d.q < 0.85).length
+})), {layout: "auto"})
+```
+
+What the simulation shows:
+
+- **Never retraining** looks fine for weeks, then slides and never recovers from the day-200 shock.
+- **Scheduled retraining** is simple and predictable, but a long interval reacts slowly to the shock, and a short one wastes money in calm periods.
+- **Triggered retraining** reacts to real problems, but it needs trustworthy quality signals. Because fraud labels arrive late (see [Monitoring](/deployment/monitoring/model-monitoring-drift.qmd)), teams usually trigger on **drift signals plus a maximum age**, for example "retrain when PSI > 0.2 or every 60 days, whichever comes first".
+
+## A routine maintenance calendar
+
+Small, regular tasks prevent big emergencies.
+
+```{python}
+#| label: fig-calendar
+#| fig-cap: "One quarter of PayGuard upkeep. Each bar is a scheduled task."
+#| code-fold: true
+import pandas as pd, plotly.express as px
+from ms_charts import COLORS, PLOTLY_CONFIG
+tasks = []
+for d in pd.date_range("2026-10-05", "2026-12-28", freq="7D"):
+    tasks.append(("Review drift and alerts", "Weekly", d, d + pd.Timedelta(days=1)))
+for d in ["2026-10-01", "2026-11-02", "2026-12-01"]:
+    d = pd.Timestamp(d); tasks.append(("Retrain and quality gate", "Monthly", d, d + pd.Timedelta(days=3)))
+for d in ["2026-10-15", "2026-11-16", "2026-12-15"]:
+    d = pd.Timestamp(d); tasks.append(("Rebuild image with patches", "Monthly", d, d + pd.Timedelta(days=1)))
+tasks += [("Upgrade libraries and test", "Quarterly", pd.Timestamp("2026-11-09"), pd.Timestamp("2026-11-14")),
+          ("Fairness and slice review", "Quarterly", pd.Timestamp("2026-12-07"), pd.Timestamp("2026-12-10")),
+          ("Rollback drill", "Quarterly", pd.Timestamp("2026-12-17"), pd.Timestamp("2026-12-18"))]
+cal = pd.DataFrame(tasks, columns=["task", "cadence", "start", "end"])
+fig = px.timeline(cal, x_start="start", x_end="end", y="task", color="cadence",
+                  color_discrete_map={"Weekly": COLORS["teal"], "Monthly": COLORS["indigo"], "Quarterly": COLORS["amber"]})
+fig.update_yaxes(autorange="reversed", title=None)
+fig.update_layout(height=340, legend=dict(orientation="h", y=1.15, title=None), xaxis_title=None, margin=dict(l=210))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Plan language upgrades early: **Python 3.10 reaches end of life in October 2026**, so any model still pinned to it needs an upgrade path ([Python devguide](https://devguide.python.org/versions/)).
+
+Automate dependency updates with a tool such as Dependabot or Renovate, and let the [MLOps pipeline](/deployment/mlops/mlops-pipelines.qmd) test each update before it merges.
+
+```{.yaml filename=".github/dependabot.yml"}
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule: {interval: monthly}
+    groups:
+      ml-stack: {patterns: ["scikit-learn", "numpy", "pandas"]}
+  - package-ecosystem: docker
+    directory: "/"
+    schedule: {interval: monthly}
+```
+
+## Handling an incident
+
+Some day an alert fires at 2 a.m. A written **runbook** turns panic into a checklist.
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A[Alert fires] --> B{Users affected?}
+  B -- no --> C[Open ticket,<br/>fix in working hours]
+  B -- yes --> D[Declare incident,<br/>name an owner]
+  D --> E{Recent release?}
+  E -- yes --> F[Roll back to last<br/>good version]
+  E -- no --> G{System or model?}
+  G -- system --> H[Scale up, restart,<br/>fail over]
+  G -- model --> I[Switch to fallback<br/>rules or older model]
+  F --> J[Confirm metrics recover]
+  H --> J
+  I --> J
+  J --> K[Write blameless postmortem]
+```
+
+| Severity | Meaning | Response |
+|---|---|---|
+| SEV1 | Payments failing or wrongly declined at scale | Page on-call now, update stakeholders every 30 minutes |
+| SEV2 | Quality clearly degraded, users mildly affected | Fix within one business day |
+| SEV3 | Early warning, no user impact yet | Ticket, fix this sprint |
+
+: Incident severity levels {#tbl-sev}
+
+The two numbers that matter are **time to detect** (MTTD) and **time to recover** (MTTR). Here is a simulated incident: a bad feature deploy at 14:00 starts declining good customers.
+
+```{python}
+#| label: fig-incident
+#| fig-cap: "Simulated incident timeline. Good monitoring shortens detection; a ready rollback shortens recovery."
+#| code-fold: true
+import numpy as np, pandas as pd, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(2)
+t = pd.date_range("2026-10-01 12:00", "2026-10-01 18:00", freq="min")
+m = (t - t[0]).total_seconds() / 60
+rate = 1.2 + rng.normal(0, 0.15, len(t))
+bad = (m >= 120) & (m < 175)
+rate[bad] += 6.5 * (1 - np.exp(-(m[bad] - 120) / 6))
+rec = m >= 175
+rate[rec] += 6.5 * np.exp(-(m[rec] - 175) / 5)
+fig = go.Figure(go.Scatter(x=t, y=rate, line=dict(color=COLORS["indigo"], width=2.2), fill="tozeroy", fillcolor="rgba(99,102,241,0.12)"))
+events = [(120, "bad deploy", COLORS["rose"]), (132, "alert fires", COLORS["amber"]), (160, "rollback starts", COLORS["teal"]), (175, "rollback done", COLORS["teal"])]
+for mm, label, c in events:
+    fig.add_vline(x=t[int(mm)], line_dash="dot", line_color=c)
+    fig.add_annotation(x=t[int(mm)], y=8.6 - 0.75 * events.index((mm, label, c)), text=label, showarrow=False, xanchor="left", xshift=4, font=dict(color=c))
+fig.update_layout(height=360, yaxis_title="False-decline rate (%)", showlegend=False, yaxis=dict(range=[0, 9.2]))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Detection took **12 minutes** and recovery another **43 minutes**. The postmortem should ask how to shrink both: a canary release would have caught the bad deploy on 5% of traffic (see [Updates and versioning](/deployment/update/model-versioning-rollouts.qmd)).
+
+::: {.callout-note}
+## A blameless postmortem template
+1. **Summary:** what happened, impact, duration.
+2. **Timeline:** deploy, detection, decisions, recovery.
+3. **Root cause:** the technical cause and why safeguards did not stop it.
+4. **What went well:** keep doing it.
+5. **Actions:** owner and due date for each fix.
+:::
+
+## Write it down: the model card
+
+A short **model card** keeps knowledge alive when people change roles: purpose, training data period, features, metrics by slice, known limits, owner, retraining schedule and runbook link. Store it next to the model in the registry.
+
+## Summary
+
+- Data, concepts, dependencies, infrastructure and knowledge **all decay**.
+- Combine **drift-triggered retraining with a maximum model age**.
+- Keep a **routine calendar**: weekly reviews, monthly retrains and patches, quarterly upgrades and drills.
+- A **runbook, rollback and blameless postmortem** turn incidents into improvements.
+- Next: release new versions safely with [Updates and versioning](/deployment/update/model-versioning-rollouts.qmd).

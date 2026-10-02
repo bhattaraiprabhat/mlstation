@@ -1,0 +1,192 @@
+---
+title: "Cloud Platforms for ML: Where Should Your Model Run?"
+description: "VMs, serverless containers, Kubernetes and managed ML platforms on AWS, Google Cloud and Azure, with an interactive cost calculator and a traffic simulation."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Cloud, AWS, GCP, Azure]
+draft: false
+---
+
+PayGuard is now a container. The next question is **where it lives**. Every cloud offers the same basic menu at different levels of "how much do you want to manage yourself". The right choice depends mostly on **traffic shape, team size and budget**.
+
+::: {.callout-tip}
+## What you will learn
+- The four ways to run a model in the cloud, from raw servers to fully managed ML
+- The matching services on AWS, Google Cloud and Azure
+- How always-on servers and pay-per-request pricing compare, with a calculator
+- Free options for small projects
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Who manages what
+
+Moving from left to right, the provider takes over more of the work. You gain convenience and lose some control. Pick a level to see the split.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+levels = ["Virtual machine", "Kubernetes", "Serverless container", "Managed ML platform"]
+viewof lvl = Inputs.radio(levels, {value: "Serverless container", label: "Run on"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const stack = ["Model and code", "Endpoint and scaling rules", "Container runtime", "Autoscaling", "Operating system and patches", "Servers and network"];
+  const yours = {"Virtual machine": 6, "Kubernetes": 4, "Serverless container": 1, "Managed ML platform": 1};
+  const n = yours[lvl], W = 760, h = 38;
+  const notes = {
+    "Virtual machine": "Full control, full responsibility. Good for steady traffic and custom setups.",
+    "Kubernetes": "The cluster runs many services. Powerful, but needs platform skills.",
+    "Serverless container": "Push a container, get a URL. Scales to zero when idle.",
+    "Managed ML platform": "Training, registry, endpoints and monitoring in one product."
+  };
+  return htl.html`<div>${htl.svg`<svg viewBox="0 0 ${W} ${stack.length * (h + 6) + 30}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    ${stack.map((s, i) => htl.svg`<g>
+      <rect x="10" y="${i * (h + 6)}" width="${W - 20}" height="${h}" rx="8" fill="${i < n ? ms.indigo : ms.teal}" fill-opacity="${i < n ? 0.85 : 0.25}"/>
+      <text x="30" y="${i * (h + 6) + h / 2 + 5}" font-size="13.5" font-weight="600" fill="${i < n ? "white" : "currentColor"}">${s}</text>
+      <text x="${W - 30}" y="${i * (h + 6) + h / 2 + 5}" text-anchor="end" font-size="12.5" fill="${i < n ? "white" : "currentColor"}">${i < n ? "You" : "Cloud provider"}</text></g>`)}
+  </svg>`}<div class="ms-readout"><span>${lvl}</span><b style="font-size:1rem">${notes[lvl]}</b></div></div>`;
+}
+```
+
+## The same menu on three clouds
+
+| What you need | AWS | Google Cloud | Azure |
+|---|---|---|---|
+| Virtual machines | EC2 | Compute Engine | Virtual Machines |
+| Serverless containers | App Runner, Lambda (container images) | Cloud Run | Container Apps |
+| Managed Kubernetes | EKS | GKE | AKS |
+| Managed ML platform | SageMaker AI | Vertex AI | Azure Machine Learning |
+| Object storage for models | S3 | Cloud Storage | Blob Storage |
+| Container registry | ECR | Artifact Registry | Container Registry |
+
+: Equivalent services across clouds {#tbl-clouds}
+
+Amazon's ML platform is now called **Amazon SageMaker AI** ([AWS](https://aws.amazon.com/sagemaker/ai/)). The concepts carry across clouds, so learning one makes the others easy.
+
+## Traffic shape decides the bill
+
+Most models are not busy all day. Below is a simulated week of PayGuard traffic for a small online shop: busy evenings, quiet nights, a weekend peak.
+
+```{python}
+#| label: fig-traffic
+#| fig-cap: "Simulated requests per minute over one week. An always-on server is sized for the peak and sits mostly idle."
+#| code-fold: true
+import numpy as np, pandas as pd, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(21)
+t = pd.date_range("2026-09-07", periods=7 * 24 * 60, freq="min")
+h = t.hour + t.minute / 60
+daily = 4 + 30 * np.exp(-((h - 20) ** 2) / 8) + 12 * np.exp(-((h - 12.5) ** 2) / 3)
+weekend = np.where(t.dayofweek >= 5, 1.5, 1.0)
+rpm = rng.poisson(daily * weekend)
+peak = np.percentile(rpm, 99.5)
+hourly = pd.Series(rpm, index=t).resample("15min").mean()
+fig = go.Figure()
+fig.add_scatter(x=hourly.index, y=hourly.values, fill="tozeroy", name="Requests per minute",
+                line=dict(color=COLORS["indigo"], width=1.5), fillcolor="rgba(99,102,241,0.25)")
+fig.add_hline(y=peak, line_dash="dash", line_color=COLORS["rose"], annotation_text="Always-on server sized for peak", annotation_position="top left")
+fig.update_layout(height=360, yaxis_title="Requests per minute", showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+util = rpm.mean() / peak
+```
+
+On average the traffic uses only **`{python} f"{util:.0%}"`** of the peak capacity. With an always-on server you pay for 100% of it, all week. With **serverless**, you pay per request and per second of compute, and it can **scale to zero** at night.
+
+## Cost calculator
+
+The prices below are **example values**, not quotes. Replace them with current numbers from your provider's pricing page. The chart shows the monthly cost of each option as traffic grows.
+
+```{ojs}
+//| echo: false
+viewof reqDay = Inputs.range([1000, 5e6], {value: 50000, step: 1000, label: "Requests per day", transform: Math.log})
+viewof msReq = Inputs.range([5, 500], {value: 40, step: 5, label: "Compute time per request (ms)"})
+viewof vmHour = Inputs.number({value: 0.05, step: 0.01, label: "Always-on server, $ per hour (example)"})
+viewof vmCount = Inputs.range([1, 4], {value: 2, step: 1, label: "Servers kept on (for redundancy)"})
+viewof perMillion = Inputs.number({value: 0.40, step: 0.05, label: "Serverless, $ per million requests (example)"})
+viewof perVcpuS = Inputs.number({value: 0.000024, step: 0.000001, label: "Serverless, $ per vCPU-second (example)"})
+```
+
+```{ojs}
+//| echo: false
+costVM = r => vmHour * 24 * 30 * vmCount
+costSL = r => (r * 30 / 1e6) * perMillion + r * 30 * (msReq / 1000) * perVcpuS
+curve = d3.range(3, 6.75, 0.05).map(e => 10 ** e).flatMap(r => [{r, cost: costVM(r), option: "Always-on servers"}, {r, cost: costSL(r), option: "Serverless"}])
+breakEven = curve.filter(d => d.option === "Serverless").find(d => d.cost > costVM(d.r))
+Plot.plot({
+  ...msStyle, height: 360, width: 760, marginLeft: 60,
+  x: {type: "log", label: "Requests per day →"}, y: {label: "↑ $ per month", grid: true},
+  color: {domain: ["Always-on servers", "Serverless"], range: [ms.rose, ms.teal], legend: true},
+  marks: [
+    Plot.line(curve, {x: "r", y: "cost", stroke: "option", strokeWidth: 3}),
+    Plot.ruleX([reqDay], {stroke: ms.indigo, strokeDasharray: "4,4"}),
+    breakEven ? Plot.ruleX([breakEven.r], {stroke: "currentColor", strokeOpacity: 0.4}) : null,
+    breakEven ? Plot.text([breakEven], {x: "r", y: d => costVM(d.r), text: d => `break-even ≈ ${d3.format(".2s")(d.r)}/day`, dy: -12, fill: "currentColor", fontSize: 12}) : null
+  ]
+})
+```
+
+```{ojs}
+//| echo: false
+html`<div class="ms-readout"><span>At ${d3.format(",")(reqDay)} requests a day</span><b>$${costSL(reqDay).toFixed(2)} serverless vs $${costVM(reqDay).toFixed(2)} always-on</b><span>${costSL(reqDay) < costVM(reqDay) ? "Serverless is cheaper at this volume." : "Steady high volume favours always-on servers."}</span></div>`
+```
+
+The pattern is general: **pay-per-use wins at low or spiky traffic; reserved capacity wins at steady high traffic.** Many teams start serverless and move to reserved servers or Kubernetes when volume becomes large and steady.
+
+## Choosing a platform
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A[New model to deploy] --> B{Need a GPU?}
+  B -- yes --> C{Large team and<br/>many models?}
+  C -- yes --> D[Managed ML platform<br/>or Kubernetes with GPUs]
+  C -- no --> E[Managed ML endpoint<br/>or GPU VM]
+  B -- no --> F{Traffic spiky<br/>or low?}
+  F -- yes --> G[Serverless container<br/>Cloud Run, Container Apps, App Runner]
+  F -- no --> H{Already run<br/>Kubernetes?}
+  H -- yes --> I[Deploy to EKS, GKE or AKS]
+  H -- no --> J[Small VM group<br/>behind a load balancer]
+```
+
+## Deploying PayGuard to a serverless container
+
+Google Cloud Run is a good example of the serverless path: build the image, push it, deploy it.
+
+```{.bash filename="terminal"}
+# build and push to Artifact Registry
+gcloud builds submit --tag \
+  us-central1-docker.pkg.dev/my-proj/ml/payguard:1.4.0
+
+# deploy: scale to zero when idle, at most 10 instances
+gcloud run deploy payguard \
+  --image us-central1-docker.pkg.dev/my-proj/ml/payguard:1.4.0 \
+  --region us-central1 --port 8000 \
+  --min-instances 0 --max-instances 10 \
+  --cpu 1 --memory 1Gi
+```
+
+The same container works on AWS App Runner or Azure Container Apps with their own commands. That portability is the reward for using Docker.
+
+## Free and low-cost options
+
+For learning projects and small sites, you can often pay nothing:
+
+- **Google Cloud Run** has a monthly free tier; with request-based billing it includes **2 million requests, 180,000 vCPU-seconds and 360,000 GiB-seconds** ([Google Cloud](https://cloud.google.com/run/pricing)).
+- **Hugging Face Spaces** offers a free **CPU Basic** tier with 2 vCPUs and 16 GB of memory, good for Gradio or Streamlit demos ([Hugging Face](https://huggingface.co/docs/hub/spaces-overview)).
+- AWS and Azure also offer free tiers and starter credits; check their current terms.
+
+::: {.callout-warning}
+## Set a budget alert on day one
+Every cloud lets you create a budget with email alerts. A forgotten GPU instance can cost more in a weekend than a year of serverless traffic.
+:::
+
+## Summary
+
+- Four levels: **VM, Kubernetes, serverless container, managed ML platform**. Higher levels mean less work and less control.
+- AWS, Google Cloud and Azure offer **equivalent services** under different names.
+- **Spiky or low traffic favours serverless**; steady heavy traffic favours reserved servers.
+- Keep the model in a container so you can move between clouds.
+- Next: handle traffic spikes in [Scale](/deployment/scale/scaling-ml-inference.qmd).

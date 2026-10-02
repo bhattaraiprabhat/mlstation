@@ -1,0 +1,237 @@
+---
+title: "Model Updates and Versioning: Ship New Models Without Fear"
+description: "What to version, how a model registry works, and how shadow, canary, blue-green and A/B rollouts protect users, with an animated canary release and auto-rollback."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Versioning, Rollouts, MLflow]
+draft: false
+---
+
+PayGuard version 15 scores better offline than version 14. Should it replace v14 for every payment right now? Not yet. Offline tests use old data; real traffic can still surprise you. A safe update answers three questions: **exactly what changed, how do we expose it gradually, and how do we undo it in one step?**
+
+::: {.callout-tip}
+## What you will learn
+- The six things you must version together
+- Semantic versions and registry aliases such as "champion" and "challenger"
+- Shadow, canary, blue-green and A/B releases, and when to use each
+- An animated canary release that rolls itself back when things go wrong
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Version everything that changes the prediction
+
+A model's output depends on more than the model file. If any of these change silently, you cannot reproduce or explain a prediction.
+
+| Artifact | Example | Tool |
+|---|---|---|
+| Code | Feature functions, training script | Git commit |
+| Data | Training snapshot of 2026-09-01 | DVC, lakeFS, dated tables |
+| Features | Definition of `tx_last_hour` | Feature store, code review |
+| Model | `payguard` version 15 | MLflow Model Registry |
+| Config | Threshold 0.5, hyperparameters | Config file in Git |
+| Environment | Python 3.11, scikit-learn 1.5 | Docker image tag |
+
+: What to version {#tbl-version}
+
+A simple semantic scheme makes versions readable:
+
+- **MAJOR** (2.0.0): the input or output contract changes, for example a new required field. Callers must update.
+- **MINOR** (1.5.0): retrained on new data or with new internal features, same contract.
+- **PATCH** (1.5.1): a bug fix that does not change model behaviour intentionally.
+
+Over time, model versions branch and merge like code:
+
+```{mermaid}
+%%| echo: false
+gitGraph
+  commit id: "v1.0 first model"
+  commit id: "v1.1 monthly retrain"
+  branch experiment
+  commit id: "new feature: merchant age"
+  commit id: "tuned depth"
+  checkout main
+  commit id: "v1.2 monthly retrain"
+  merge experiment id: "v1.3 adds merchant age"
+  commit id: "v2.0 new input schema"
+```
+
+## The model registry
+
+A **registry** stores every model version with its metrics and lineage. Instead of hard-coding "version 15", the service loads a model by **alias**. Promoting or rolling back means moving the alias, with no code change and no redeploy ([MLflow docs](https://mlflow.org/docs/latest/ml/model-registry/)).
+
+```{.python filename="promote.py"}
+import mlflow
+from mlflow import MlflowClient
+
+client = MlflowClient()
+# v15 passed the quality gate: make it the challenger
+client.set_registered_model_alias("payguard", "challenger", 15)
+
+# the service always loads whatever "champion" points to
+model = mlflow.pyfunc.load_model("models:/payguard@champion")
+
+# after a successful rollout, promote; rolling back is the same call with 14
+client.set_registered_model_alias("payguard", "champion", 15)
+```
+
+## Four ways to roll out
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof strat = Inputs.radio(["Shadow", "Canary", "Blue-green", "A/B test"], {value: "Canary", label: "Strategy"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const info = {
+    "Shadow": {split: [100, 0], note: "v15 receives a copy of every request, but its answers are only logged. Zero user risk; compare predictions side by side.", dashed: true},
+    "Canary": {split: [95, 5], note: "A small slice of real traffic goes to v15. If its metrics hold, the slice grows step by step.", dashed: false},
+    "Blue-green": {split: [0, 100], note: "v15 runs on a full copy of the environment. Traffic switches all at once, and switching back is instant.", dashed: false},
+    "A/B test": {split: [50, 50], note: "Traffic is split randomly for a fixed period to measure the business effect with statistics.", dashed: false}
+  }[strat];
+  const W = 760, H = 210;
+  const y1 = 55, y2 = 155, wA = 2 + info.split[0] / 8, wB = info.dashed ? 4 : 2 + info.split[1] / 8;
+  return htl.html`<div>${htl.svg`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    <rect x="20" y="80" width="130" height="50" rx="12" fill="${ms.slate}" fill-opacity="0.85"/>
+    <text x="85" y="110" text-anchor="middle" fill="white" font-size="14" font-weight="600">Traffic</text>
+    <path d="M150,105 C300,105 330,${y1} 520,${y1}" fill="none" stroke="${ms.indigo}" stroke-width="${wA}" stroke-opacity="0.8"/>
+    <path d="M150,105 C300,105 330,${y2} 520,${y2}" fill="none" stroke="${ms.teal}" stroke-width="${wB}" stroke-opacity="0.8" stroke-dasharray="${info.dashed ? "6,5" : "none"}"/>
+    <rect x="520" y="${y1 - 25}" width="210" height="50" rx="12" fill="${ms.indigo}" fill-opacity="0.85"/>
+    <text x="625" y="${y1 + 5}" text-anchor="middle" fill="white" font-size="14" font-weight="600">v14 champion · ${info.split[0]}%</text>
+    <rect x="520" y="${y2 - 25}" width="210" height="50" rx="12" fill="${ms.teal}" fill-opacity="0.85"/>
+    <text x="625" y="${y2 + 5}" text-anchor="middle" fill="white" font-size="14" font-weight="600">v15 · ${info.dashed ? "copy only" : info.split[1] + "%"}</text>
+  </svg>`}<div class="ms-readout"><span>${strat}</span><b style="font-size:1rem">${info.note}</b></div></div>`;
+}
+```
+
+| Strategy | User risk | Extra cost | Answers the question |
+|---|---|---|---|
+| Shadow | None | Double compute | Does it behave sanely on real inputs? |
+| Canary | Small, limited to the slice | Low | Is it safe to roll out? |
+| Blue-green | Brief, but instant rollback | Two environments | Can we switch cleanly? |
+| A/B test | Half of users see the new model | Time | Is it better for the business? |
+
+: Rollout strategies {#tbl-rollout}
+
+A common sequence for PayGuard is **shadow for a few days, then canary, then full rollout**, with an A/B test when the change affects business outcomes such as false declines.
+
+## An animated canary release
+
+Press play. Traffic to v15 steps up through 1%, 5%, 25%, 50% and 100%. At every step the system compares v15's error rate with v14's. Tick "bad release" to see the automatic rollback.
+
+```{ojs}
+//| echo: false
+viewof badRelease = Inputs.toggle({label: "Bad release (v15 has a bug)", value: false})
+viewof tol = Inputs.range([0.2, 2], {value: 0.5, step: 0.1, label: "Rollback if v15 errors exceed v14 by (percentage points)"})
+viewof go_ = Inputs.button("Play rollout")
+```
+
+```{ojs}
+//| echo: false
+canary = {
+  const steps = [1, 5, 25, 50, 100], per = 30, rnd = d3.randomNormal.source(d3.randomLcg(13))(0, 0.12);
+  const out = []; let rolled = -1;
+  for (let t = 0; t < steps.length * per; t++) {
+    const share = rolled >= 0 ? 0 : steps[Math.floor(t / per)];
+    const base = 0.8 + rnd();
+    const v15 = badRelease ? 0.8 + 1.6 * Math.min(1, t / 40) + rnd() * 1.5 : 0.75 + rnd() * (share < 5 ? 2.5 : 1);
+    out.push({t, share, base, v15: rolled >= 0 ? null : v15});
+    if (rolled < 0 && t % per === per - 1 && d3.mean(out.slice(-per), d => d.v15) - d3.mean(out.slice(-per), d => d.base) > tol) rolled = t;
+  }
+  return {out, rolled};
+}
+frame = {
+  go_; canary;
+  for (let i = 1; i <= canary.out.length; i++) { yield i; await Promises.delay(35); }
+}
+```
+
+```{ojs}
+//| echo: false
+{
+  const shown = canary.out.slice(0, frame), last = shown[shown.length - 1];
+  const done = frame >= canary.out.length, rb = canary.rolled >= 0 && frame > canary.rolled;
+  const share = Plot.plot({
+    ...msStyle, height: 170, width: 760, marginLeft: 55,
+    x: {domain: [0, canary.out.length], label: null, axis: null}, y: {domain: [0, 100], label: "↑ % traffic to v15", grid: true},
+    marks: [Plot.areaY(shown, {x: "t", y: "share", fill: ms.teal, fillOpacity: 0.35, curve: "step"}), Plot.line(shown, {x: "t", y: "share", stroke: ms.teal, strokeWidth: 2, curve: "step"})]
+  });
+  const err = Plot.plot({
+    ...msStyle, height: 200, width: 760, marginLeft: 55,
+    x: {domain: [0, canary.out.length], label: "Minutes since rollout started →"}, y: {domain: [0, 4.5], label: "↑ error rate (%)", grid: true},
+    color: {domain: ["v14 champion", "v15 canary"], range: [ms.indigo, ms.rose], legend: true},
+    marks: [
+      Plot.line(shown, {x: "t", y: "base", stroke: () => "v14 champion", strokeWidth: 1.8}),
+      Plot.line(shown.filter(d => d.v15 !== null), {x: "t", y: "v15", stroke: () => "v15 canary", strokeWidth: 1.8}),
+      rb ? Plot.ruleX([canary.rolled], {stroke: ms.rose, strokeDasharray: "4,4"}) : null
+    ]
+  });
+  const msg = rb ? `Automatic rollback at minute ${canary.rolled}: v15 errors exceeded v14 by more than ${tol} points. Only ${canary.out[canary.rolled - 1]?.share ?? 1}% of traffic was ever exposed.`
+    : done ? "Rollout complete. v15 is now serving 100% of traffic; promote the 'champion' alias."
+    : `Canary at ${last.share}% of traffic, metrics within tolerance.`;
+  return htl.html`<div>${share}${err}<div class="ms-readout"><span>Status</span><b style="font-size:1rem">${msg}</b></div></div>`;
+}
+```
+
+The point of a canary is containment. A bug that would have hit every customer touched only a small slice, for a few minutes.
+
+## Is v15 actually better? An A/B test
+
+Safety is not the same as improvement. To measure the business effect, PayGuard split traffic 50/50 for three weeks and counted **false declines** (good customers wrongly blocked). The simulation below tracks the difference and its 95% confidence interval as data accumulates.
+
+```{python}
+#| label: fig-ab
+#| fig-cap: "Simulated A/B test. Early on, the confidence interval is wide and crosses zero; after about two weeks it sits clearly below zero, showing v15 declines fewer good customers."
+#| code-fold: true
+import numpy as np, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(17)
+days, per_day = 21, 4000
+a = rng.binomial(per_day, 0.0210, days).cumsum()    # v14 false declines
+b = rng.binomial(per_day, 0.0185, days).cumsum()    # v15 false declines
+n = per_day * np.arange(1, days + 1)
+pa, pb = a / n, b / n
+diff = (pb - pa) * 100
+se = np.sqrt(pa * (1 - pa) / n + pb * (1 - pb) / n) * 100
+d = np.arange(1, days + 1)
+fig = go.Figure()
+fig.add_scatter(x=np.r_[d, d[::-1]], y=np.r_[diff + 1.96 * se, (diff - 1.96 * se)[::-1]], fill="toself",
+                fillcolor="rgba(20,184,166,0.18)", line=dict(width=0), name="95% interval")
+fig.add_scatter(x=d, y=diff, line=dict(color=COLORS["teal"], width=3), name="v15 minus v14")
+fig.add_hline(y=0, line_color=COLORS["slate"], line_dash="dash")
+fig.update_layout(height=360, xaxis_title="Day of test", yaxis_title="Difference in false-decline rate (points)", legend=dict(orientation="h", y=1.12))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The difference in rates and its interval are
+
+$$
+\hat\Delta = \hat p_{15} - \hat p_{14}, \qquad
+\hat\Delta \pm 1.96\sqrt{\frac{\hat p_{14}(1-\hat p_{14})}{n_{14}} + \frac{\hat p_{15}(1-\hat p_{15})}{n_{15}}}
+$$ {#eq-ab}
+
+After 21 days, v15 changes the false-decline rate by **`{python} f"{diff[-1]:.2f}"` points** (95% interval `{python} f"{diff[-1]-1.96*se[-1]:.2f}"` to `{python} f"{diff[-1]+1.96*se[-1]:.2f}"`). Decide the test length **before** starting, and do not stop early the first time the interval looks good.
+
+## Rollback must be boring
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A[Metric breach<br/>or human call] --> B[Move 'champion'<br/>alias back to v14]
+  B --> C[Service reloads<br/>within seconds]
+  C --> D[Verify metrics<br/>recover]
+  D --> E[Keep v15 for<br/>investigation]
+```
+
+Practise rollback regularly (the [Maintenance](/deployment/maintenance/ml-model-maintenance.qmd) calendar includes a quarterly drill). Keep the previous image and model available, and make sure database or schema changes are **backward compatible** so v14 can still run.
+
+## Summary
+
+- Version **code, data, features, model, config and environment** together.
+- Use **semantic versions** and registry **aliases**; promotion and rollback become one call.
+- Roll out with **shadow → canary → full**, and use an **A/B test** to prove business value.
+- Automate the **rollback trigger** and practise it until it is boring.
+- Back to the start: the [Deployment overview](/deployment/deployment-overview.qmd) shows how all nine parts fit together.

@@ -1,0 +1,254 @@
+---
+title: "Docker for Machine Learning: Package a Model So It Runs Anywhere"
+description: "Containers explained visually: images vs containers, a production Dockerfile for a model API, layer caching you can play with, and how to keep images small."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Docker, Containers]
+draft: false
+---
+
+"It works on my machine" is the oldest bug in software. PayGuard depends on a specific Python version, specific library versions and a model file. A **container** bundles all of that into one sealed box that runs the same on a laptop, a server or the cloud.
+
+::: {.callout-tip}
+## What you will learn
+- How containers differ from virtual machines
+- The path from a Dockerfile to a running container
+- A production-ready Dockerfile for the PayGuard API
+- How layer caching makes rebuilds fast, and how to keep images small
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Containers vs virtual machines
+
+A **virtual machine** carries a whole operating system. A **container** shares the host's kernel and carries only the app and its libraries, so it starts in seconds and uses far less memory. Switch between the two views.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof mode = Inputs.radio(["Virtual machines", "Containers"], {value: "Containers", label: "Show"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const W = 760, H = 300, vm = mode === "Virtual machines";
+  const apps = ["PayGuard API", "Feature service", "Dashboard"];
+  const box = (x, y, w, h, label, c, op = 0.85, tc = "white") => htl.svg`<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${c}" fill-opacity="${op}"/><text x="${x + w / 2}" y="${y + h / 2 + 5}" text-anchor="middle" font-size="13" font-weight="600" fill="${tc}">${label}</text></g>`;
+  const colW = (W - 80) / 3;
+  return htl.svg`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    ${apps.map((a, i) => { const x = 30 + i * (colW + 10); return htl.svg`<g>
+      ${box(x, vm ? 20 : 80, colW, 40, a, ms.indigo)}
+      ${box(x, vm ? 66 : 126, colW, 34, "Python + libraries", ms.violet, 0.75)}
+      ${vm ? box(x, 106, colW, 50, "Guest OS (GBs)", ms.rose, 0.75) : ""}</g>`; })}
+    ${vm ? box(30, 166, W - 60, 40, "Hypervisor", ms.amber, 0.85) : box(30, 166, W - 60, 40, "Container runtime (Docker)", ms.teal, 0.9)}
+    ${box(30, 212, W - 60, 36, "Host operating system", "currentColor", 0.12, "currentColor")}
+    ${box(30, 254, W - 60, 36, "Hardware", "currentColor", 0.2, "currentColor")}
+  </svg>`;
+}
+```
+
+```{ojs}
+//| echo: false
+html`<div class="ms-readout"><span>${mode}</span><b>${mode === "Containers" ? "Start in seconds, size in MBs" : "Start in minutes, size in GBs"}</b><span>${mode === "Containers" ? "Containers share the host kernel, so you can pack many on one server." : "Each VM boots a full operating system. Stronger isolation, more overhead."}</span></div>`
+```
+
+## From Dockerfile to running container
+
+Four words matter. A **Dockerfile** is the recipe. An **image** is the baked, read-only result. A **registry** stores images (Docker Hub, GitHub Container Registry, AWS ECR). A **container** is a running copy of an image.
+
+```{mermaid}
+%%| echo: false
+flowchart TB
+  A[Dockerfile<br/>recipe] -- docker build --> B[Image<br/>payguard:1.4.0]
+  B -- docker push --> C[(Registry)]
+  C -- docker pull --> D[Server or cloud]
+  D -- docker run --> E[Container 1]
+  D -- docker run --> F[Container 2]
+```
+
+## A production Dockerfile for PayGuard
+
+This uses a **multi-stage build**: the first stage installs libraries with build tools, and the final stage copies only what is needed, so build tools never reach production ([Docker docs](https://docs.docker.com/build/building/multi-stage/)).
+
+```{.dockerfile filename="Dockerfile"}
+# ---- stage 1: build wheels ----
+FROM python:3.11-slim AS build
+WORKDIR /w
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir -r requirements.txt -w /wheels
+
+# ---- stage 2: small runtime image ----
+FROM python:3.11-slim
+WORKDIR /app
+COPY --from=build /wheels /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+
+# rarely changes: model file
+COPY models/payguard.joblib models/
+# changes often: application code, copied last
+COPY app.py .
+
+# never run as root
+RUN useradd -m appuser
+USER appuser
+
+EXPOSE 8000
+HEALTHCHECK CMD python -c \
+  "import urllib.request as u; u.urlopen('http://localhost:8000/health')"
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```{.ini filename="requirements.txt"}
+fastapi==0.115.*
+uvicorn==0.32.*
+scikit-learn==1.5.*
+pandas==2.2.*
+joblib==1.4.*
+```
+
+```{.bash filename="terminal"}
+docker build -t payguard:1.4.0 .
+docker run -d -p 8000:8000 --name payguard payguard:1.4.0
+curl localhost:8000/health
+```
+
+::: {.callout-important}
+## Pin the scikit-learn version
+A model saved with one scikit-learn version may not load, or may behave differently, in another. The container pins the exact version used in training.
+:::
+
+## Layer caching: why order matters
+
+Each instruction creates a **layer**. When you rebuild, Docker reuses every layer up to the first one that changed, then rebuilds everything after it. Pick what you changed and see what gets rebuilt.
+
+```{ojs}
+//| echo: false
+viewof changed = Inputs.radio(["Application code", "Model file", "requirements.txt", "Nothing"], {value: "Application code", label: "I changed"})
+viewof order = Inputs.radio(["Good order (code last)", "Bad order (code first)"], {value: "Good order (code last)", label: "Dockerfile"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const good = [["FROM python:3.11-slim", null, 2], ["COPY requirements.txt", "requirements.txt", 1], ["RUN pip install ...", null, 95], ["COPY payguard.joblib", "Model file", 3], ["COPY app.py", "Application code", 1]];
+  const bad = [["FROM python:3.11-slim", null, 2], ["COPY . .  (all files)", "any", 2], ["RUN pip install ...", null, 95]];
+  const L = order.startsWith("Good") ? good : bad;
+  let broken = false;
+  const rows = L.map(([cmd, trig, sec]) => {
+    if (changed !== "Nothing" && (trig === changed || (trig === "any" && changed !== "Nothing"))) broken = true;
+    return {cmd, sec, rebuilt: broken};
+  });
+  const total = d3.sum(rows, r => r.rebuilt ? r.sec : 0.2);
+  return htl.html`<div>${Plot.plot({
+    ...msStyle, height: 40 + rows.length * 42, marginLeft: 190, width: 760,
+    x: {label: "Seconds (simulated) →", domain: [0, 100]}, y: {label: null, domain: rows.map(r => r.cmd)},
+    marks: [
+      Plot.barX(rows, {y: "cmd", x: r => r.rebuilt ? r.sec : 0.2, fill: r => r.rebuilt ? ms.rose : ms.teal, rx: 4}),
+      Plot.text(rows, {y: "cmd", x: r => r.rebuilt ? r.sec : 0.2, text: r => r.rebuilt ? `rebuilt ${r.sec}s` : "cached", dx: 8, textAnchor: "start", fill: "currentColor", fontSize: 12})
+    ]})}
+  <div class="ms-readout"><span>Rebuild time</span><b>${total.toFixed(0)} s</b><span>${total > 50 ? "All libraries reinstall. Copy requirements first and code last." : "Only the changed layers rebuild."}</span></div></div>`;
+}
+```
+
+Over a week of small code edits, the difference adds up. Here are 30 simulated builds in a busy week.
+
+```{python}
+#| label: fig-builds
+#| fig-cap: "Simulated build times over 30 commits. Most commits only change code, so a well-ordered Dockerfile rebuilds in seconds."
+#| code-fold: true
+import numpy as np, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(8)
+kind = rng.choice(["code", "model", "deps"], 30, p=[0.8, 0.13, 0.07])
+good = np.where(kind == "code", 4, np.where(kind == "model", 7, 100)) + rng.normal(0, 1, 30)
+bad = 100 + rng.normal(0, 4, 30)
+fig = go.Figure()
+fig.add_bar(x=np.arange(1, 31), y=bad, name="Bad order", marker_color=COLORS["rose"], opacity=0.55)
+fig.add_bar(x=np.arange(1, 31), y=good, name="Good order", marker_color=COLORS["teal"])
+fig.update_layout(barmode="overlay", height=360, xaxis_title="Commit", yaxis_title="Build time (s)", legend=dict(orientation="h", y=1.12))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Total for the week: **`{python} f"{bad.sum()/60:.0f}"` minutes** with the bad order vs **`{python} f"{good.sum()/60:.0f}"` minutes** with the good one.
+
+## Keep images small
+
+Smaller images download faster, start faster when autoscaling and have fewer packages that need security patches.
+
+```{python}
+#| label: fig-size
+#| fig-cap: "Illustrative image composition. Slim base images and multi-stage builds remove most of the weight."
+#| code-fold: true
+parts = ["Base OS", "Python", "Build tools", "ML libraries", "Model", "Code"]
+naive = [120, 50, 450, 380, 6, 0.1]
+slim = [75, 50, 0, 300, 6, 0.1]
+cols = [COLORS["slate"], COLORS["violet"], COLORS["rose"], COLORS["indigo"], COLORS["amber"], COLORS["teal"]]
+fig = go.Figure()
+for p, a, b, c in zip(parts, naive, slim, cols):
+    fig.add_bar(y=["Full base image", "Slim + multi-stage"], x=[a, b], name=p, orientation="h", marker_color=c)
+fig.update_layout(barmode="stack", height=280, xaxis_title="Megabytes (illustrative)", legend=dict(orientation="h", y=1.25))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Also add a `.dockerignore` so data folders, notebooks and `.git` never enter the image:
+
+```{.ini filename=".dockerignore"}
+.git
+.venv
+data/
+notebooks/
+__pycache__/
+*.ipynb
+```
+
+## Running more than one container
+
+Real services rarely run alone. **Docker Compose** starts PayGuard and a Redis cache together with one command.
+
+```{.yaml filename="compose.yaml"}
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      REDIS_URL: redis://cache:6379
+    depends_on: [cache]
+  cache:
+    image: redis:7-alpine
+```
+
+```{.bash filename="terminal"}
+docker compose up -d      # start both
+docker compose logs -f api
+docker compose down       # stop and remove
+```
+
+## Command cheat sheet
+
+| Command | What it does |
+|---|---|
+| `docker build -t name:tag .` | Build an image from the Dockerfile in this folder |
+| `docker images` | List local images and sizes |
+| `docker run -d -p 8000:8000 name:tag` | Start a container in the background |
+| `docker ps` | List running containers |
+| `docker logs -f <id>` | Follow a container's logs |
+| `docker exec -it <id> sh` | Open a shell inside a running container |
+| `docker push registry/name:tag` | Upload an image to a registry |
+
+## Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| Using the `latest` tag in production | Tag with a version (`1.4.0`) or the git commit |
+| Secrets baked into the image | Pass them as environment variables or secret mounts at run time |
+| Running as root | Add a user and `USER appuser` |
+| Huge images from copying data | Use `.dockerignore`, mount data instead |
+
+## Summary
+
+- A container packs the **app, libraries and model** so it runs the same everywhere.
+- **Dockerfile → image → registry → container** is the whole workflow.
+- Copy requirements first and code last to keep **layer caching** effective.
+- Use **slim bases, multi-stage builds, pinned versions and a non-root user**.
+- Next: choose where those containers run with [cloud platforms](/deployment/cloud/cloud-platforms-for-ml.qmd).

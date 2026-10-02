@@ -1,0 +1,219 @@
+---
+title: "Scaling ML Inference: Surviving the Black Friday Spike"
+description: "Why latency explodes near full capacity, how autoscaling reacts to a traffic spike (animated), and how batching, caching and right-sizing control cost."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Scale, Autoscaling]
+draft: false
+---
+
+On a normal day PayGuard handles a few hundred payments per second. On Black Friday traffic jumps **8×** in an hour. If the service cannot keep up, payments time out and the shop loses sales. If it keeps 8× capacity all year, the cloud bill explodes. **Scaling** is the art of having just enough capacity, just in time.
+
+::: {.callout-tip}
+## What you will learn
+- Little's law and why latency explodes as servers approach 100% busy
+- Horizontal vs vertical scaling
+- How an autoscaler reacts to a spike, in an animated simulation you control
+- Batching, caching and model compression as cost levers
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Two numbers rule everything
+
+**Throughput** $\lambda$ is requests per second. **Latency** $W$ is how long each request spends in the system. **Little's law** links them to the number of requests in flight, $L$:
+
+$$
+L = \lambda \, W
+$$ {#eq-little}
+
+If PayGuard receives 400 requests per second and each takes 0.05 s, then on average $400 \times 0.05 = 20$ requests are in progress at once. You need enough workers to hold them.
+
+## Why "80% busy" is the danger zone
+
+When servers are nearly full, new requests wait in a queue. Queueing theory shows that waiting time does not grow in a straight line: it **explodes** as utilization approaches 100%. The chart uses the standard M/M/c queue model for a group of 4 replicas, each taking 20 ms per request.
+
+```{python}
+#| label: fig-util
+#| fig-cap: "Average latency vs utilization for 4 replicas (M/M/4 queue, 20 ms service time). Past about 80% the curve turns sharply upward."
+#| code-fold: true
+import numpy as np, plotly.graph_objects as go
+from math import factorial
+from ms_charts import COLORS, PLOTLY_CONFIG
+
+def mmc_latency(rho, c=4, service_ms=20):
+    a = rho * c                                    # offered load
+    s = sum(a**k / factorial(k) for k in range(c))
+    pc = a**c / factorial(c) / (1 - rho)
+    erlang_c = pc / (s + pc)                       # probability of waiting
+    wait = erlang_c * service_ms / (c * (1 - rho))
+    return service_ms + wait
+
+rho = np.linspace(0.05, 0.97, 200)
+w = [mmc_latency(r) for r in rho]
+fig = go.Figure(go.Scatter(x=rho * 100, y=w, line=dict(color=COLORS["indigo"], width=3.5)))
+fig.add_vrect(x0=80, x1=97, fillcolor=COLORS["rose"], opacity=0.08, line_width=0,
+              annotation_text="danger zone", annotation_position="top left")
+fig.update_layout(height=360, xaxis_title="Utilization (%)", yaxis_title="Average latency (ms)", showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+At 50% busy, a request takes about `{python} f"{mmc_latency(0.5):.0f}"` ms. At 95% busy it takes about `{python} f"{mmc_latency(0.95):.0f}"` ms. That is why autoscalers usually target **60–70% utilization**, not 100%: the spare room absorbs bursts.
+
+## Scale up or scale out
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  subgraph V[Vertical: scale up]
+    direction TB
+    V1[1 small server] --> V2[1 bigger server<br/>more CPU, more RAM]
+  end
+  subgraph H[Horizontal: scale out]
+    direction TB
+    LB[Load balancer] --> R1[Replica 1]
+    LB --> R2[Replica 2]
+    LB --> R3[Replica 3]
+  end
+```
+
+| | Vertical (bigger machine) | Horizontal (more machines) |
+|---|---|---|
+| Limit | The biggest machine available | Practically unlimited |
+| Failure | One machine, one point of failure | One replica fails, others carry on |
+| Best for | Large models that need lots of memory or a GPU | Stateless APIs like PayGuard |
+
+## Autoscaling a Black Friday spike
+
+An **autoscaler** watches utilization and adds or removes replicas. It cannot react instantly: it needs time to notice the spike and to start new containers. Press play and adjust the settings to see the trade-off between **cost** and **overload**.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof target = Inputs.range([0.4, 0.95], {value: 0.65, step: 0.05, label: "Target utilization"})
+viewof delay = Inputs.range([1, 20], {value: 5, step: 1, label: "Scale-up delay (minutes)"})
+viewof minRep = Inputs.range([1, 20], {value: 4, step: 1, label: "Minimum replicas"})
+viewof playing = Inputs.toggle({label: "Play animation", value: true})
+```
+
+```{ojs}
+//| echo: false
+traffic = {
+  // simulated requests per second over 24 hours, minute by minute
+  const rnd = d3.randomNormal.source(d3.randomLcg(4))(0, 1);
+  return d3.range(1440).map(m => {
+    const h = m / 60;
+    const base = 120 + 160 * Math.exp(-((h - 20) ** 2) / 10) + 90 * Math.exp(-((h - 13) ** 2) / 4);
+    const spike = h >= 9 && h < 12 ? 1 + 7 * Math.min(1, (h - 9) * 2) * Math.exp(-(h - 9.5) / 2.5) : 1;
+    return Math.max(20, base * spike + rnd() * 15);
+  });
+}
+sim = {
+  const perReplica = 50;            // requests per second one replica can handle
+  let reps = minRep, out = [], pending = [];
+  for (let m = 0; m < 1440; m++) {
+    const need = Math.max(minRep, Math.ceil(traffic[m] / (perReplica * target)));
+    if (need > reps && !pending.length) pending.push({at: m + delay, n: need});
+    if (pending.length && m >= pending[0].at) { reps = Math.max(reps, pending.shift().n); }
+    if (need < reps * 0.7 && m % 10 === 0) reps = Math.max(need, minRep);   // scale down slowly
+    const util = traffic[m] / (reps * perReplica);
+    const lat = util < 1 ? 20 / (1 - Math.min(util, 0.98)) ** 0.6 : 400;
+    out.push({m, t: new Date(2026, 10, 27, 0, m), demand: traffic[m], capacity: reps * perReplica, reps, util, lat});
+  }
+  return out;
+}
+clock = {
+  let i = 60;
+  while (true) { yield i; if (playing) i = i >= 1439 ? 0 : i + 8; await Promises.delay(40); }
+}
+```
+
+```{ojs}
+//| echo: false
+{
+  const shown = sim.slice(0, clock + 1), now_ = sim[clock];
+  const over = sim.filter(d => d.util >= 1).length, repHours = d3.sum(sim, d => d.reps) / 60;
+  const top = Plot.plot({
+    ...msStyle, height: 280, width: 760, marginLeft: 55,
+    x: {type: "time", domain: [sim[0].t, sim[1439].t], label: null}, y: {label: "↑ requests per second", domain: [0, d3.max(sim, d => Math.max(d.demand, d.capacity)) * 1.05], grid: true},
+    marks: [
+      Plot.areaY(shown, {x: "t", y: "capacity", fill: ms.teal, fillOpacity: 0.18, curve: "step"}),
+      Plot.line(shown, {x: "t", y: "capacity", stroke: ms.teal, strokeWidth: 2, curve: "step"}),
+      Plot.line(shown, {x: "t", y: "demand", stroke: ms.indigo, strokeWidth: 1.6}),
+      Plot.dot(shown.filter(d => d.util >= 1), {x: "t", y: "demand", r: 2.2, fill: ms.rose}),
+      Plot.ruleX([now_.t], {stroke: "currentColor", strokeOpacity: 0.4}),
+    ]
+  });
+  const key = (c, t) => htl.html`<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-size:12.5px"><span style="width:14px;height:4px;border-radius:2px;background:${c}"></span>${t}</span>`;
+  return htl.html`<div><div>${key(ms.indigo, "Demand")}${key(ms.teal, "Capacity")}${key(ms.rose, "Overloaded minutes")}</div>${top}
+  <div class="ms-readout"><span>${d3.timeFormat("%H:%M")(now_.t)} · ${now_.reps} replicas · ${(Math.min(now_.util, 9.99) * 100).toFixed(0)}% busy</span><b>${over} min overloaded</b><span>over the day, using ${repHours.toFixed(0)} replica-hours</span></div></div>`;
+}
+```
+
+Try these experiments:
+
+- Raise **minimum replicas** to 20: overload almost disappears, but the cost roughly doubles.
+- Lower the **target utilization** to 0.5: more headroom during the spike, more replica-hours.
+- Increase the **scale-up delay** to 15 minutes: the spike arrives before new replicas are ready.
+
+The practical answer is a mix: a sensible minimum, a target near 0.65, fast-starting containers (small images help, see [Docker](/deployment/containers/docker-for-ml.qmd)), and **scheduled pre-scaling** before known events like Black Friday.
+
+On Kubernetes, a Horizontal Pod Autoscaler expresses the same idea:
+
+```{.yaml filename="hpa.yaml"}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: payguard}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: payguard}
+  minReplicas: 4
+  maxReplicas: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 65}
+```
+
+## Batching: throughput vs latency
+
+Grouping requests into batches raises throughput, because fixed overhead is shared (we measured this in [Tools](/deployment/tools/ml-serving-tools.qmd)). But each request waits for its batch to fill. The simulation below models a server with 4 ms of fixed overhead per batch plus 0.15 ms per row.
+
+```{python}
+#| label: fig-batch
+#| fig-cap: "Simulated batching trade-off. Throughput rises quickly with batch size; latency rises slowly at first, then steadily."
+#| code-fold: true
+from plotly.subplots import make_subplots
+b = np.array([1, 2, 4, 8, 16, 32, 64, 128])
+batch_ms = 4 + 0.15 * b
+throughput = b / batch_ms * 1000
+latency = batch_ms + 0.5 * b * 0.6          # compute time + average wait to fill the batch
+fig = make_subplots(specs=[[{"secondary_y": True}]])
+fig.add_scatter(x=b, y=throughput, name="Throughput (req/s)", line=dict(color=COLORS["teal"], width=3), secondary_y=False)
+fig.add_scatter(x=b, y=latency, name="Latency (ms)", line=dict(color=COLORS["rose"], width=3, dash="dot"), secondary_y=True)
+fig.update_xaxes(type="log", title="Batch size", tickvals=b)
+fig.update_yaxes(title_text="Requests per second", secondary_y=False)
+fig.update_yaxes(title_text="Latency (ms)", secondary_y=True)
+fig.update_layout(height=360, legend=dict(orientation="h", y=1.12))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+A batch of 16 to 32 gives most of the throughput gain while keeping latency well inside PayGuard's 100 ms budget.
+
+## Other cost levers
+
+| Lever | How it helps | PayGuard example |
+|---|---|---|
+| **Caching** | Reuse answers for repeated inputs | Cache merchant risk features for 5 minutes |
+| **Smaller models** | Distillation, pruning, quantization cut compute per request | An int8 model scores faster on CPU |
+| **Right-sizing** | Match CPU and memory to real usage | Drop from 4 vCPU to 2 when CPU sits at 20% |
+| **Async and queues** | Smooth spikes for work that can wait | Send low-risk refunds to a queue |
+| **Scale to zero** | Pay nothing when idle | Night-time demo endpoints |
+
+## Summary
+
+- **Little's law** $L = \lambda W$ tells you how much concurrency you need.
+- Latency **explodes past roughly 80% utilization**, so keep headroom.
+- **Scale out** stateless services; autoscalers need time, so set a minimum and pre-scale for known events.
+- **Batching, caching and smaller models** cut cost per prediction.
+- Next: know when something goes wrong with [Monitoring](/deployment/monitoring/model-monitoring-drift.qmd).

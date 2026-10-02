@@ -1,0 +1,286 @@
+---
+title: "The ML Serving Toolkit: FastAPI, BentoML, MLflow and Friends"
+description: "Turn a trained model file into a reliable prediction service. Which tool does which job, a working FastAPI service, and a live experiment on why batching matters."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, Tools, FastAPI, MLflow]
+draft: false
+---
+
+A trained model is just a file. To be useful it needs a **door**: something that accepts a request, prepares the input, calls the model and sends back an answer. This article shows the tools that build that door, using **PayGuard**, our fraud model from the [overview](/deployment/deployment-overview.qmd).
+
+::: {.callout-tip}
+## What you will learn
+- The four layers of a serving stack and the tool for each layer
+- How to wrap a model in a FastAPI service in about 30 lines
+- How to track and register models with MLflow
+- Why sending rows in batches can be many times faster, measured live
+:::
+
+{{< include ../_series-nav.md >}}
+
+## Four layers, four jobs
+
+Think of serving as a stack. Each layer answers one question. Pick a layer to see its tools.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+layers = [
+  {name: "Track and register", q: "Which model version is this, and how was it trained?", tools: "MLflow, Weights & Biases, Neptune", c: ms.violet},
+  {name: "Package", q: "How do I save the model so it loads anywhere?", tools: "joblib, ONNX, TorchScript, SavedModel, Docker", c: ms.indigo},
+  {name: "Serve", q: "How do requests reach the model?", tools: "FastAPI, BentoML, Ray Serve, NVIDIA Triton, KServe", c: ms.teal},
+  {name: "Demo and test", q: "How do people try it before production?", tools: "Gradio, Streamlit, pytest, Locust", c: ms.amber}
+]
+viewof sel = Inputs.radio(layers.map(d => d.name), {value: "Serve", label: "Layer"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const W = 760, h = 58;
+  const L = layers.find(d => d.name === sel);
+  return htl.html`<div>${htl.svg`<svg viewBox="0 0 ${W} ${layers.length * (h + 10) + 10}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    ${layers.map((d, i) => htl.svg`<g>
+      <rect x="${d.name === sel ? 10 : 40}" y="${10 + i * (h + 10)}" width="${d.name === sel ? W - 20 : W - 80}" height="${h}" rx="12" fill="${d.c}" fill-opacity="${d.name === sel ? 0.9 : 0.22}"/>
+      <text x="${W / 2}" y="${10 + i * (h + 10) + h / 2 + 5}" text-anchor="middle" font-size="16" font-weight="600" fill="${d.name === sel ? "white" : "currentColor"}">${d.name}</text></g>`)}
+  </svg>`}
+  <div class="ms-readout"><span>${L.q}</span><b style="font-size:1.05rem">${L.tools}</b></div></div>`;
+}
+```
+
+| Tool | Best at | Use it when |
+|---|---|---|
+| **FastAPI** | Lightweight Python web APIs with automatic validation and docs | You want full control and a small, simple service |
+| **BentoML** | Packaging a model plus its code into a deployable service | You want batching, containers and serving built in |
+| **MLflow** | Experiment tracking, model registry, standard model format | You train many versions and need to know which is live |
+| **ONNX Runtime** | Fast, framework-neutral inference | You need speed or want to run on edge devices |
+| **NVIDIA Triton** | High-throughput GPU serving of many models | You serve deep learning models on GPUs at scale |
+| **Ray Serve / KServe** | Scaling many models on a cluster | You already run Ray or Kubernetes |
+| **Gradio / Streamlit** | Quick demo web pages | You want stakeholders to try the model |
+
+: Serving tools at a glance {#tbl-tools}
+
+## Step 1: train and save PayGuard
+
+We simulate 20,000 card payments with a few features, train a gradient-boosted model and save it with `joblib`. This runs on any laptop.
+
+```{python}
+#| code-fold: false
+import numpy as np, pandas as pd, joblib, os
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
+
+rng = np.random.default_rng(7)
+n = 20_000
+df = pd.DataFrame({
+    "amount": rng.lognormal(3.5, 1.0, n),          # dollars
+    "hour": rng.integers(0, 24, n),
+    "km_from_home": rng.exponential(15, n),
+    "tx_last_hour": rng.poisson(1.2, n),
+    "new_merchant": rng.binomial(1, 0.25, n),
+})
+# simulated fraud risk: big, late-night, far-away, rapid-fire payments
+logit = (-6 + 0.012 * df.amount + 0.9 * (df.hour < 5)
+         + 0.02 * df.km_from_home + 0.6 * df.tx_last_hour + 0.8 * df.new_merchant)
+df["fraud"] = rng.binomial(1, 1 / (1 + np.exp(-logit)))
+
+X, y = df.drop(columns="fraud"), df.fraud
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, random_state=0)
+model = HistGradientBoostingClassifier(max_iter=200).fit(Xtr, ytr)
+auc = roc_auc_score(yte, model.predict_proba(Xte)[:, 1])
+
+os.makedirs("models", exist_ok=True)
+joblib.dump(model, "models/payguard.joblib")
+print(f"Fraud rate {y.mean():.1%}, test AUC {auc:.3f}")
+```
+
+## Step 2: give it a door with FastAPI
+
+FastAPI checks every request against a schema, so a missing field returns a clear error instead of a crash. It also creates interactive documentation at `/docs`.
+
+```{.python filename="app.py"}
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+import joblib, pandas as pd
+
+model = joblib.load("models/payguard.joblib")   # load once, at start-up
+app = FastAPI(title="PayGuard", version="1.0.0")
+
+class Payment(BaseModel):
+    amount: float = Field(gt=0)
+    hour: int = Field(ge=0, le=23)
+    km_from_home: float = Field(ge=0)
+    tx_last_hour: int = Field(ge=0)
+    new_merchant: int = Field(ge=0, le=1)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/score")
+def score(payments: list[Payment]):
+    X = pd.DataFrame([p.model_dump() for p in payments])
+    probs = model.predict_proba(X)[:, 1]
+    return [{"fraud_prob": round(float(p), 4),
+             "decision": "review" if p > 0.5 else "approve"}
+            for p in probs]
+```
+
+Run it and send a payment:
+
+```{.bash filename="terminal"}
+pip install fastapi uvicorn
+uvicorn app:app --port 8000
+
+curl -X POST localhost:8000/score -H "Content-Type: application/json" \
+  -d '[{"amount": 950, "hour": 3, "km_from_home": 400,
+        "tx_last_hour": 5, "new_merchant": 1}]'
+```
+
+This is what happens inside, one request at a time:
+
+```{mermaid}
+%%| echo: false
+sequenceDiagram
+  participant C as Client
+  participant F as FastAPI
+  participant V as Pydantic
+  participant M as Model
+  C->>F: POST /score (JSON)
+  F->>V: Validate fields
+  alt invalid
+    V-->>C: 422 error with field names
+  else valid
+    V->>M: DataFrame of payments
+    M-->>F: Fraud probabilities
+    F-->>C: 200 OK, decisions
+  end
+```
+
+## Step 3: why batching matters
+
+Every call to the model has a fixed overhead: Python function calls, input checks, memory setup. Scoring 1 row or 100 rows costs almost the same overhead. Here we time it live on the model we just trained.
+
+```{python}
+#| label: fig-batch
+#| fig-cap: "Measured time per payment for different batch sizes on this machine. Larger batches spread the fixed overhead across many rows."
+#| code-fold: true
+import time, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+
+sizes = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000]
+per_row = []
+for b in sizes:
+    batch = Xte.iloc[:b]
+    reps = max(3, 300 // b)
+    t0 = time.perf_counter()
+    for _ in range(reps):
+        model.predict_proba(batch)
+    per_row.append((time.perf_counter() - t0) / reps / b * 1000)   # ms per row
+
+speedup = per_row[0] / per_row[-1]
+fig = go.Figure(go.Scatter(x=sizes, y=per_row, mode="lines+markers",
+                           line=dict(color=COLORS["indigo"], width=3), marker=dict(size=9)))
+fig.update_layout(height=360, xaxis=dict(type="log", title="Batch size (rows per call)"),
+                  yaxis=dict(type="log", title="Milliseconds per payment"), showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+On this machine, scoring 1,000 payments in one call was about **`{python} f"{speedup:.0f}"`× cheaper per payment** than scoring them one at a time. Tools such as BentoML and Triton use **adaptive batching**: they wait a few milliseconds, collect requests that arrive together and score them as one batch. You trade a little latency for a lot of throughput. The [Scale](/deployment/scale/scaling-ml-inference.qmd) article explores this trade-off.
+
+## Step 4: track and register with MLflow
+
+When you train ten versions, you need to know which one is live and how it was made. MLflow records parameters, metrics and the model file, and keeps a **registry** of named versions ([MLflow docs](https://mlflow.org/docs/latest/ml/model-registry/)).
+
+::: {.panel-tabset}
+## MLflow
+
+```{.python filename="train_and_log.py"}
+import mlflow, mlflow.sklearn
+
+mlflow.set_experiment("payguard")
+with mlflow.start_run():
+    model = HistGradientBoostingClassifier(max_iter=200).fit(Xtr, ytr)
+    auc = roc_auc_score(yte, model.predict_proba(Xte)[:, 1])
+    mlflow.log_param("max_iter", 200)
+    mlflow.log_metric("auc", auc)
+    mlflow.sklearn.log_model(model, "model",
+                             registered_model_name="payguard")
+# browse runs: mlflow ui --port 5000
+```
+
+## BentoML
+
+```{.python filename="service.py"}
+import bentoml, joblib, pandas as pd
+
+@bentoml.service(resources={"cpu": "2"})
+class PayGuard:
+    def __init__(self):
+        self.model = joblib.load("models/payguard.joblib")
+
+    @bentoml.api(batchable=True, max_batch_size=256)
+    def score(self, rows: list[dict]) -> list[float]:
+        X = pd.DataFrame(rows)
+        return self.model.predict_proba(X)[:, 1].tolist()
+# run: bentoml serve service:PayGuard
+```
+
+## Gradio demo
+
+```{.python filename="demo.py"}
+import gradio as gr, joblib, pandas as pd
+
+model = joblib.load("models/payguard.joblib")
+
+def check(amount, hour, km, tx, new):
+    row = pd.DataFrame([[amount, hour, km, tx, int(new)]],
+                       columns=model.feature_names_in_)
+    return float(model.predict_proba(row)[0, 1])
+
+gr.Interface(check,
+             ["number", gr.Slider(0, 23, step=1), "number",
+              "number", "checkbox"],
+             "number", title="PayGuard demo").launch()
+```
+:::
+
+## Which tool should I start with?
+
+```{ojs}
+//| echo: false
+viewof needs = Inputs.checkbox(["Many model versions", "GPU deep learning", "Batching built in", "Quick demo for my team", "Already on Kubernetes", "Run on phones or edge"], {label: "I need", value: ["Many model versions"]})
+```
+
+```{ojs}
+//| echo: false
+{
+  const rec = new Set(["FastAPI"]);
+  if (needs.includes("Many model versions")) rec.add("MLflow");
+  if (needs.includes("GPU deep learning")) rec.add("NVIDIA Triton");
+  if (needs.includes("Batching built in")) { rec.delete("FastAPI"); rec.add("BentoML"); }
+  if (needs.includes("Quick demo for my team")) rec.add("Gradio");
+  if (needs.includes("Already on Kubernetes")) rec.add("KServe");
+  if (needs.includes("Run on phones or edge")) rec.add("ONNX Runtime");
+  return html`<div class="ms-readout"><span>Start with</span><b>${[...rec].join(" + ")}</b><span>Add more only when a real need appears.</span></div>`;
+}
+```
+
+## Common pitfalls
+
+| Pitfall | What goes wrong | Fix |
+|---|---|---|
+| Loading the model inside the request | Every call reads the file from disk | Load once at start-up |
+| No input validation | A missing field crashes the service | Use a Pydantic schema |
+| Training and serving code differ | Features are computed differently, predictions drift | Share one feature function, or save a full `Pipeline` |
+| Unpinned library versions | A model saved with one scikit-learn version fails to load in another | Pin versions in `requirements.txt` |
+| No health endpoint | The platform cannot tell if the service is alive | Add `/health` |
+
+## Summary
+
+- Serving has four layers: **track, package, serve, demo**.
+- **FastAPI** is the simplest door for a model; **BentoML** adds batching and packaging; **MLflow** tracks which version is which.
+- Batching spreads fixed overhead across many rows, which made each payment about `{python} f"{speedup:.0f}"`× cheaper here.
+- Next: automate training and testing with [MLOps pipelines](/deployment/mlops/mlops-pipelines.qmd).

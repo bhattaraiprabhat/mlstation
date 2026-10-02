@@ -1,0 +1,187 @@
+---
+title: "ML Deployment, Explained: From Notebook to Production"
+description: "The big picture of putting a machine learning model to work: deployment patterns, the request journey, the latency budget and the build-and-operate loop."
+author: "MLStation"
+date: 2026-10-01
+categories: [Deployment, MLOps]
+draft: false
+---
+
+A model in a notebook is a prototype. A model in production answers real requests, every second, for months, while the world around it changes. **Deployment** is everything between those two states. This series follows one example from start to finish: **PayGuard**, a fraud-detection model that scores every card payment before it is approved.
+
+::: {.callout-tip}
+## What you will learn
+- The five ways a model can be deployed, and how to choose
+- What happens, step by step, when a request hits a model in production
+- How a latency budget is spent, and why the model is rarely the slowest part
+- The build-and-operate loop that the rest of this series explores
+:::
+
+{{< include _series-nav.md >}}
+
+## The deployment lifecycle
+
+Deployment is not a single step at the end. It is a loop: you **build** a model and package it, **ship** it to an environment, **serve** predictions, then **operate** it by watching, scaling and updating it. Monitoring feeds back into building the next version.
+
+```{mermaid}
+%%| echo: false
+flowchart TB
+  subgraph Build
+    direction LR
+    A[Data and training] --> B[Package model<br/>tools, Docker]
+  end
+  subgraph Ship
+    direction LR
+    C[CI/CD pipeline<br/>MLOps] --> D[Cloud or edge<br/>platform]
+  end
+  subgraph Operate
+    direction LR
+    E[Serve and scale] --> F[Monitor] --> G[Maintain and update]
+  end
+  B --> C
+  D --> E
+  G -. new data, new version .-> A
+```
+
+## Five ways to deploy a model
+
+| Pattern | How it works | Typical latency | Example |
+|---|---|---|---|
+| **Batch** | Score a whole table on a schedule | Minutes to hours | Nightly churn scores for the sales team |
+| **Online API** | A request comes in, a prediction goes out | Milliseconds | PayGuard scoring a card payment |
+| **Streaming** | Score events as they flow through a queue | Sub-second | Flagging suspicious log-ins from an event stream |
+| **Edge** | The model runs on the device | Milliseconds, works offline | Barcode reader in a phone app |
+| **Embedded in an app** | The model is a library inside another service | Microseconds | Spam filter inside an email server |
+
+: Deployment patterns {#tbl-patterns}
+
+Answer three questions and see which pattern fits.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof need = Inputs.radio(["Within milliseconds", "Within seconds", "By tomorrow is fine"], {value: "Within milliseconds", label: "How fast is the answer needed?"})
+viewof online = Inputs.radio(["Always online", "Sometimes offline"], {value: "Always online", label: "Is the device connected?"})
+viewof shape = Inputs.radio(["One request at a time", "A continuous event stream", "A big table at once"], {value: "One request at a time", label: "How does data arrive?"})
+```
+
+```{ojs}
+//| echo: false
+pick = online === "Sometimes offline" ? ["Edge", "Ship a compact model (ONNX, TFLite, CoreML) inside the device app."]
+  : need === "By tomorrow is fine" || shape === "A big table at once" ? ["Batch", "Run a scheduled job that scores the whole table and writes results to a database."]
+  : shape === "A continuous event stream" ? ["Streaming", "Consume events from a queue (Kafka, Pub/Sub, Kinesis) and score each one as it passes."]
+  : ["Online API", "Wrap the model in a web service (FastAPI, BentoML) behind a load balancer. This is PayGuard's pattern."]
+html`<div class="ms-readout"><span>Recommended pattern</span><b>${pick[0]}</b><span>${pick[1]}</span></div>`
+```
+
+## The journey of one request
+
+When a shopper taps "Pay", PayGuard has a strict budget: the bank wants an answer in **under 100 ms**. Press play and follow one payment through the system. The timings come from a simulation of 10,000 requests.
+
+```{python}
+#| echo: false
+import numpy as np, pandas as pd
+rng = np.random.default_rng(11)
+N = 10_000
+stages = {   # simulated milliseconds per stage
+    "Network in": rng.gamma(4, 2.0, N),
+    "API gateway": rng.gamma(3, 0.8, N),
+    "Feature lookup": rng.gamma(2.5, 6.0, N),
+    "Model inference": rng.gamma(4, 1.5, N),
+    "Business rules": rng.gamma(2, 1.0, N),
+    "Network out": rng.gamma(4, 2.0, N),
+}
+lat = pd.DataFrame(stages)
+lat["total"] = lat.sum(axis=1)
+med = lat.median().round(1)
+ojs_define(stagesMed=[dict(stage=k, ms=float(med[k])) for k in stages])
+```
+
+```{ojs}
+//| echo: false
+viewof play = Inputs.toggle({label: "Play animation", value: true})
+```
+
+```{ojs}
+//| echo: false
+tick = {
+  let i = 0;
+  while (true) { yield i; if (play) i = (i + 1) % 240; await Promises.delay(45); }
+}
+journey = {
+  const nodes = ["Shopper", "API gateway", "Feature store", "Model server", "Rules", "Bank"];
+  const W = 760, H = 170, xs = nodes.map((_, i) => 60 + i * (W - 120) / (nodes.length - 1));
+  const p = (tick % 120) / 120 * (nodes.length - 1);
+  const seg = Math.min(nodes.length - 2, Math.floor(p)), f = p - seg;
+  const x = xs[seg] + (xs[seg + 1] - xs[seg]) * f;
+  const back = tick >= 120;
+  return htl.svg`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif;color:currentColor">
+    <line x1="${xs[0]}" y1="80" x2="${xs[xs.length - 1]}" y2="80" stroke="currentColor" stroke-opacity="0.25" stroke-width="3"/>
+    ${nodes.map((n, i) => htl.svg`<g>
+      <rect x="${xs[i] - 52}" y="55" width="104" height="50" rx="12" fill="${i === seg || i === seg + 1 ? ms.indigo : "var(--ms-surface,#f4f4f7)"}" fill-opacity="${i === seg || i === seg + 1 ? 0.18 : 1}" stroke="currentColor" stroke-opacity="0.3"/>
+      <text x="${xs[i]}" y="85" text-anchor="middle" font-size="12.5" fill="currentColor">${n}</text></g>`)}
+    <circle cx="${back ? xs[xs.length - 1] - (x - xs[0]) : x}" cy="${back ? 128 : 32}" r="9" fill="${back ? ms.teal : ms.amber}"/>
+    <text x="${W / 2}" y="160" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.7">${back ? "Decision travels back: approve or decline" : "Payment request travels in"}</text>
+  </svg>`;
+}
+```
+
+Where do those milliseconds go? Here is the median time for each stage.
+
+```{python}
+#| label: fig-budget
+#| fig-cap: "Median latency per stage across 10,000 simulated payments. The model itself is a small slice; fetching features costs more."
+#| code-fold: true
+import plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+fig = go.Figure(go.Waterfall(
+    x=[k.replace(" ", "<br>") for k in stages] + ["Total"], y=list(med[list(stages)]) + [0],
+    measure=["relative"] * len(stages) + ["total"],
+    text=[f"{v:.1f} ms" for v in med[list(stages)]] + [f"{med['total']:.0f} ms"], textposition="outside",
+    increasing=dict(marker=dict(color=COLORS["indigo"])), totals=dict(marker=dict(color=COLORS["teal"])),
+    connector=dict(line=dict(color="rgba(138,147,163,0.4)"))))
+fig.add_hline(y=100, line_dash="dash", line_color=COLORS["rose"], annotation_text="100 ms budget", annotation_position="top left")
+fig.update_layout(height=380, yaxis_title="Milliseconds", showlegend=False, yaxis=dict(range=[0, 112]), xaxis=dict(tickangle=0))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The median is only half the story. Users feel the slow tail, so teams track the **95th** and **99th percentile** (p95, p99).
+
+```{python}
+#| label: fig-tail
+#| fig-cap: "Distribution of total latency. The p99 is far above the median."
+#| code-fold: true
+p50, p95, p99 = np.percentile(lat.total, [50, 95, 99])
+fig = go.Figure(go.Histogram(x=lat.total, nbinsx=80, marker_color=COLORS["indigo"], opacity=0.8))
+for v, name, c, pos in [(p50, "p50", COLORS["teal"], "top"), (p95, "p95", COLORS["amber"], "top left"), (p99, "p99", COLORS["rose"], "top right")]:
+    fig.add_vline(x=v, line_color=c, line_width=2.5, annotation_text=f"{name} {v:.0f} ms", annotation_position=pos)
+fig.update_layout(height=340, xaxis_title="Total latency (ms)", yaxis_title="Requests", bargap=0.02, showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Half of payments finish in `{python} f"{p50:.0f}"` ms, but 1 in 100 takes more than `{python} f"{p99:.0f}"` ms. Most speed work in production attacks the **features and the network**, not the model.
+
+## Build vs operate
+
+| Phase | Question it answers | Article |
+|---|---|---|
+| Tools | How do I turn a model file into a service? | [Tools](/deployment/tools/ml-serving-tools.qmd) |
+| MLOps | How do I train, test and ship automatically? | [MLOps](/deployment/mlops/mlops-pipelines.qmd) |
+| Containers | How do I make it run the same everywhere? | [Docker](/deployment/containers/docker-for-ml.qmd) |
+| Cloud | Where should it run, and what will it cost? | [Cloud](/deployment/cloud/cloud-platforms-for-ml.qmd) |
+| Scale | How do I handle 10× traffic on Black Friday? | [Scale](/deployment/scale/scaling-ml-inference.qmd) |
+| Monitoring | How do I know it is still working? | [Monitoring](/deployment/monitoring/model-monitoring-drift.qmd) |
+| Maintenance | How do I keep it healthy for years? | [Maintenance](/deployment/maintenance/ml-model-maintenance.qmd) |
+| Updates | How do I release a new version safely? | [Updates](/deployment/update/model-versioning-rollouts.qmd) |
+
+::: {.callout-warning}
+## The hidden cost
+The model code is a small part of a production ML system. The surrounding data pipelines, configuration, serving and monitoring create most of the long-term maintenance cost ([Sculley et al., 2015](https://papers.nips.cc/paper/5656-hidden-technical-debt-in-machine-learning-systems)). Plan for the whole system from day one.
+:::
+
+## Summary
+
+- Deployment is a **loop**: build, ship, serve, operate, and back again.
+- Pick the pattern from the **latency need, connectivity and data shape**: batch, online API, streaming, edge or embedded.
+- Measure latency per stage and watch the **p95 and p99**, not just the average.
+- The rest of this series walks through each part of the loop with PayGuard.
