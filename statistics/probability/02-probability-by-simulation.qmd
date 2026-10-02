@@ -1,0 +1,157 @@
+---
+title: "Probability by Simulation: Learning Chance by Repetition"
+description: "Turn probability rules into experiments with coins, conditional probability, independence and Monte Carlo simulation."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Probability, Simulation]
+draft: false
+---
+
+
+Probability is the mathematical language for events that are uncertain **before** we observe them.
+
+The fastest route to intuition is to simulate the same uncertain mechanism many times.
+
+::: {.callout-tip}
+## What you will learn
+- Events, complements, unions and intersections
+- Conditional probability and independence
+- The Law of Large Numbers
+- Monte Carlo estimation
+- Why probability is foundational to ML uncertainty
+:::
+
+## Events as sets
+
+For events $A$ and $B$,
+
+$$
+P(A^c)=1-P(A)
+$$
+
+and
+
+$$
+P(A\cup B)=P(A)+P(B)-P(A\cap B).
+$$
+
+Conditional probability is
+
+$$
+P(A\mid B)=\frac{P(A\cap B)}{P(B)}.
+$$
+
+If $A$ and $B$ are independent,
+
+$$
+P(A\cap B)=P(A)P(B).
+$$
+
+## Animation: probability settles down
+
+Press play. The running proportion of heads wanders early and stabilizes as flips accumulate.
+
+```{ojs}
+//| echo: false
+viewof flips = Inputs.range([10,5000], {value:200, step:10, label:"Number of coin flips"})
+u = d3.randomLcg(0.42)
+coin = d3.range(flips).map(()=>u()<0.5 ? 1 : 0)
+running = coin.map((_,i)=>({n:i+1,p:d3.mean(coin.slice(0,i+1))}))
+Plot.plot({
+  height:320,
+  x:{label:"Flip"},
+  y:{domain:[0,1],label:"Running P(heads)"},
+  marks:[
+    Plot.ruleY([.5], {strokeDasharray:"5,4"}),
+    Plot.line(running,{x:"n",y:"p",stroke:"#4F46E5",strokeWidth:2})
+  ]
+})
+```
+
+This is the **Law of Large Numbers** in motion: under suitable conditions, the sample average approaches the expected value.
+
+## Conditional probability: filtering the world
+
+Think of $P(A\mid B)$ as changing the denominator:
+
+```text
+Original population
+      ↓ condition on B
+Only cases satisfying B
+      ↓
+What fraction also satisfy A?
+```
+
+```{python}
+#| code-fold: true
+import numpy as np
+rng = np.random.default_rng(2)
+
+n = 100_000
+rain = rng.random(n) < 0.25
+traffic = np.where(rain, rng.random(n)<0.65, rng.random(n)<0.20)
+
+print("P(traffic) =", traffic.mean())
+print("P(traffic | rain) =", traffic[rain].mean())
+```
+
+## Monte Carlo: estimate what is hard to integrate
+
+A point uniformly sampled in the square $[-1,1]^2$ lies inside the unit circle with probability $\pi/4$.
+
+Therefore:
+
+$$
+\pi \approx 4\frac{\text{points inside circle}}{\text{all points}}.
+$$
+
+```{ojs}
+//| echo: false
+viewof Npi = Inputs.range([100,20000], {value:2000, step:100, label:"Monte Carlo points"})
+rpi = d3.randomLcg(0.73)
+pts = d3.range(Npi).map(()=>{let x=2*rpi()-1,y=2*rpi()-1; return {x,y,inside:x*x+y*y<=1}})
+piHat = 4*d3.mean(pts,d=>d.inside)
+html`<div class="ms-readout"><span>Estimated π</span><b>${piHat.toFixed(4)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  width:430,height:430,x:{domain:[-1,1]},y:{domain:[-1,1]},
+  marks:[Plot.dot(pts,{x:"x",y:"y",r:2,fill:d=>d.inside?"#4F46E5":"#CBD5E1",fillOpacity:.65})]
+})
+```
+
+## DS/ML Bridge
+
+Probability appears everywhere:
+
+```text
+Classification      → P(class | features)
+Bayesian inference  → posterior probabilities
+Uncertainty         → predictive distributions
+A/B testing         → sampling variation
+Generative AI       → token probability distributions
+Monte Carlo         → uncertainty propagation / simulation
+```
+
+A classifier score of 0.8 is meaningful only after asking what probability-like quantity it represents and whether it is calibrated.
+
+## Save the experiment
+
+Save the seed, number of simulations and result:
+
+```python
+config = {"seed": 2, "n": 100_000}
+```
+
+Simulation without a seed/configuration is harder to reproduce.
+
+## Summary
+- Probability quantifies uncertainty before outcomes are known.
+- Conditional probability changes the reference population.
+- Independence is a mathematical statement, not merely “unrelated.”
+- Simulation turns probability into something observable.
+- Monte Carlo methods scale this idea to complex problems.
+
+**Next:** *Random Variables and Distributions — Models for Data-Generating Processes*

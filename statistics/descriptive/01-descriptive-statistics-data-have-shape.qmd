@@ -1,0 +1,145 @@
+---
+title: "Descriptive Statistics: Data Have Shape"
+description: "Build intuition for center, spread, skew, outliers and robust summaries—and see why EDA is the first statistical model check."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Descriptive Statistics, Data Science]
+draft: false
+---
+
+
+Before fitting a model, ask a simpler question:
+
+> **What kind of data do I actually have?**
+
+A mean without a distribution can be misleading. A standard deviation without a plot can hide outliers. Descriptive statistics are not bookkeeping—they are the first layer of **model diagnostics**.
+
+::: {.callout-tip}
+## What you will learn
+- Mean, median, quantiles, variance, standard deviation and IQR
+- Why the same mean can describe very different datasets
+- How skew and outliers change summaries
+- When robust statistics are preferable
+- How EDA connects directly to ML preprocessing and model choice
+:::
+
+## One number cannot describe a dataset
+
+For observations $x_1,\ldots,x_n$,
+
+$$
+\bar{x}=\frac{1}{n}\sum_{i=1}^n x_i
+$$
+
+is the sample mean, while
+
+$$
+s^2=\frac{1}{n-1}\sum_{i=1}^n(x_i-\bar{x})^2
+$$
+
+measures sample variance.
+
+But center and spread are only coordinates on a larger map:
+
+```text
+DATA
+ ├── Center      → mean, median
+ ├── Spread      → SD, IQR, range
+ ├── Shape       → skew, tails, modes
+ └── Exceptions  → outliers, missingness
+```
+
+## Interactive: let one outlier pull the mean
+
+Move the outlier. Watch the mean chase it while the median resists.
+
+```{ojs}
+//| echo: false
+viewof outlier = Inputs.range([5, 100], {value: 20, step: 1, label: "Outlier value"})
+base = [8,9,9,10,10,10,11,11,12]
+data = [...base, outlier]
+mean = d3.mean(data)
+median = d3.median(data)
+html`<div class="ms-readout"><span>Mean</span><b>${mean.toFixed(1)}</b>
+<span>Median</span><b>${median.toFixed(1)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  height: 250,
+  x: {domain:[0,105], label:"Value"},
+  y: {axis:null},
+  marks:[
+    Plot.dot(data.map((x,i)=>({x,y:0,j:i})), {x:"x", y:"y", r:7, fill:"#4F46E5"}),
+    Plot.ruleX([mean], {stroke:"#E11D48", strokeWidth:3}),
+    Plot.ruleX([median], {stroke:"#059669", strokeWidth:3, strokeDasharray:"5,4"}),
+    Plot.text([{x:mean,y:.12,t:"mean"},{x:median,y:-.12,t:"median"}],
+              {x:"x",y:"y",text:"t"})
+  ]
+})
+```
+
+::: {.callout-note}
+## Robustness
+The **median** and **IQR** are resistant to extreme observations. The mean and standard deviation are much more sensitive. That is not a defect—the statistics answer different questions.
+:::
+
+## Simulation: four datasets, similar summaries
+
+```{python}
+#| code-fold: true
+#| fig-cap: "Different shapes can share similar first-order summaries."
+import numpy as np
+import plotly.express as px
+import pandas as pd
+
+rng = np.random.default_rng(7)
+n = 500
+df = pd.DataFrame({
+    "Normal": rng.normal(0,1,n),
+    "Skewed": rng.exponential(1,n)-1,
+    "Heavy tail": rng.standard_t(3,n)/np.sqrt(3),
+    "Mixture": np.r_[rng.normal(-1,.45,n//2), rng.normal(1,.45,n//2)]
+}).melt(var_name="Distribution", value_name="x")
+
+fig = px.histogram(df, x="x", facet_col="Distribution", nbins=45,
+                   histnorm="probability density", animation_frame=None)
+fig.update_layout(height=360, showlegend=False)
+fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+fig.show()
+```
+
+## DS/ML Bridge: why EDA changes modeling decisions
+
+| Statistical clue | Data-science consequence |
+|---|---|
+| Strong skew | Transform feature, robust model, or suitable distribution |
+| Large outliers | Investigate data quality; consider robust loss/scaling |
+| Multiple modes | Hidden subgroups or mixture behavior |
+| Very different scales | Scaling may matter for distance/gradient methods |
+| Missingness pattern | Missingness may itself contain information |
+
+::: {.callout-warning}
+## Common mistake
+Do not automatically delete an outlier because a boxplot marks it. An outlier can be an error, a rare valid case, or the most important observation in the dataset.
+:::
+
+## Save the analysis
+
+```python
+summary = df.groupby("Distribution")["x"].agg(
+    ["count","mean","median","std","min","max"]
+)
+summary.to_csv("eda_summary.csv")
+```
+
+Save both **summary statistics and plots/configuration**. EDA is part of the reproducible analysis, not disposable scratch work.
+
+## Summary
+- Center, spread and shape describe different properties.
+- Mean/SD are sensitive; median/IQR are robust.
+- Visualization prevents summaries from hiding structure.
+- EDA often determines preprocessing, feature engineering and model assumptions.
+
+**Next:** *Probability by Simulation — Learning Chance by Repetition*

@@ -1,0 +1,117 @@
+---
+title: "Hypothesis Tests, p-values, Errors & Power"
+description: "Understand hypothesis testing as a decision framework, visualize p-values, and simulate Type I error, Type II error and power."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Hypothesis Testing, Inference]
+draft: false
+---
+
+
+Hypothesis testing is often taught as a ritual:
+
+```text
+calculate p → compare with 0.05 → declare significance
+```
+
+That hides the real structure.
+
+A test asks:
+
+> **If a specified null model were true, how surprising would data like these be?**
+
+::: {.callout-tip}
+## What you will learn
+- Null and alternative hypotheses
+- Test statistics and p-values
+- Type I and Type II errors
+- Statistical power
+- Why statistical significance is not practical importance
+:::
+
+## The p-value
+
+A p-value is the probability, **under the null model**, of observing a test statistic at least as incompatible with the null as the one observed.
+
+It is **not** $P(H_0\mid\text{data})$.
+
+## Interactive: move the observed z-statistic
+
+```{ojs}
+//| echo: false
+viewof zobs = Inputs.range([0,4], {value:1.96, step:.05, label:"|Observed z|"})
+phi=z=>Math.exp(-z*z/2)/Math.sqrt(2*Math.PI)
+grid=d3.range(-4.5,4.51,.02).map(x=>({x,y:phi(x),tail:Math.abs(x)>=zobs}))
+cdf=x=>0.5*(1+((z)=>{const t=1/(1+.3275911*Math.abs(z)); const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-z*z);return z>=0?y:-y;})(x/Math.SQRT2))
+pval=2*(1-cdf(zobs))
+html`<div class="ms-readout"><span>Two-sided p-value</span><b>${pval.toFixed(4)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+ height:300,x:{label:"z"},y:{label:"Null density"},
+ marks:[
+  Plot.areaY(grid.filter(d=>d.tail),{x:"x",y:"y",fill:"#E11D48",fillOpacity:.25}),
+  Plot.line(grid,{x:"x",y:"y",stroke:"#4F46E5",strokeWidth:2})
+ ]
+})
+```
+
+## Errors are defined across repeated decisions
+
+| Reality | Do not reject $H_0$ | Reject $H_0$ |
+|---|---|---|
+| $H_0$ true | Correct | Type I error ($\alpha$) |
+| $H_1$ true | Type II error ($\beta$) | Correct; power $=1-\beta$ |
+
+## Animation: power rises with effect size and sample size
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+from scipy.stats import norm
+
+rows=[]
+alpha=.05
+crit=norm.ppf(1-alpha/2)
+for n in [20,50,100,200,500]:
+    for d in np.linspace(0,0.6,61):
+        mu=d*np.sqrt(n)
+        power=norm.sf(crit-mu)+norm.cdf(-crit-mu)
+        rows.append({"n":n,"effect":d,"power":power})
+df=pd.DataFrame(rows)
+fig=px.line(df,x="effect",y="power",animation_frame="n",range_y=[0,1],
+            labels={"effect":"Standardized effect size","power":"Power"})
+fig.add_hline(y=.8,line_dash="dash")
+fig.update_layout(height=380)
+fig.show()
+```
+
+## DS/ML Bridge
+
+Hypothesis testing appears in:
+
+- feature experiments,
+- model comparison,
+- uplift measurement,
+- regression coefficient tests,
+- monitoring shifts,
+- controlled online experiments.
+
+But with huge datasets, tiny effects can become statistically significant. Always pair inference with an **effect size** and domain relevance.
+
+::: {.callout-warning}
+## “Not significant” does not mean “no effect”
+It can mean the study had too little information to distinguish the effect from noise.
+:::
+
+## Summary
+- A p-value is computed assuming the null model.
+- Type I error is a false positive; Type II error is a false negative.
+- Power is the probability of detecting an effect under a specified alternative.
+- Larger samples detect smaller effects.
+- Statistical significance and practical importance are different questions.
+
+**Next:** *A/B Testing — Statistics as a Product Decision System*

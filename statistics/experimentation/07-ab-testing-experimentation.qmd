@@ -1,0 +1,154 @@
+---
+title: "A/B Testing: Statistics as a Product Decision System"
+description: "Design experiments from randomization through lift, uncertainty, sample size, guardrails and decision-making."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Experimentation, A/B Testing, Data Science]
+draft: false
+---
+
+
+A/B testing is where probability, sampling, confidence intervals and hypothesis tests become an operational decision system.
+
+The statistical calculation is only one part.
+
+::: {.callout-tip}
+## What you will learn
+- Randomization and treatment/control groups
+- Absolute and relative lift
+- Difference-in-proportions uncertainty
+- Sample size, power and minimum detectable effect
+- Guardrails, peeking and practical decisions
+:::
+
+## The causal engine: randomization
+
+```text
+Eligible users
+      ↓ random assignment
+ ┌────┴────┐
+ A         B
+control   treatment
+ └────┬────┘
+      ↓
+ compare outcomes
+```
+
+Randomization aims to make treatment assignment independent of pre-treatment characteristics, allowing differences in outcomes to be attributed to treatment **in expectation**.
+
+## Interactive experiment simulator
+
+```{ojs}
+//| echo: false
+viewof nab = Inputs.range([100,20000], {value:2000, step:100, label:"Users per group"})
+viewof liftab = Inputs.range([0,.05], {value:.01, step:.0025, label:"Absolute treatment lift"})
+rab=d3.randomLcg(.87)
+pA=.10; pB=pA+liftab
+convA=d3.sum(d3.range(nab),()=>rab()<pA)
+convB=d3.sum(d3.range(nab),()=>rab()<pB)
+rateA=convA/nab; rateB=convB/nab; diff=rateB-rateA
+seab=Math.sqrt(rateA*(1-rateA)/nab+rateB*(1-rateB)/nab)
+html`<div class="ms-readout">
+<span>A</span><b>${(100*rateA).toFixed(2)}%</b>
+<span>B</span><b>${(100*rateB).toFixed(2)}%</b>
+<span>Observed lift</span><b>${(100*diff).toFixed(2)} pp</b>
+</div>`
+```
+
+Repeat mentally by moving $n$: small experiments are noisy enough that B can lose even when its true conversion rate is higher.
+
+## Absolute vs. relative lift
+
+If conversion moves from 10% to 11%:
+
+$$
+\text{absolute lift}=11\%-10\%=1\text{ percentage point}
+$$
+
+$$
+\text{relative lift}=\frac{11\%-10\%}{10\%}=10\%.
+$$
+
+Always state which one you mean.
+
+## Simulation: the distribution of observed lift
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+
+rng=np.random.default_rng(21)
+pA,pB=.10,.11
+rows=[]
+for n in [200,1000,5000,20000]:
+    for _ in range(1200):
+        a=rng.binomial(n,pA)/n
+        b=rng.binomial(n,pB)/n
+        rows.append({"n":n,"lift":b-a})
+df=pd.DataFrame(rows)
+fig=px.histogram(df,x="lift",animation_frame="n",nbins=50,
+                 range_x=[-.08,.10],histnorm="probability density")
+fig.add_vline(x=.01,line_dash="dash")
+fig.update_layout(height=380)
+fig.show()
+```
+
+## Guardrails
+
+A primary metric can improve while the product gets worse elsewhere.
+
+```text
+Primary: conversion ↑
+Guardrails:
+  latency?
+  cancellations?
+  refunds?
+  retention?
+  errors?
+```
+
+Predefine important metrics and decision rules.
+
+## DS/ML Bridge
+
+Experiments evaluate not only UI changes but also ML systems:
+
+```text
+ranking model
+recommendation algorithm
+search relevance model
+fraud threshold
+notification policy
+AI assistant experience
+```
+
+Offline metrics tell you what happened on a dataset. Randomized online experiments can measure the **causal product impact** of deploying the change.
+
+::: {.callout-warning}
+## Repeated peeking changes error behavior
+Running a fixed-horizon test but stopping whenever $p<0.05$ is not the same procedure you originally calibrated. Use a planned fixed horizon or an appropriate sequential method.
+:::
+
+## What should you save?
+
+```text
+experiment/
+├── hypothesis.md
+├── metric_definitions.json
+├── sample_size_plan.json
+├── assignment_version.json
+├── analysis.ipynb
+└── decision.md
+```
+
+Pre-experiment decisions are valuable evidence against post-hoc storytelling.
+
+## Summary
+- Randomization is the foundation of causal interpretation.
+- Lift must be accompanied by uncertainty.
+- Sample size should be tied to baseline rate, effect size, alpha and power.
+- Guardrails prevent optimizing one metric at the expense of the system.
+- A/B tests connect statistical inference directly to product decisions.
+
+**Next:** *Correlation, Confounding & Causality*

@@ -1,0 +1,132 @@
+---
+title: "Linear Regression: From Line Fitting to Statistical Modeling"
+description: "Build linear regression geometrically and statistically, then connect residuals, assumptions, regularization and prediction to ML."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Regression, Machine Learning]
+draft: false
+---
+
+
+Linear regression is both a statistical model and one of the simplest supervised-learning algorithms.
+
+That makes it an ideal bridge between statistics and machine learning.
+
+::: {.callout-tip}
+## What you will learn
+- The linear model and least squares
+- Residuals and the loss surface
+- Coefficient interpretation
+- Diagnostics and assumptions
+- How regression connects to regularized ML
+:::
+
+## The model
+
+For one predictor,
+
+$$
+Y=\beta_0+\beta_1X+\varepsilon.
+$$
+
+Least squares chooses coefficients minimizing
+
+$$
+SSE(\beta_0,\beta_1)
+=
+\sum_{i=1}^n
+\left(y_i-\beta_0-\beta_1x_i\right)^2.
+$$
+
+## Interactive: fit the line yourself
+
+```{ojs}
+//| echo: false
+viewof b0 = Inputs.range([-3,3], {value:0, step:.1, label:"Intercept β₀"})
+viewof b1 = Inputs.range([-1,4], {value:1, step:.1, label:"Slope β₁"})
+rlr=d3.randomLcg(.19)
+ptslr=d3.range(45).map(i=>{let x=i/7; return{x,y:1+2*x+(rlr()-.5)*3}})
+sselr=d3.sum(ptslr,d=>(d.y-(b0+b1*d.x))**2)
+html`<div class="ms-readout"><span>Sum of squared errors</span><b>${sselr.toFixed(1)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+lineLR=[{x:0,y:b0},{x:6.5,y:b0+b1*6.5}]
+Plot.plot({
+ height:340,x:{label:"x"},y:{label:"y"},
+ marks:[Plot.dot(ptslr,{x:"x",y:"y",fill:"#4F46E5"}),Plot.line(lineLR,{x:"x",y:"y",stroke:"#E11D48",strokeWidth:3})]
+})
+```
+
+Try to minimize SSE manually. Optimization algorithms do the same search much faster.
+
+## Residuals tell the story
+
+A residual is
+
+$$
+e_i=y_i-\hat y_i.
+$$
+
+Residual plots can reveal:
+
+```text
+curve pattern     → missing nonlinearity
+funnel shape      → nonconstant variance
+clusters          → missing groups/features
+large residuals   → unusual cases
+```
+
+## 3D loss surface
+
+```{python}
+#| code-fold: true
+import numpy as np
+import plotly.graph_objects as go
+
+rng=np.random.default_rng(9)
+x=np.linspace(0,5,50); y=1+2*x+rng.normal(0,1,50)
+B0=np.linspace(-1,3,70); B1=np.linspace(.5,3.5,70)
+Z=np.array([[np.sum((y-(a+b*x))**2) for b in B1] for a in B0])
+fig=go.Figure(go.Surface(x=B1,y=B0,z=Z,showscale=False))
+fig.update_layout(height=430,scene=dict(xaxis_title="β1",yaxis_title="β0",zaxis_title="SSE"))
+fig.show()
+```
+
+The bowl is the optimization landscape for this simple model.
+
+## DS/ML Bridge: regularization
+
+Multiple linear regression:
+
+$$
+\hat y=\beta_0+\sum_{j=1}^p\beta_jx_j.
+$$
+
+Ridge adds an $L_2$ penalty:
+
+$$
+\text{Loss}
+=
+SSE+\lambda\sum_j\beta_j^2.
+$$
+
+Lasso uses an $L_1$ penalty:
+
+$$
+\text{Loss}
+=
+SSE+\lambda\sum_j|\beta_j|.
+$$
+
+Now the statistical model connects directly to ML ideas of generalization, regularization and bias–variance trade-offs.
+
+## Summary
+- Linear regression minimizes squared residuals.
+- Coefficients describe conditional linear relationships.
+- Residual diagnostics reveal model misspecification.
+- Regression can be used for inference, prediction, or both—but the goal changes how it should be evaluated.
+- Ridge and lasso extend regression into regularized machine learning.
+
+**Next:** *Logistic Regression, Odds & Classification*

@@ -1,0 +1,167 @@
+---
+title: "Time Series: Dependence, Trend, Seasonality & Forecasting"
+description: "Learn why time breaks ordinary i.i.d. assumptions and connect decomposition, autocorrelation, backtesting and forecasting to practical ML."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Time Series, Forecasting, Data Science]
+draft: false
+---
+
+
+Most introductory statistics quietly assumes observations can be treated as independent.
+
+Time series often refuses to cooperate.
+
+Yesterday can predict today. December can resemble last December. A trend can make the future unlike the past average.
+
+::: {.callout-tip}
+## What you will learn
+- Trend, seasonality, noise and autocorrelation
+- Lagged relationships
+- Why random train/test splitting can leak the future
+- Rolling-origin backtesting
+- How statistical forecasting connects to ML
+:::
+
+## A time-series decomposition
+
+A useful conceptual model is
+
+$$
+Y_t=T_t+S_t+R_t,
+$$
+
+where:
+
+- $T_t$ = trend,
+- $S_t$ = seasonal component,
+- $R_t$ = remainder/noise.
+
+## Interactive: build a signal
+
+```{ojs}
+//| echo: false
+viewof trendTS = Inputs.range([0,.08], {value:.02, step:.005, label:"Trend per step"})
+viewof ampTS = Inputs.range([0,5], {value:2, step:.1, label:"Seasonal amplitude"})
+viewof noiseTS = Inputs.range([0,4], {value:1, step:.1, label:"Noise"})
+rts=d3.randomLcg(.64)
+seriesTS=d3.range(180).map(t=>({t,y:10+trendTS*t+ampTS*Math.sin(2*Math.PI*t/30)+(rts()-.5)*2*noiseTS}))
+Plot.plot({
+ height:330,x:{label:"Time"},y:{label:"y"},
+ marks:[Plot.line(seriesTS,{x:"t",y:"y",stroke:"#4F46E5",strokeWidth:2})]
+})
+```
+
+Change one component at a time. The observed line is the mixture.
+
+## Autocorrelation
+
+Autocorrelation at lag $k$ compares $Y_t$ with $Y_{t-k}$.
+
+A strong lag-7 relationship in daily data may indicate weekly seasonality.
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.graph_objects as go
+
+rng=np.random.default_rng(18)
+t=np.arange(365)
+y=20+.02*t+3*np.sin(2*np.pi*t/7)+rng.normal(0,1.2,len(t))
+
+lags=np.arange(1,31)
+acf=[np.corrcoef(y[k:],y[:-k])[0,1] for k in lags]
+
+fig=go.Figure(go.Bar(x=lags,y=acf))
+fig.update_layout(height=340,xaxis_title="Lag",yaxis_title="Autocorrelation")
+fig.show()
+```
+
+## The cardinal rule: do not train on the future
+
+Random splitting can create leakage:
+
+```text
+BAD FOR MANY TIME-SERIES TASKS
+past + future mixed → random train/test
+```
+
+Prefer chronological evaluation:
+
+```text
+TRAIN                 TEST
+───────────────|────────────
+past                     future
+```
+
+## Animation: rolling-origin backtesting
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+
+rng=np.random.default_rng(19)
+t=np.arange(160)
+y=10+.04*t+2*np.sin(2*np.pi*t/20)+rng.normal(0,.7,len(t))
+rows=[]
+for cutoff in [60,80,100,120,140]:
+    for i,(tt,yy) in enumerate(zip(t,y)):
+        part="train" if tt<=cutoff else "future"
+        rows.append({"cutoff":cutoff,"time":tt,"y":yy,"part":part})
+df=pd.DataFrame(rows)
+fig=px.scatter(df,x="time",y="y",color="part",animation_frame="cutoff",
+               range_x=[0,160],range_y=[5,20])
+fig.update_layout(height=380)
+fig.show()
+```
+
+Each frame moves the training frontier forward. This is much closer to how forecasting models are used in reality.
+
+## DS/ML Bridge
+
+Statistical forecasting and ML share the same core evaluation discipline:
+
+```text
+features from past only
+      ↓
+fit model
+      ↓
+predict unseen future
+      ↓
+advance time
+      ↓
+repeat
+```
+
+ML models may use lag features, rolling statistics, calendar features and exogenous variables. Statistical models may encode trend, autoregression and seasonality directly.
+
+The algorithm matters—but **temporal validation design matters first**.
+
+::: {.callout-warning}
+## Leakage can make a bad forecast look excellent
+Any feature computed using information unavailable at prediction time can invalidate evaluation, even if the code runs perfectly.
+:::
+
+## What should you save?
+
+```text
+forecast_run/
+├── data_cutoff.txt
+├── feature_config.json
+├── split_definition.json
+├── model_config.json
+├── forecasts.csv
+└── metrics.json
+```
+
+A forecast is inseparable from the time at which it was made.
+
+## Summary
+- Time series contain ordered dependence.
+- Trend, seasonality and autocorrelation create structure across time.
+- Random splitting can leak future information.
+- Rolling-origin evaluation mimics real forecasting.
+- Statistical and ML forecasting differ in machinery but share the need for leakage-safe temporal validation.
+
+**Next:** Revisit the series as a connected toolkit: describe → model uncertainty → infer → experiment → predict → validate.

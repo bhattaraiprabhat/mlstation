@@ -1,0 +1,119 @@
+---
+title: "Correlation, Confounding & Causality"
+description: "See how association emerges, how confounders create misleading patterns, and why prediction and causal explanation are different goals."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Correlation, Causality, Data Science]
+draft: false
+---
+
+
+Two variables moving together is useful information.
+
+It is not automatically a causal story.
+
+::: {.callout-tip}
+## What you will learn
+- Covariance and Pearson correlation
+- Why correlation measures linear association
+- Confounding and Simpson's paradox
+- Prediction versus causal inference
+- Why feature importance is not causal effect
+:::
+
+## Correlation
+
+Pearson correlation is
+
+$$
+r=\frac{\operatorname{Cov}(X,Y)}{s_Xs_Y},
+$$
+
+with $-1\le r\le1$.
+
+It measures **linear** association.
+
+## Interactive: rotate the correlation cloud
+
+```{ojs}
+//| echo: false
+viewof rho = Inputs.range([-.95,.95], {value:.6, step:.05, label:"Correlation ρ"})
+rr=d3.randomLcg(.41)
+normal=()=>{let u=rr()||1e-9,v=rr(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+cloud=d3.range(600).map(()=>{let x=normal(),e=normal();return{x,y:rho*x+Math.sqrt(1-rho*rho)*e}})
+Plot.plot({
+ height:360,x:{domain:[-4,4]},y:{domain:[-4,4]},
+ marks:[Plot.dot(cloud,{x:"x",y:"y",r:3,fill:"#4F46E5",fillOpacity:.45}),Plot.ruleX([0]),Plot.ruleY([0])]
+})
+```
+
+## Confounding: a third variable changes the story
+
+Imagine ice-cream sales and drowning incidents both rise in summer.
+
+```text
+Temperature
+  ↙      ↘
+Ice cream   Swimming exposure
+               ↓
+            Drowning
+```
+
+The association between ice cream and drowning does not imply that buying ice cream causes drowning.
+
+## Simulation: Simpson's paradox
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+
+rng=np.random.default_rng(33)
+rows=[]
+for group,offset,xmu in [("A",5,1),("B",-5,5)]:
+    x=rng.normal(xmu,.8,180)
+    y=.8*x+offset+rng.normal(0,.7,180)
+    rows += [{"x":a,"y":b,"group":group} for a,b in zip(x,y)]
+df=pd.DataFrame(rows)
+fig=px.scatter(df,x="x",y="y",color="group",trendline="ols")
+fig.update_layout(height=390)
+fig.show()
+print("Overall correlation:",df[["x","y"]].corr().iloc[0,1])
+print(df.groupby("group").apply(lambda g:g[["x","y"]].corr().iloc[0,1]))
+```
+
+The aggregate relationship can differ dramatically from within-group relationships.
+
+## Prediction is not explanation
+
+A feature can be predictive because it is:
+
+- causal,
+- caused by the target,
+- correlated with a cause,
+- a proxy for another variable,
+- leaked from the future.
+
+ML asks:
+
+> Does this feature improve prediction on the target distribution?
+
+Causal inference asks:
+
+> What would happen to $Y$ if we intervened on $X$?
+
+These are different questions.
+
+::: {.callout-warning}
+## Feature importance is not causal importance
+SHAP values, coefficients and permutation importance describe aspects of a predictive model. Without a causal design and assumptions, they do not establish intervention effects.
+:::
+
+## Summary
+- Correlation measures association, especially linear association.
+- Confounders can create or reverse aggregate relationships.
+- Prediction and causal inference answer different questions.
+- Randomization is one powerful way to identify causal effects.
+- Model explanation tools should not be automatically interpreted causally.
+
+**Next:** *Linear Regression — From Line Fitting to Statistical Modeling*

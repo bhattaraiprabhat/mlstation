@@ -1,0 +1,151 @@
+---
+title: "Bayesian Statistics: Learning by Updating"
+description: "Turn prior knowledge and observed data into posterior uncertainty, then connect Bayesian reasoning to modern probabilistic ML."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Bayesian, Probability, Machine Learning]
+draft: false
+---
+
+
+Bayesian statistics treats uncertainty about unknown quantities probabilistically.
+
+The central operation is simple:
+
+```text
+Prior belief + Data → Posterior belief
+```
+
+::: {.callout-tip}
+## What you will learn
+- Prior, likelihood and posterior
+- Bayes' rule
+- Beta–binomial updating
+- Credible intervals
+- How Bayesian thinking connects to probabilistic ML
+:::
+
+## Bayes' rule
+
+For parameter $\theta$ and data $D$,
+
+$$
+p(\theta\mid D)
+=
+\frac{p(D\mid\theta)p(\theta)}
+{p(D)}.
+$$
+
+Often we write:
+
+$$
+\text{posterior}
+\propto
+\text{likelihood}\times\text{prior}.
+$$
+
+## Interactive: update a conversion-rate belief
+
+For a Bernoulli conversion probability $p$, choose a Beta prior:
+
+$$
+p\sim\operatorname{Beta}(\alpha,\beta).
+$$
+
+After $s$ successes and $f$ failures,
+
+$$
+p\mid D\sim\operatorname{Beta}(\alpha+s,\beta+f).
+$$
+
+```{ojs}
+//| echo: false
+viewof priorStrength = Inputs.range([2,100], {value:10, step:1, label:"Prior strength α+β"})
+viewof successes = Inputs.range([0,100], {value:18, step:1, label:"Observed successes"})
+viewof trialsBayes = Inputs.range([1,100], {value:50, step:1, label:"Observed trials"})
+sBayes=Math.min(successes,trialsBayes)
+a0=priorStrength*.1; b0=priorStrength*.9
+a1=a0+sBayes; b1=b0+trialsBayes-sBayes
+meanPrior=a0/(a0+b0); meanPost=a1/(a1+b1)
+html`<div class="ms-readout"><span>Prior mean</span><b>${meanPrior.toFixed(3)}</b>
+<span>Posterior mean</span><b>${meanPost.toFixed(3)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+// Shape visualization via unnormalized beta density
+betaShape=(x,a,b)=>x**(a-1)*(1-x)**(b-1)
+gridB=d3.range(.001,.999,.002)
+pr=gridB.map(x=>({x,y:betaShape(x,a0,b0)})); po=gridB.map(x=>({x,y:betaShape(x,a1,b1)}))
+m1=d3.max(pr,d=>d.y); m2=d3.max(po,d=>d.y)
+Plot.plot({
+ height:330,x:{domain:[0,1],label:"Conversion probability p"},y:{axis:null},
+ marks:[
+  Plot.line(pr,{x:"x",y:d=>d.y/m1,stroke:"#94A3B8",strokeWidth:2}),
+  Plot.line(po,{x:"x",y:d=>d.y/m2,stroke:"#4F46E5",strokeWidth:3})
+ ]
+})
+```
+
+Move prior strength. Strong priors require more data to move substantially.
+
+## Frequentist CI vs Bayesian credible interval
+
+A Bayesian 95% credible interval is a probability statement about the parameter **under the specified model and prior**:
+
+> Given the model, prior and observed data, 95% of posterior probability lies in this interval.
+
+That differs from the repeated-sampling interpretation of a frequentist confidence interval.
+
+## Simulation: posterior contracts as data arrive
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+from scipy.stats import beta
+import plotly.express as px
+
+true_p=.3
+rng=np.random.default_rng(6)
+data=rng.binomial(1,true_p,400)
+rows=[]
+for n in [0,5,20,50,100,400]:
+    s=data[:n].sum()
+    a,b=2+s,2+n-s
+    for x in np.linspace(.001,.999,300):
+        rows.append({"n":n,"p":x,"density":beta.pdf(x,a,b)})
+df=pd.DataFrame(rows)
+fig=px.line(df,x="p",y="density",animation_frame="n",range_x=[0,1],
+            range_y=[0,12])
+fig.add_vline(x=true_p,line_dash="dash")
+fig.update_layout(height=380)
+fig.show()
+```
+
+## DS/ML Bridge
+
+Bayesian ideas appear in:
+
+- probabilistic programming,
+- Bayesian optimization,
+- uncertainty estimation,
+- hierarchical models,
+- Thompson sampling,
+- latent-variable models,
+- sequential decision systems.
+
+The broader lesson is to represent uncertainty about unknown quantities rather than returning only point estimates.
+
+::: {.callout-warning}
+## Priors are assumptions, not decoration
+A prior can stabilize sparse-data problems, but it also influences the posterior. Inspect sensitivity when conclusions depend strongly on prior choices.
+:::
+
+## Summary
+- Bayes' rule updates prior uncertainty with evidence.
+- The likelihood connects the parameter to observed data.
+- Posterior uncertainty contracts as informative data accumulate.
+- Bayesian intervals have a direct posterior-probability interpretation under the model.
+- Priors should be explicit and examined.
+
+**Next:** *Time Series — Dependence, Trend, Seasonality & Forecasting*

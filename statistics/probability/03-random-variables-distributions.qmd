@@ -1,0 +1,136 @@
+---
+title: "Random Variables & Distributions: Models for How Data Arrive"
+description: "Connect Bernoulli, binomial, Poisson and continuous distributions to real data-generating processes and ML targets."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Distributions, Probability]
+draft: false
+---
+
+
+A distribution is not merely a curve. It is a **model for how values are generated**.
+
+Choosing a distribution begins with the mechanism:
+
+> Is the outcome binary? A count? A waiting time? A continuous measurement?
+
+::: {.callout-tip}
+## What you will learn
+- Random variables, PMFs/PDFs and CDFs
+- Expectation and variance
+- Bernoulli, binomial and Poisson models
+- How parameters change distributions
+- How distribution choice appears in ML loss functions
+:::
+
+## Random variable
+
+A random variable maps uncertain outcomes to numbers.
+
+Its expectation is
+
+$$
+E[X]=\sum_x xP(X=x)
+$$
+
+for a discrete variable, or
+
+$$
+E[X]=\int x f(x)\,dx
+$$
+
+for a continuous variable.
+
+Variance is
+
+$$
+\operatorname{Var}(X)=E[(X-E[X])^2].
+$$
+
+## Interactive distribution laboratory
+
+Choose a probability $p$ and see the binomial count distribution change.
+
+```{ojs}
+//| echo: false
+viewof nbin = Inputs.range([5,100], {value:20, step:1, label:"Trials n"})
+viewof pbin = Inputs.range([0.02,.98], {value:.3, step:.01, label:"Success probability p"})
+logFact = n => d3.sum(d3.range(1,n+1), d=>Math.log(d))
+choose = (n,k)=>Math.exp(logFact(n)-logFact(k)-logFact(n-k))
+binom = d3.range(nbin+1).map(k=>({k,p:choose(nbin,k)*pbin**k*(1-pbin)**(nbin-k)}))
+Plot.plot({
+ height:320,x:{label:"Number of successes"},y:{label:"Probability"},
+ marks:[Plot.barY(binom,{x:"k",y:"p",fill:"#4F46E5"}),Plot.ruleY([0])]
+})
+```
+
+For $X\sim\text{Binomial}(n,p)$,
+
+$$
+E[X]=np,\qquad \operatorname{Var}(X)=np(1-p).
+$$
+
+## Mechanism → distribution
+
+| Data-generating story | Common starting model |
+|---|---|
+| One yes/no outcome | Bernoulli |
+| Successes in fixed $n$ trials | Binomial |
+| Events in an interval | Poisson |
+| Symmetric continuous measurement | Normal |
+| Positive waiting time | Exponential/Gamma |
+
+The model is an approximation. The story helps you choose a sensible starting point.
+
+## Simulation: Poisson counts
+
+```{python}
+#| code-fold: true
+import numpy as np
+import plotly.express as px
+import pandas as pd
+
+rng = np.random.default_rng(4)
+rows=[]
+for lam in [1,4,10]:
+    for x in rng.poisson(lam, 3000):
+        rows.append({"lambda":f"λ={lam}","count":x})
+df=pd.DataFrame(rows)
+fig=px.histogram(df,x="count",facet_col="lambda",histnorm="probability",
+                 nbins=25)
+fig.update_layout(height=340,showlegend=False)
+fig.show()
+```
+
+## DS/ML Bridge: distributions hide inside loss functions
+
+A statistical model often assumes a conditional distribution:
+
+```text
+Regression with squared error
+      ↕
+Gaussian noise assumption
+
+Binary cross-entropy
+      ↕
+Bernoulli likelihood
+
+Poisson regression
+      ↕
+Poisson count likelihood
+```
+
+This is why statistics and machine learning are deeply connected: many losses are negative log-likelihoods under probabilistic models.
+
+::: {.callout-note}
+## Companion exploration
+Your interactive Normal Distribution article is the natural deep dive for the Gaussian case: use it to explore $\mu$, $\sigma$, the 68–95–99.7 rule, bivariate normal geometry and Q–Q plots.
+:::
+
+## Summary
+- A distribution describes a data-generating mechanism probabilistically.
+- Expectation describes long-run center; variance describes dispersion.
+- Bernoulli/binomial are natural for binary trials; Poisson for event counts.
+- Distribution assumptions reappear as ML objectives and likelihoods.
+
+**Next:** *Sampling, Standard Error & the Central Limit Theorem*

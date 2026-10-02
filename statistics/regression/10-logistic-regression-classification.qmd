@@ -1,0 +1,131 @@
+---
+title: "Logistic Regression: Probability, Odds & Classification"
+description: "Understand logistic regression as a probabilistic classifier and connect log-odds, thresholds, calibration and classification metrics."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Regression, Classification, Machine Learning]
+draft: false
+---
+
+
+Linear regression predicts on the whole real line.
+
+But a probability must stay between 0 and 1.
+
+Logistic regression solves this by modeling **log-odds**.
+
+::: {.callout-tip}
+## What you will learn
+- Probability, odds and log-odds
+- The logistic function
+- Coefficient interpretation
+- Thresholds and confusion matrices
+- Calibration versus discrimination
+:::
+
+## From a line to a probability
+
+$$
+\operatorname{logit}(p)
+=
+\log\frac{p}{1-p}
+=
+\beta_0+\beta_1x.
+$$
+
+Solving for $p$:
+
+$$
+p(x)=\frac{1}{1+\exp[-(\beta_0+\beta_1x)]}.
+$$
+
+## Interactive sigmoid
+
+```{ojs}
+//| echo: false
+viewof aLog = Inputs.range([-6,6], {value:-1, step:.1, label:"Intercept β₀"})
+viewof bLog = Inputs.range([-4,4], {value:1.5, step:.1, label:"Slope β₁"})
+sig=z=>1/(1+Math.exp(-z))
+sigcurve=d3.range(-5,5.01,.05).map(x=>({x,p:sig(aLog+bLog*x)}))
+Plot.plot({
+ height:330,x:{label:"x"},y:{domain:[0,1],label:"P(Y=1 | x)"},
+ marks:[Plot.line(sigcurve,{x:"x",y:"p",stroke:"#4F46E5",strokeWidth:3}),Plot.ruleY([.5],{strokeDasharray:"4,4"})]
+})
+```
+
+## Thresholds create decisions
+
+A model may output:
+
+```text
+P(fraud)=0.73
+```
+
+A business rule converts probability into action:
+
+```text
+if p ≥ threshold → flag
+else             → do not flag
+```
+
+Changing the threshold changes false positives and false negatives.
+
+## Animation: threshold sweeps the confusion matrix
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+
+rng=np.random.default_rng(14)
+n=1200
+x=rng.normal(size=n)
+p=1/(1+np.exp(-(-.5+1.5*x)))
+y=rng.binomial(1,p)
+rows=[]
+for t in np.linspace(.05,.95,19):
+    pred=(p>=t)
+    tp=((pred==1)&(y==1)).sum(); fp=((pred==1)&(y==0)).sum()
+    fn=((pred==0)&(y==1)).sum(); tn=((pred==0)&(y==0)).sum()
+    for label,val in {"TP":tp,"FP":fp,"FN":fn,"TN":tn}.items():
+        rows.append({"threshold":round(t,2),"cell":label,"count":val})
+df=pd.DataFrame(rows)
+fig=px.bar(df,x="cell",y="count",animation_frame="threshold",
+           range_y=[0,n])
+fig.update_layout(height=380)
+fig.show()
+```
+
+## Odds ratios
+
+If $\beta_1=0.7$, a one-unit increase in $x$ multiplies the odds by
+
+$$
+e^{0.7}\approx2.01.
+$$
+
+That is an odds statement, not a doubling of probability.
+
+## DS/ML Bridge
+
+Logistic regression teaches several ideas that survive in modern classifiers:
+
+```text
+probability output
+loss / likelihood
+decision threshold
+precision-recall tradeoff
+ROC behavior
+calibration
+class imbalance
+```
+
+A high AUC does not guarantee well-calibrated probabilities. Ranking quality and probability quality are distinct.
+
+## Summary
+- Logistic regression maps a linear score into $(0,1)$.
+- Coefficients act additively on log-odds and multiplicatively on odds.
+- Classification thresholds are decision choices, not intrinsic model truths.
+- Evaluate both discrimination and calibration when probabilities matter.
+
+**Next:** *Bayesian Statistics — Learning by Updating*

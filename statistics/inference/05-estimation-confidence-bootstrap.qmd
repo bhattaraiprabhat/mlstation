@@ -1,0 +1,128 @@
+---
+title: "Estimation, Confidence Intervals & Bootstrap"
+description: "Move beyond point estimates with uncertainty intervals and bootstrap simulation that works far beyond simple means."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Inference, Bootstrap, Data Science]
+draft: false
+---
+
+
+A point estimate answers:
+
+> What is my best single-number estimate?
+
+An interval asks the more honest question:
+
+> **How uncertain is that estimate?**
+
+::: {.callout-tip}
+## What you will learn
+- Point estimators, bias and variability
+- Confidence intervals
+- Bootstrap resampling
+- Coverage as a repeated-sampling property
+- How bootstrap uncertainty applies to ML metrics
+:::
+
+## Estimate + uncertainty
+
+For a mean under a normal approximation,
+
+$$
+\bar x \pm z_{1-\alpha/2}SE(\bar x)
+$$
+
+gives a familiar confidence interval.
+
+But the interpretation is often misstated.
+
+A 95% confidence procedure is designed so that, over repeated samples, about 95% of intervals produced by the procedure cover the fixed true parameter.
+
+## Animation: watch 95% intervals succeed and fail
+
+```{ojs}
+//| echo: false
+viewof repsCI = Inputs.range([10,200], {value:50, step:5, label:"Repeated samples"})
+rci=d3.randomLcg(.55)
+rowsCI=d3.range(repsCI).map(i=>{
+ let vals=d3.range(25).map(()=>d3.randomNormal.source(rci)(0,1)());
+ let m=d3.mean(vals), se=d3.deviation(vals)/5, lo=m-1.96*se, hi=m+1.96*se;
+ return {i,m,lo,hi,cover:lo<=0&&hi>=0}
+})
+coverage=d3.mean(rowsCI,d=>d.cover)
+html`<div class="ms-readout"><span>Observed coverage</span><b>${(100*coverage).toFixed(1)}%</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+ height:420,x:{label:"Estimate / interval"},y:{label:"Repeated sample"},
+ marks:[
+  Plot.ruleX([0],{strokeDasharray:"4,4"}),
+  Plot.ruleY(rowsCI,{y:"i",x1:"lo",x2:"hi",stroke:d=>d.cover?"#4F46E5":"#E11D48"}),
+  Plot.dot(rowsCI,{x:"m",y:"i",fill:d=>d.cover?"#4F46E5":"#E11D48",r:3})
+ ]
+})
+```
+
+## Bootstrap: let the sample imitate repeated sampling
+
+Given observed data:
+
+```text
+Original sample
+      ↓ sample WITH replacement
+Bootstrap sample 1 → statistic
+Bootstrap sample 2 → statistic
+...
+Bootstrap sample B → statistic
+      ↓
+Approximate sampling distribution
+```
+
+```{python}
+#| code-fold: true
+import numpy as np
+import plotly.express as px
+
+rng=np.random.default_rng(11)
+x=rng.lognormal(mean=1,sigma=.8,size=80)
+B=5000
+boot=np.array([np.median(rng.choice(x,size=len(x),replace=True)) for _ in range(B)])
+lo,hi=np.quantile(boot,[.025,.975])
+print("Median:",np.median(x),"Bootstrap 95% interval:",(lo,hi))
+fig=px.histogram(x=boot,nbins=60,labels={"x":"Bootstrap median"})
+fig.add_vline(x=lo,line_dash="dash"); fig.add_vline(x=hi,line_dash="dash")
+fig.update_layout(height=360)
+fig.show()
+```
+
+## DS/ML Bridge: uncertainty for model metrics
+
+Bootstrap can estimate uncertainty for:
+
+```text
+accuracy
+AUC
+RMSE
+precision / recall
+business lift
+feature summaries
+```
+
+provided the resampling scheme respects the data structure. Time series, clustered observations and repeated users require more care than i.i.d. rows.
+
+::: {.callout-warning}
+## Bootstrap is not magic
+Resampling a biased or unrepresentative dataset does not make it representative. The bootstrap approximates variability around the empirical sample you actually collected.
+:::
+
+## Summary
+- Point estimates need uncertainty.
+- Confidence level describes a repeated-sampling procedure.
+- Bootstrap approximates a sampling distribution by resampling observed data.
+- Bootstrap is especially useful for complicated statistics and ML metrics.
+- Resampling must respect the structure of the data.
+
+**Next:** *Hypothesis Tests, p-values, Errors & Power*

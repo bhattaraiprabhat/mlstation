@@ -1,0 +1,122 @@
+---
+title: "Sampling, Standard Error & the Central Limit Theorem"
+description: "Watch samples become sampling distributions and learn why uncertainty shrinks with sample size."
+author: "MLStation"
+date: 2026-10-01
+categories: [Statistics, Inference, Simulation]
+draft: false
+---
+
+
+A dataset is one sample. Statistical inference asks:
+
+> **What would change if we could repeat the sampling process?**
+
+That imaginary repetition creates a **sampling distribution**.
+
+::: {.callout-tip}
+## What you will learn
+- Population, sample, parameter and statistic
+- Sampling distributions
+- Standard error
+- The Central Limit Theorem (CLT)
+- Why more data reduces uncertainty at a square-root rate
+:::
+
+## Three distributions people confuse
+
+```text
+POPULATION DISTRIBUTION
+values among individuals
+
+SAMPLE DISTRIBUTION
+values in one observed dataset
+
+SAMPLING DISTRIBUTION
+a statistic across repeated samples
+```
+
+For the sample mean,
+
+$$
+SE(\bar X)=\frac{\sigma}{\sqrt n}.
+$$
+
+## Interactive CLT machine
+
+The population below is strongly skewed. Increase $n$: the distribution of sample means becomes tighter and more bell-shaped.
+
+```{ojs}
+//| echo: false
+viewof nclt = Inputs.range([1,100], {value:5, step:1, label:"Sample size n"})
+rclt = d3.randomLcg(.31)
+means = d3.range(2500).map(()=>{
+  let s=0; for(let j=0;j<nclt;j++) s += -Math.log(1-rclt());
+  return s/nclt
+})
+Plot.plot({
+ height:330,x:{label:"Sample mean"},y:{label:"Count"},
+ marks:[Plot.rectY(means,Plot.binX({y:"count"},{x:d=>d,thresholds:45,fill:"#4F46E5",fillOpacity:.7})),Plot.ruleX([1],{stroke:"#E11D48"})]
+})
+```
+
+The CLT does **not** say raw data become normal. It says that under suitable conditions, standardized sums/means approach a normal distribution as sample size grows.
+
+## Animation in Python: uncertainty shrinks
+
+```{python}
+#| code-fold: true
+import numpy as np, pandas as pd
+import plotly.express as px
+
+rng=np.random.default_rng(8)
+rows=[]
+for n in [2,5,10,30,100]:
+    means=[rng.exponential(1,n).mean() for _ in range(1200)]
+    rows += [{"n":n,"mean":m} for m in means]
+df=pd.DataFrame(rows)
+fig=px.histogram(df,x="mean",animation_frame="n",range_x=[0,3],
+                 nbins=45,histnorm="probability density")
+fig.update_layout(height=380,yaxis_range=[0,4])
+fig.show()
+```
+
+## The square-root law
+
+To cut standard error in half:
+
+$$
+\frac{\sigma}{\sqrt{n_{\text{new}}}}
+=
+\frac{1}{2}\frac{\sigma}{\sqrt{n}}
+$$
+
+requires
+
+$$
+n_{\text{new}}=4n.
+$$
+
+Four times the data for half the standard error.
+
+## DS/ML Bridge
+
+Sampling variation appears in:
+
+- cross-validation scores,
+- feature importance estimates,
+- A/B-test lifts,
+- offline model metrics,
+- bootstrap uncertainty,
+- repeated training/evaluation splits.
+
+A model accuracy of 0.91 is a **statistic computed on a sample**, not an eternal property of the model.
+
+## Summary
+- A statistic changes from sample to sample.
+- Its sampling distribution quantifies that variability.
+- Standard error measures uncertainty in an estimator.
+- The CLT explains why normal approximations are so common.
+- Uncertainty typically shrinks like $1/\sqrt n$.
+
+**Next:** *Estimation, Confidence Intervals & Bootstrap*
