@@ -1,6 +1,6 @@
 ---
-title: "Computer Vision"
-description: "Image classification, detection, segmentation and generation."
+title: "Visualization"
+description: "Charts that explain: choosing, designing and animating visuals for data and models."
 page-layout: full
 toc: false
 title-block-style: none
@@ -20,10 +20,10 @@ listing:
 
 ```{=html}
 <header class="section-hero compact">
-  <span class="section-hero-icon"><i class="bi bi-eye"></i></span>
-  <p class="eyebrow">Artificial Intelligence</p>
-  <h1>Computer Vision</h1>
-  <p class="lead">Image classification, detection, segmentation and generation.</p>
+  <span class="section-hero-icon"><i class="bi bi-pie-chart"></i></span>
+  <p class="eyebrow">Machine Learning</p>
+  <h1>Visualization</h1>
+  <p class="lead">Charts that explain: choosing, designing and animating visuals for data and models.</p>
 </header>
 ```
 

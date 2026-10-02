@@ -22,6 +22,7 @@ SITE = {
                ("unsupervised", "Unsupervised Learning", "diagram-2", "Clustering, dimensionality reduction and hidden structure."),
                ("deep-learning", "Deep Learning", "layers", "Neural networks, CNNs, transformers and training at depth."),
                ("feature-engineering", "Feature Engineering", "sliders", "Turning raw data into signals a model can learn from."),
+               ("visualization", "Visualization", "pie-chart", "Charts that explain: choosing, designing and animating visuals for data and models."),
            ]),
             ("Practice", [
                ("algorithms", "Algorithms", "braces", "Core ML algorithms derived step by step, then implemented."),

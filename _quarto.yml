@@ -58,6 +58,9 @@ website:
           - text: "Feature Engineering"
             icon: sliders
             href: ml/feature-engineering/index.qmd
+          - text: "Visualization"
+            icon: pie-chart
+            href: ml/visualization/index.qmd
           - text: "---"
           - text: "Practice"
           - text: "Algorithms"

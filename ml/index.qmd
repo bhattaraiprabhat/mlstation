@@ -33,6 +33,7 @@ listing:
 <a class="topic-card" href="unsupervised/index.html"><span class="topic-icon"><i class="bi bi-diagram-2"></i></span><span class="topic-body"><span class="topic-title">Unsupervised Learning</span><span class="topic-desc">Clustering, dimensionality reduction and hidden structure.</span></span><i class="bi bi-arrow-right topic-arrow"></i></a>
 <a class="topic-card" href="deep-learning/index.html"><span class="topic-icon"><i class="bi bi-layers"></i></span><span class="topic-body"><span class="topic-title">Deep Learning</span><span class="topic-desc">Neural networks, CNNs, transformers and training at depth.</span></span><i class="bi bi-arrow-right topic-arrow"></i></a>
 <a class="topic-card" href="feature-engineering/index.html"><span class="topic-icon"><i class="bi bi-sliders"></i></span><span class="topic-body"><span class="topic-title">Feature Engineering</span><span class="topic-desc">Turning raw data into signals a model can learn from.</span></span><i class="bi bi-arrow-right topic-arrow"></i></a>
+<a class="topic-card" href="visualization/index.html"><span class="topic-icon"><i class="bi bi-pie-chart"></i></span><span class="topic-body"><span class="topic-title">Visualization</span><span class="topic-desc">Charts that explain: choosing, designing and animating visuals for data and models.</span></span><i class="bi bi-arrow-right topic-arrow"></i></a>
 </div>
 <h2 class="group-title">Practice</h2>
 <div class="topic-grid">

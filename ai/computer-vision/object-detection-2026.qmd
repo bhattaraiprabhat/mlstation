@@ -1,0 +1,1 @@
+../../ml/deep-learning/object-detection-2026.qmd
