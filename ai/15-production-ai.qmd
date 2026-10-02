@@ -1,0 +1,408 @@
+---
+title: "Production AI: From Prototype to Reliable System"
+description: "Bring the full MLStation AI path together with observability, versioning, cost, latency, security, evaluation, and controlled deployment."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, Production, LLMOps]
+draft: false
+---
+
+A notebook that works once is a **demonstration**.
+
+A system that works repeatedly, can be observed, can fail safely, and can be improved without losing track of what changed is moving toward **production**.
+
+This final core chapter connects the entire learning path.
+
+::: {.callout-tip}
+## What you will learn
+- What changes when an AI prototype becomes a service
+- The main production dimensions: quality, latency, cost, reliability and security
+- Why versioning and observability matter
+- A practical deployment loop
+- What artifacts define a reproducible AI release
+:::
+
+## The bridge from demo to system
+
+A prototype often looks like:
+
+```text
+Prompt → Model → Looks good!
+```
+
+Production asks many more questions:
+
+```text
+                    QUALITY
+                       ▲
+                       │
+SECURITY ◀────── AI SYSTEM ──────▶ COST
+                       │
+                       ▼
+                  RELIABILITY
+
+              + LATENCY + SCALE
+```
+
+No single metric tells the whole story.
+
+::: {#def-production-ai}
+## Production AI
+A **production AI system** is an AI-enabled application operated for real use with explicit controls for reliability, quality, observability, security, performance, change management, and recovery.
+:::
+
+## Revisit the architecture
+
+We started this series with:
+
+```text
+Prompt → LLM → Response
+```
+
+Then we added layers:
+
+```text
+User
+ ↓
+Prompt / Instructions
+ ↓
+Orchestration
+ ├── Retrieval / RAG
+ ├── Agent decisions
+ ├── Tools / MCP
+ └── State / Memory
+ ↓
+Validation
+ ↓
+Response
+```
+
+Production adds an outer operating layer:
+
+```text
+┌───────────────────────────────────────────┐
+│ Logging • Metrics • Tracing • Evaluation │
+│ Security • Cost • Latency • Versioning   │
+│ Deployment • Rollback • Monitoring       │
+│                                           │
+│          ┌─────────────────────┐          │
+│          │   AI APPLICATION    │          │
+│          └─────────────────────┘          │
+└───────────────────────────────────────────┘
+```
+
+The application is no longer just code. It is a **managed system**.
+
+## Observe one request end to end
+
+Give every request a trace identifier:
+
+```text
+request_id = "req_8f21..."
+```
+
+Then connect events:
+
+```text
+req_8f21
+  ├── prompt_version: v7
+  ├── retrieval: 42 ms
+  ├── retrieved_chunks: 3
+  ├── model: model-X
+  ├── model_latency: 820 ms
+  ├── tool_calls: 1
+  ├── validation: pass
+  └── total_latency: 1.04 s
+```
+
+When a user reports a bad result, you can inspect the actual path rather than guessing.
+
+## What should you measure?
+
+A useful production scorecard contains several dimensions.
+
+| Dimension | Example questions |
+|---|---|
+| Quality | Did the system complete the task correctly? |
+| Reliability | How often do requests fail? |
+| Latency | How long does a request take? |
+| Cost | What does each request/workflow consume? |
+| Retrieval | Are useful documents being found? |
+| Tools | Are tool calls succeeding? |
+| Safety/Security | Are permissions and controls working? |
+
+: Production quality is multi-dimensional {#tbl-production-dimensions}
+
+Optimize carefully: reducing latency may change quality; adding more retrieval context may increase cost; a larger model may improve some tasks while slowing the system.
+
+## Version the behavior, not only the model
+
+Suppose output changes after deployment.
+
+Was it:
+
+```text
+model?
+system prompt?
+tool schema?
+RAG index?
+embedding model?
+chunking?
+workflow graph?
+validation rule?
+```
+
+All can change behavior.
+
+A release manifest can capture them:
+
+```json
+{
+  "release": "2026.10.01-1",
+  "model": "model-X",
+  "prompt_version": "prompt-v7",
+  "embedding_model": "embed-v3",
+  "index_version": "policy-index-v12",
+  "workflow_version": "workflow-v5",
+  "evaluation_set": "eval-v4"
+}
+```
+
+This makes a deployment identifiable.
+
+## A simple production wrapper
+
+```{.python filename="production_wrapper.py"}
+import json
+import time
+import uuid
+from pathlib import Path
+
+def run_application(user_input):
+    # Replace with the actual AI workflow.
+    return {
+        "answer": f"Processed: {user_input}",
+        "validation": "pass"
+    }
+
+def handle_request(user_input):
+    request_id = str(uuid.uuid4())
+    started = time.perf_counter()
+
+    event = {
+        "request_id": request_id,
+        "status": "started"
+    }
+
+    try:
+        result = run_application(user_input)
+
+        event["status"] = "success"
+        event["validation"] = result["validation"]
+
+        return result
+
+    except Exception as exc:
+        event["status"] = "error"
+        event["error_type"] = type(exc).__name__
+        raise
+
+    finally:
+        event["latency_seconds"] = (
+            time.perf_counter() - started
+        )
+
+        Path("logs").mkdir(exist_ok=True)
+
+        with Path("logs/events.jsonl").open("a") as f:
+            f.write(json.dumps(event) + "\n")
+```
+
+This tiny wrapper already introduces:
+
+```text
+request identity
+timing
+status
+error capture
+structured logs
+```
+
+Production frameworks can provide much richer tracing, but the principle is the same.
+
+::: {.callout-warning}
+## Logs need boundaries too
+Do not indiscriminately log prompts, documents, personal information, credentials, secrets or sensitive tool results. Decide what is necessary, redact where appropriate, restrict access, and define retention.
+:::
+
+## Evaluate before and after deployment
+
+A healthy change loop is:
+
+```text
+CHANGE
+  ↓
+Offline evaluation
+  ↓
+Pass quality gates?
+  ├── no → revise
+  └── yes
+       ↓
+Controlled deployment
+       ↓
+Online monitoring
+       ↓
+Unexpected regression?
+  ├── yes → rollback / mitigate
+  └── no  → continue
+```
+
+Offline evaluation catches known problems.  
+Online monitoring catches behavior that appears under real traffic and real operating conditions.
+
+You need both.
+
+## Reliability needs graceful failure
+
+A robust system knows what to do when:
+
+```text
+LLM unavailable
+retrieval empty
+tool times out
+MCP server unavailable
+validation fails
+agent exceeds step limit
+budget threshold reached
+```
+
+Possible responses include:
+
+```text
+retry
+fallback
+ask user for clarification
+degrade to simpler workflow
+queue work
+escalate to human
+stop safely
+```
+
+Failure handling should be designed before the failure occurs.
+
+## Security follows the whole path
+
+Review every boundary:
+
+```text
+User input
+   ↓
+Prompt construction
+   ↓
+Retrieved content
+   ↓
+Agent/tool selection
+   ↓
+External systems
+   ↓
+Stored memory
+   ↓
+Logs
+```
+
+Use principles such as:
+
+- least privilege,
+- input/output validation,
+- secret management,
+- authorization,
+- auditability,
+- controlled side effects,
+- dependency and data governance appropriate to the application.
+
+## What should you save?
+
+At this stage, we no longer save a single "model."
+
+We save the **release definition**:
+
+```text
+release/
+├── manifest.json
+├── prompts/
+├── workflow/
+├── tool_schemas/
+├── retrieval_config/
+├── evaluation/
+├── deployment_config/
+└── changelog.md
+```
+
+And operationally we preserve appropriate:
+
+```text
+metrics
+traces
+errors
+evaluation results
+deployment history
+```
+
+subject to security, privacy and retention requirements.
+
+## The complete MLStation AI map
+
+We can now see the entire journey:
+
+```text
+LLM
+ ↓
+PROMPTING
+ ↓
+LLM APPLICATION
+ ↓
+RAG
+ ├── embeddings
+ ├── vector retrieval
+ └── grounded generation
+ ↓
+AGENTIC AI
+ ├── decisions
+ ├── tools
+ └── action/observation loop
+ ↓
+MULTI-AGENT SYSTEMS
+ ↓
+ORCHESTRATION
+ ↓
+MCP / EXTERNAL CAPABILITIES
+ ↓
+MEMORY + STATE
+ ↓
+VALIDATION + EVALUATION
+ ↓
+PRODUCTION
+```
+
+The later concepts do not replace the earlier ones.
+
+They **compose**.
+
+::: {.callout-tip}
+## The final mental model
+A reliable AI product is rarely "just an LLM."
+
+It is a system of **models, context, retrieval, tools, state, control flow, validation and operational safeguards**—with each layer added because it solves a specific problem.
+:::
+
+## Summary
+
+- Production begins when repeatability, reliability and operations matter as much as the demo.
+- Observe quality, latency, cost, reliability and security together.
+- Version prompts, retrieval, tools and workflows—not only model names.
+- Trace requests end to end so failures can be diagnosed.
+- Evaluate changes before deployment and monitor behavior afterward.
+- Design fallbacks, bounded retries and safe stopping paths.
+- Save a release manifest that identifies the complete behavior of the deployed system.
+
+**Next:** Use these building blocks to design an AI system around a real problem—and add complexity only when the problem requires it.

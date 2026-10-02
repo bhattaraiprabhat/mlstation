@@ -1,0 +1,262 @@
+---
+title: "Multi-Agent Systems: When One Agent Is Not Enough"
+description: "How specialized agents can divide work, communicate through explicit artifacts, and collaborate without turning the system into unnecessary complexity."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, Multi-Agent Systems]
+draft: false
+---
+
+One capable person can research, write and review a report.
+
+A team can divide those responsibilities—but only if the division actually helps.
+
+The same principle applies to **multi-agent systems**.
+
+::: {.callout-tip}
+## What you will learn
+- What a multi-agent system is
+- Why specialization can help
+- Common collaboration patterns
+- How agents should exchange information
+- When multiple agents are unnecessary
+:::
+
+## From one desk to a small newsroom
+
+Imagine producing a short technical article.
+
+A single agent could do everything:
+
+```text
+Research → Draft → Review → Final
+```
+
+Or we can assign roles:
+
+```text
+              ┌────────────┐
+Topic ───────▶│ Researcher │
+              └─────┬──────┘
+                    │ evidence
+                    ▼
+              ┌────────────┐
+              │   Writer   │
+              └─────┬──────┘
+                    │ draft
+                    ▼
+              ┌────────────┐
+              │  Reviewer  │
+              └─────┬──────┘
+                    │
+                    ▼
+                  Final
+```
+
+Each agent receives a narrower responsibility.
+
+::: {#def-mas}
+## Multi-agent system
+A **multi-agent system (MAS)** contains multiple agent-like components that have distinct roles or capabilities and coordinate to accomplish a larger task.
+:::
+
+## Why specialize?
+
+Different roles may need different:
+
+- prompts,
+- tools,
+- context,
+- permissions,
+- models,
+- evaluation criteria.
+
+For example:
+
+| Agent | Main responsibility | Typical access |
+|---|---|---|
+| Researcher | Gather evidence | Search/retrieval |
+| Writer | Produce draft | Evidence + style guide |
+| Reviewer | Check requirements | Draft + rubric |
+
+: Specialization can separate responsibilities and permissions {#tbl-agent-roles}
+
+A reviewer does not necessarily need the researcher's search tools. A researcher does not need permission to publish.
+
+That separation can be useful.
+
+## Communication should be explicit
+
+Avoid imagining agents as mysterious personalities talking freely forever.
+
+A cleaner design passes **artifacts**:
+
+```text
+Researcher
+   ↓
+evidence.json
+   ↓
+Writer
+   ↓
+draft.md
+   ↓
+Reviewer
+   ↓
+review.json
+```
+
+The handoff itself becomes inspectable.
+
+For example:
+
+```json
+{
+  "claims": [
+    {
+      "claim": "RAG adds retrieved context before generation.",
+      "source_id": "rag_notes_01"
+    }
+  ]
+}
+```
+
+Structured handoffs reduce ambiguity.
+
+## Three common patterns
+
+### 1. Sequential
+
+```text
+Agent A → Agent B → Agent C
+```
+
+Good when work naturally has stages.
+
+### 2. Supervisor and specialists
+
+```text
+                   Supervisor
+                 /     |      \
+                ▼      ▼       ▼
+             Agent A Agent B Agent C
+                 \     |      /
+                    Result
+```
+
+The supervisor decides which specialist to invoke.
+
+### 3. Parallel specialists
+
+```text
+                ┌→ Agent A ─┐
+Input ──────────┼→ Agent B ─┼→ Aggregate
+                └→ Agent C ─┘
+```
+
+Useful when independent analyses can run separately.
+
+## A small sequential example
+
+```{.python filename="multi_agent_pipeline.py"}
+import json
+from pathlib import Path
+
+def researcher(topic):
+    # In a real system, this agent may use retrieval/search.
+    return {
+        "topic": topic,
+        "evidence": [
+            "Evidence item A",
+            "Evidence item B"
+        ]
+    }
+
+def writer(research):
+    # In a real system, an LLM would receive the evidence.
+    return {
+        "draft": (
+            f"Draft about {research['topic']} "
+            f"using {len(research['evidence'])} evidence items."
+        )
+    }
+
+def reviewer(draft):
+    return {
+        "approved": True,
+        "notes": "Draft follows the requested structure."
+    }
+
+topic = "Retrieval-Augmented Generation"
+
+research = researcher(topic)
+draft = writer(research)
+review = reviewer(draft)
+
+run = {
+    "research": research,
+    "draft": draft,
+    "review": review
+}
+
+Path("mas_runs").mkdir(exist_ok=True)
+Path("mas_runs/run_001.json").write_text(
+    json.dumps(run, indent=2)
+)
+```
+
+The functions are placeholders for agent/model calls. The lesson is the **contract between stages**.
+
+## More agents can make a system worse
+
+Suppose one agent already completes a task reliably in two calls.
+
+Turning it into six agents may add:
+
+```text
+More prompts
++ more tokens
++ more latency
++ more failure points
++ harder debugging
+```
+
+::: {.callout-warning}
+## Do not create an organization chart for a one-person job
+Add another agent when there is a concrete reason: specialization, permission separation, parallel work, independent review, or context isolation.
+
+"Multi-agent" is an architecture choice, not a quality badge.
+:::
+
+## What should you save?
+
+A multi-agent run needs both **individual traces** and **handoffs**:
+
+```text
+mas_run/
+├── topology.json
+├── researcher/
+│   └── trace.json
+├── handoffs/
+│   ├── research_to_writer.json
+│   └── writer_to_reviewer.json
+├── writer/
+│   └── trace.json
+├── reviewer/
+│   └── trace.json
+└── final_output.md
+```
+
+When something goes wrong, ask:
+
+> Which agent first introduced the error, and which later agents failed to catch it?
+
+## Summary
+
+- Multi-agent systems divide a larger task among specialized agent-like components.
+- Useful specialization may involve different prompts, tools, context, models or permissions.
+- Sequential, supervisor, and parallel patterns cover many introductory designs.
+- Prefer explicit, structured handoffs over opaque agent conversations.
+- More agents increase coordination cost and failure surface.
+- Save each agent's trace and the artifacts exchanged between agents.
+
+**Next:** *AI Orchestration — Managing Agents, Tools, and Workflows*

@@ -1,0 +1,239 @@
+---
+title: "MCP: Connecting AI Systems to Tools and Data"
+description: "A conceptual introduction to the Model Context Protocol and how a standard client-server interface can expose tools and context to AI applications."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, MCP, Tools, Agentic AI]
+draft: false
+---
+
+By now our AI application can use tools.
+
+But a new engineering problem appears:
+
+```text
+AI App A ── custom code ── Database
+AI App A ── custom code ── Files
+AI App A ── custom code ── Service X
+
+AI App B ── different custom code ── Database
+AI App B ── different custom code ── Files
+...
+```
+
+Every connection can become its own adapter.
+
+A protocol asks a different question:
+
+> Can clients and capability providers agree on a common way to communicate?
+
+::: {.callout-tip}
+## What you will learn
+- Why a protocol is useful
+- The basic **MCP client/server** picture
+- How MCP relates to tools and context
+- How MCP differs from ordinary function calling
+- What configuration and permissions should be preserved
+:::
+
+## The USB analogy
+
+Before common connector standards, every device could require a different physical interface.
+
+A standard connector does **not** make every device identical. It standardizes how compatible devices connect.
+
+Use the same mental model cautiously for MCP:
+
+```text
+AI Application
+      │
+   MCP Client
+      │
+   protocol
+      │
+   MCP Server
+      │
+      ├── tools
+      ├── resources/context
+      └── other exposed capabilities
+```
+
+::: {#def-mcp}
+## Model Context Protocol
+**Model Context Protocol (MCP)** is an open protocol for connecting AI applications to external systems through standardized client-server interactions and exposed capabilities.
+:::
+
+The protocol is the connection layer. It is **not the LLM itself** and it is **not automatically an agent**.
+
+## Without and with a common protocol
+
+### Direct integration
+
+```text
+Agent
+ ├── custom adapter → Files
+ ├── custom adapter → Database
+ └── custom adapter → Internal service
+```
+
+### Protocol-oriented integration
+
+```text
+AI Host / Application
+        │
+    MCP Client
+        │
+        ├──────── MCP Server A → Files
+        ├──────── MCP Server B → Database
+        └──────── MCP Server C → Service
+```
+
+The application still decides which servers it trusts and which capabilities it exposes to the model.
+
+## Function calling vs. MCP
+
+These ideas are related but not interchangeable.
+
+```text
+FUNCTION / TOOL CALLING
+Model expresses:
+"Call tool X with arguments Y."
+
+MCP
+Provides a standardized way for an AI application
+to discover/access capabilities supplied by an MCP server.
+```
+
+A model may select a tool that the application learned about through an MCP connection.
+
+So a useful layered picture is:
+
+```text
+LLM
+ ↓ chooses
+Tool
+ ↓ exposed through
+MCP client/server connection
+ ↓ reaches
+External system
+```
+
+## A conceptual client flow
+
+The exact SDK syntax can evolve, so first learn the stable architecture:
+
+```text
+1. Connect to an MCP server
+2. Discover available capabilities
+3. Select an allowed capability
+4. Send a structured request
+5. Receive structured result
+6. Feed useful result back into the AI workflow
+```
+
+Pseudocode:
+
+```python
+client = connect(server)
+
+capabilities = client.list_tools()
+
+chosen = choose_allowed_tool(capabilities)
+
+result = client.call_tool(
+    name=chosen.name,
+    arguments={"query": "quarterly revenue"}
+)
+
+state["observation"] = result
+```
+
+This is intentionally conceptual rather than tied to a particular SDK version.
+
+## MCP does not remove security boundaries
+
+A standard interface makes connection easier. It does not make every connection safe.
+
+Ask:
+
+```text
+Which server am I connecting to?
+Which tools/resources does it expose?
+What credentials can it access?
+Which operations are read-only?
+Which operations create side effects?
+What information is sent across the boundary?
+```
+
+::: {.callout-warning}
+## Standardized does not mean trusted
+Treat MCP servers and their exposed capabilities as security boundaries. Apply authentication, authorization, least privilege, validation and logging appropriate to the system.
+:::
+
+## Where MCP fits in our series
+
+We can now place nearly every concept learned so far:
+
+```text
+                    ORCHESTRATOR
+                         │
+                         ▼
+                       AGENT
+                         │
+                   chooses tool
+                         │
+                         ▼
+                    MCP CLIENT
+                         │
+               standardized connection
+                         │
+                         ▼
+                    MCP SERVER
+                         │
+             ┌───────────┼───────────┐
+             ▼           ▼           ▼
+           Tool       Resource      Data
+```
+
+MCP solves a **connection/interface problem**.  
+The agent solves a **decision problem**.  
+The orchestrator solves a **coordination problem**.
+
+Keeping these layers separate makes architecture discussions much clearer.
+
+## What should you save?
+
+For reproducibility and auditing, preserve connection metadata without storing secrets in plain text:
+
+```text
+mcp_config/
+├── server_inventory.json
+├── allowed_capabilities.json
+├── client_config.json
+└── run_logs/
+```
+
+Record:
+
+- server identity/version where relevant,
+- capabilities available to the application,
+- permissions granted,
+- tool/resource calls,
+- returned results needed for the trace.
+
+Do **not** casually place passwords, API keys or access tokens into experiment files or source control.
+
+::: {.callout-tip}
+## The sentence to remember
+**MCP standardizes connection; it does not decide the workflow.**
+:::
+
+## Summary
+
+- MCP provides a standardized client-server pattern for connecting AI applications to external capabilities.
+- MCP is not itself an LLM, agent, or orchestrator.
+- Tool calling describes an action the model/application wants; MCP can provide the connection through which a capability is accessed.
+- Standard interfaces still require trust and permission boundaries.
+- Save server/capability configuration and execution traces, but keep secrets out of ordinary artifacts.
+
+**Next:** *Memory and State in AI Applications*

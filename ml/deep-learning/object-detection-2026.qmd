@@ -1,0 +1,395 @@
+---
+title: "Object Detection in 2026: From Barcodes to Driverless Cars"
+description: "The state of the art in image detection today: YOLO26, RF-DETR, open-vocabulary models and SAM 3, and how they are used from pill counting to self-driving cars."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Computer Vision, Deep Learning]
+draft: false
+---
+
+In our [CNN article](../../ml/deep-learning/cnn-from-pixels-to-yolo.qmd) we saw how YOLO draws boxes around objects in a single pass. The field has moved quickly since then. In 2026 a detector can run on a phone, reach record accuracy on a server, find objects you describe in plain words, and fuse cameras with lidar in a moving car. This article maps the landscape and shows which tool fits which job, from reading a barcode to driving through fog.
+
+::: {.callout-tip}
+## What you will learn
+- The five detection tasks and how they differ
+- The four model families that define the state of the art in 2026
+- How to read accuracy (mAP), speed (latency) and the trade-off between them
+- How to pick a confidence threshold for your use case
+- Eight real use cases, from barcode reading to driverless cars, with recommended approaches
+:::
+
+## One scene, five tasks
+
+"Detection" is a family of related tasks. Switch between them on the same loading-dock scene.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof task = Inputs.radio(["Classification", "Detection", "Segmentation", "Oriented boxes", "Open vocabulary"], {value: "Detection", label: "Task"})
+viewof prompt = Inputs.text({label: "Text prompt (open vocabulary)", value: "package with barcode", placeholder: "try: person, vehicle, safety cone, animal"})
+```
+
+```{ojs}
+//| echo: false
+objs = [
+  {name: "person", alias: "person worker human people pedestrian", x: 70, y: 70, w: 50, h: 130, angle: 0, col: ms.indigo},
+  {name: "parcel", alias: "parcel package box barcode label shipment", x: 160, y: 140, w: 90, h: 60, angle: -18, col: ms.amber},
+  {name: "forklift", alias: "forklift vehicle truck machine", x: 290, y: 85, w: 130, h: 115, angle: 0, col: ms.teal},
+  {name: "safety cone", alias: "safety cone traffic cone hazard", x: 450, y: 145, w: 36, h: 55, angle: 0, col: ms.rose},
+  {name: "dog", alias: "dog animal pet", x: 510, y: 160, w: 60, h: 40, angle: 0, col: ms.violet}
+]
+matches = o => prompt.trim().length > 0 && prompt.toLowerCase().split(/[ ,]+/).some(w => w.length > 2 && o.alias.includes(w))
+htl.svg`<svg viewBox="0 0 600 230" style="width:100%;max-width:760px;font-family:Inter,system-ui,sans-serif;border-radius:14px;background:var(--ms-surface,#f4f4f7)">
+  <rect x="0" y="200" width="600" height="30" fill="#94A3B8" fill-opacity="0.35"/>
+  <circle cx="95" cy="88" r="16" fill="#64748B"/><rect x="80" y="106" width="30" height="62" rx="8" fill="#64748B"/><rect x="82" y="166" width="10" height="34" fill="#64748B"/><rect x="98" y="166" width="10" height="34" fill="#64748B"/>
+  <g transform="rotate(-18 205 170)"><rect x="160" y="140" width="90" height="60" fill="#B08A5A"/>
+    ${d3.range(14).map(i => htl.svg`<rect x="${172 + i * 4}" y="${152}" width="${i % 3 ? 2 : 1}" height="20" fill="#1f2937"/>`)}</g>
+  <rect x="300" y="120" width="90" height="62" rx="6" fill="#64748B"/><rect x="325" y="92" width="40" height="30" fill="none" stroke="#64748B" stroke-width="5"/>
+  <rect x="390" y="95" width="6" height="90" fill="#64748B"/><rect x="396" y="170" width="28" height="5" fill="#64748B"/>
+  <circle cx="320" cy="190" r="12" fill="#334155"/><circle cx="372" cy="190" r="12" fill="#334155"/>
+  <path d="M468 145 L486 200 L450 200 Z" fill="#F97316"/>
+  <ellipse cx="535" cy="182" rx="26" ry="13" fill="#78716C"/><circle cx="562" cy="168" r="10" fill="#78716C"/>
+  ${task === "Classification" ? htl.svg`<rect x="10" y="10" width="190" height="28" rx="6" fill="${ms.indigo}"/><text x="20" y="29" fill="white" font-size="14" font-weight="600">Image label: "warehouse"</text>` : ""}
+  ${task === "Detection" ? objs.map(o => htl.svg`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="none" stroke="${o.col}" stroke-width="3"/>
+     <rect x="${o.x}" y="${o.y - 18}" width="${o.name.length * 7.5 + 10}" height="18" fill="${o.col}"/><text x="${o.x + 5}" y="${o.y - 5}" fill="white" font-size="12" font-weight="600">${o.name}</text>`) : ""}
+  ${task === "Segmentation" ? objs.map(o => htl.svg`<rect x="${o.x + 4}" y="${o.y + 4}" width="${o.w - 8}" height="${o.h - 8}" rx="${Math.min(o.w, o.h) / 3}" fill="${o.col}" fill-opacity="0.45" transform="rotate(${o.angle} ${o.x + o.w / 2} ${o.y + o.h / 2})"/>`) : ""}
+  ${task === "Oriented boxes" ? objs.map(o => htl.svg`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="none" stroke="${o.col}" stroke-width="3" transform="rotate(${o.angle} ${o.x + o.w / 2} ${o.y + o.h / 2})"/>`) : ""}
+  ${task === "Open vocabulary" ? objs.filter(matches).map(o => htl.svg`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="none" stroke="${ms.amber}" stroke-width="4"/>
+     <rect x="${o.x}" y="${o.y - 18}" width="${prompt.length * 7 + 10}" height="18" fill="${ms.amber}"/><text x="${o.x + 5}" y="${o.y - 5}" fill="white" font-size="12" font-weight="600">${prompt}</text>`) : ""}
+</svg>`
+```
+
+```{ojs}
+//| echo: false
+desc = ({
+  "Classification": "One label for the whole image. Fast, but says nothing about where things are or how many.",
+  "Detection": "A box, a class and a confidence for every object. The workhorse of computer vision.",
+  "Segmentation": "The exact pixels of each object. Needed when shape matters: tumours, crop rows, road surface.",
+  "Oriented boxes": "Rotated boxes that hug tilted objects. Essential for satellite images, parcels and ships.",
+  "Open vocabulary": "You type what to find; the model was never trained on a fixed list. Type a word in the prompt box."
+})
+html`<div class="ms-readout"><span>${task}</span><b style="font-size:1rem;font-weight:500">${desc[task]}</b></div>`
+```
+
+## The four families of 2026
+
+| Family | Leading models | Big idea | Best for |
+|---|---|---|---|
+| **Real-time CNN detectors** | YOLO26, YOLO12 | Small, fast, easy to export to phones and edge chips | Cameras, robots, embedded devices |
+| **Real-time transformers (DETR family)** | RF-DETR, D-FINE, DEIM, RT-DETR | Attention instead of hand-made anchors; no NMS step | Highest accuracy at real-time speed on a GPU |
+| **Open-vocabulary and promptable** | Grounding DINO, YOLOE, SAM 3 | Find objects described by text or an example image | Changing products, rare objects, fast labelling |
+| **Vision foundation backbones** | DINOv3 | One huge self-supervised model whose features power many tasks | Specialised domains with few labels |
+
+: The state-of-the-art detection landscape in 2026 {#tbl-families}
+
+A few milestones behind that table:
+
+- **YOLO26** (January 2026) predicts boxes end-to-end without non-maximum suppression by default, and one family covers detection, segmentation, classification, pose, depth and oriented boxes ([Ultralytics](https://docs.ultralytics.com/models/yolo26/)).
+- **RF-DETR** from Roboflow, built on DINOv2 features and deformable attention, is described as the first real-time model to exceed 60 AP on the COCO benchmark ([Roboflow on GitHub](http://github.com/roboflow/rf-detr)).
+- **D-FINE-L** reaches 54.0 AP at 124 frames per second on an NVIDIA T4 GPU ([Roboflow Playground](https://playground.roboflow.com/models/ustc/d-fine)), and **DEIMv2-S** is the first model under 10 million parameters to pass 50 AP ([DEIMv2 paper](https://arxiv.org/pdf/2509.20787)).
+- **Grounding DINO** detects objects from text and scores 52.5 AP on COCO without ever training on COCO ([IDEA Research](https://github.com/IDEA-Research/GroundingDINO)).
+- **SAM 3** from Meta finds, segments and tracks every instance of a concept given as a short phrase or example image; SAM 3.1 (March 2026) tracks up to 16 objects in one pass ([Meta AI](https://ai.meta.com/blog/segment-anything-model-3/)).
+- **DINOv3** (August 2025) was trained without labels on 1.7 billion images, with a 7-billion-parameter flagship and small distilled versions ([Meta AI](https://ai.meta.com/blog/dinov3-self-supervised-vision-model/)).
+
+## Reading the scoreboard: accuracy vs speed
+
+Detectors are compared on **COCO** (80 everyday object types) using **mAP@50:95**: average precision, averaged over IoU thresholds from 0.50 to 0.95. Higher means boxes are both correct and tight. Speed is **latency**, the milliseconds to process one image; frames per second is $1000 / \text{latency}$.
+
+$$
+\text{mAP}_{50:95} = \frac{1}{10}\sum_{t \in \{0.50, 0.55, \dots, 0.95\}} \text{AP}_{\text{IoU} \ge t}
+$$ {#eq-map}
+
+Set the frame rate your application needs. Models that are too slow fade out.
+
+```{python}
+#| echo: false
+import numpy as np, pandas as pd
+board = pd.DataFrame([
+    ("YOLO26-N", "CNN", 1.7, 40.1, 2.4), ("YOLO26-X", "CNN", 11.8, 56.9, 55.7),
+    ("YOLO12-N", "CNN", 1.6, 40.4, 2.5), ("YOLO12-L", "CNN", 5.83, 53.8, 26.5),
+    ("RF-DETR-N", "Transformer", 2.3, 48.4, 30.5), ("RF-DETR-M", "Transformer", 4.4, 54.7, 33.7),
+    ("RF-DETR-2XL", "Transformer", 17.2, 60.1, 126.9),
+    ("D-FINE-L", "Transformer", round(1000 / 124, 1), 54.0, None), ("D-FINE-X", "Transformer", round(1000 / 78, 1), 55.8, None)],
+    columns=["model", "family", "latency_ms", "map", "params_m"])
+ojs_define(board=board.drop(columns="params_m").to_dict(orient="records"))
+```
+
+```{ojs}
+//| echo: false
+viewof fps = Inputs.range([10, 400], {value: 60, step: 5, label: "Required frames per second"})
+```
+
+```{ojs}
+//| echo: false
+budget = 1000 / fps
+fit = board.filter(d => d.latency_ms <= budget)
+best = d3.greatest(fit, d => d.map)
+Plot.plot({
+  ...msStyle, height: 380, marginRight: 90,
+  x: {type: "log", label: "Latency per image on NVIDIA T4 (ms, log scale) →", domain: [1.2, 25]},
+  y: {label: "↑ COCO mAP 50:95", domain: [38, 62]},
+  color: {domain: ["CNN", "Transformer"], range: [ms.teal, ms.indigo], legend: true},
+  marks: [
+    Plot.rectX([{x1: budget, x2: 25}], {x1: "x1", x2: "x2", y1: 38, y2: 62, fill: "currentColor", fillOpacity: 0.06}),
+    Plot.ruleX([budget], {stroke: ms.rose, strokeWidth: 2, strokeDasharray: "5,4"}),
+    Plot.text([budget], {x: d => d, y: 39, text: () => `${budget.toFixed(1)} ms budget`, dx: 6, textAnchor: "start", fill: ms.rose, fontSize: 12}),
+    Plot.dot(board, {x: "latency_ms", y: "map", fill: "family", r: 7, fillOpacity: d => d.latency_ms <= budget ? 0.95 : 0.18}),
+    Plot.text(board, {x: "latency_ms", y: "map", y: d => d.map + ({"YOLO12-N": 0.7, "YOLO26-N": -0.7, "YOLO12-L": -0.8, "D-FINE-L": 0.7, "YOLO26-X": 0.6, "D-FINE-X": -0.6}[d.model] ?? 0), text: "model", dx: 9,
+      textAnchor: "start", fontSize: 11.5, fill: "currentColor", fillOpacity: d => d.latency_ms <= budget ? 1 : 0.3})
+  ]
+})
+```
+
+```{ojs}
+//| echo: false
+html`<div class="ms-readout"><span>At ${fps} fps the most accurate option is</span><b>${best ? best.model : "none"}</b><span>${best ? best.map + " mAP" : "lower the frame rate"}</span></div>`
+```
+
+Figures come from the [JetBrains 2026 comparison](https://blog.jetbrains.com/pycharm/2026/07/best-object-detection-models-for-machine-learning-in-2026/) and, for D-FINE, the [Roboflow Playground](https://playground.roboflow.com/models/ustc/d-fine). Measurement setups differ slightly, so treat close values as ties and **always re-test on your own images**.
+
+## Choosing a confidence threshold
+
+Every detection comes with a confidence score. Where you set the cut-off decides the trade-off between **precision** (of the boxes we report, how many are real?) and **recall** (of the real objects, how many did we find?). The right point depends on the cost of each mistake.
+
+```{python}
+#| echo: false
+rng = np.random.default_rng(3)
+n_true = 400
+scores_tp = np.clip(rng.beta(6, 2, n_true), 0, 1)        # detections that match a real object
+found = rng.random(n_true) < 0.93                         # 7% of objects never get a box at all
+scores_fp = np.clip(rng.beta(2, 5, 500), 0, 1)           # false alarms (background, reflections)
+ojs_define(det=dict(tp=np.round(scores_tp[found], 3).tolist(), fp=np.round(scores_fp, 3).tolist(), n_true=n_true))
+```
+
+```{ojs}
+//| echo: false
+viewof thr = Inputs.range([0.05, 0.95], {value: 0.5, step: 0.01, label: "Confidence threshold"})
+```
+
+```{ojs}
+//| echo: false
+pr = d3.range(0.02, 0.99, 0.01).map(t => {
+  const tp = det.tp.filter(s => s >= t).length, fp = det.fp.filter(s => s >= t).length;
+  return {t, precision: tp / Math.max(1, tp + fp), recall: tp / det.n_true};
+})
+cur = {
+  const tp = det.tp.filter(s => s >= thr).length, fp = det.fp.filter(s => s >= thr).length;
+  const p = tp / Math.max(1, tp + fp), r = tp / det.n_true;
+  return {tp, fp, fn: det.n_true - tp, p, r, f1: 2 * p * r / Math.max(1e-9, p + r)};
+}
+html`<div class="ms-readout"><span>Precision</span><b>${(cur.p * 100).toFixed(0)}%</b><span>Recall</span><b>${(cur.r * 100).toFixed(0)}%</b><span>False alarms</span><b>${cur.fp}</b><span>Missed objects</span><b>${cur.fn}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 320,
+  x: {label: "Recall →", domain: [0, 1], tickFormat: "%"}, y: {label: "↑ Precision", domain: [0.4, 1.01], tickFormat: "%"},
+  marks: [
+    Plot.line(pr, {x: "recall", y: "precision", stroke: ms.indigo, strokeWidth: 3}),
+    Plot.dot([cur], {x: "r", y: "p", r: 9, fill: ms.amber, stroke: "white", strokeWidth: 2}),
+    Plot.text([cur], {x: "r", y: "p", text: () => `threshold ${thr.toFixed(2)}`, dy: -16, fill: "currentColor", fontSize: 12})
+  ]
+})
+```
+
+A **pharmacy pill counter** cannot miss a pill, so it uses a low threshold and accepts a human check of false alarms. A **retail checkout** that charges a customer wants high precision. A **self-driving car** wants both, which is why it adds more sensors instead of trusting one threshold.
+
+## Eight use cases, from niche to critical
+
+Pick a use case to see what makes it hard and which approach fits.
+
+```{ojs}
+//| echo: false
+cases = ({
+  "Barcode and QR reading": {what: "Find every code on a parcel, shelf or screen, then decode it.",
+    hard: "Tiny, blurred, curved or damaged codes; many codes in one frame.",
+    approach: "Two stages. Locate codes with a classic detector (OpenCV) or a small YOLO model trained on barcodes, then decode the crop with a library such as ZXing-cpp. OpenCV can upscale small crops with a super-resolution network first.",
+    needs: {Speed: 5, Accuracy: 4, "Edge compute": 5, "Label effort": 2, "Open vocabulary": 1}},
+  "Pharmacy pill counting": {what: "Count tablets on a tray, fast and exactly.",
+    hard: "Dozens of identical, touching objects; reflections.",
+    approach: "A small fine-tuned YOLO26 or RF-DETR model on a fixed overhead camera with controlled light. Tune for recall; a pharmacist confirms.",
+    needs: {Speed: 3, Accuracy: 5, "Edge compute": 4, "Label effort": 2, "Open vocabulary": 1}},
+  "Factory defect inspection": {what: "Spot scratches, missing parts or solder faults on a production line.",
+    hard: "Defects are rare and small; thousands of good parts for every bad one.",
+    approach: "Fine-tune RF-DETR or YOLO on the few labelled defects, often combined with anomaly detection that learns only what 'good' looks like. A DINOv3 backbone helps when labels are scarce.",
+    needs: {Speed: 4, Accuracy: 5, "Edge compute": 3, "Label effort": 4, "Open vocabulary": 1}},
+  "Farm and garden": {what: "Count fruit, find weeds for targeted spraying, spot leaf disease.",
+    hard: "Outdoor light, occlusion by leaves, objects that look alike.",
+    approach: "Edge models (YOLO26-N or -S) on a tractor or drone camera, exported to TensorRT or TFLite. Segmentation when the sprayer needs the exact leaf area.",
+    needs: {Speed: 4, Accuracy: 3, "Edge compute": 5, "Label effort": 3, "Open vocabulary": 2}},
+  "Wildlife camera traps": {what: "Sort millions of trail-camera photos into animal, person, vehicle or empty.",
+    hard: "Night infrared, partial animals, huge volumes of empty frames.",
+    approach: "Microsoft's open-source MegaDetector V6 offers YOLO and RT-DETR variants; the compact one has 2.3 million parameters and runs on an ordinary CPU.",
+    needs: {Speed: 2, Accuracy: 4, "Edge compute": 3, "Label effort": 1, "Open vocabulary": 2}},
+  "Retail shelves": {what: "Check stock gaps and planogram compliance from shelf photos.",
+    hard: "Thousands of products that change every season.",
+    approach: "Open-vocabulary models (YOLOE, Grounding DINO) or SAM 3 to find products by name or example image, avoiding retraining for every new item.",
+    needs: {Speed: 2, Accuracy: 4, "Edge compute": 2, "Label effort": 2, "Open vocabulary": 5}},
+  "Satellite and aerial imagery": {what: "Find ships, planes, buildings or cleared forest from above.",
+    hard: "Objects at every angle, tiny relative to huge images.",
+    approach: "Oriented bounding boxes (YOLO26 OBB) on tiled images; DINOv3 offers a backbone trained specifically on satellite imagery.",
+    needs: {Speed: 2, Accuracy: 4, "Edge compute": 1, "Label effort": 3, "Open vocabulary": 2}},
+  "Driverless cars": {what: "Detect and track every road user in 3D, in all weather, many times per second.",
+    hard: "Safety-critical, rare events, fog, night and glare.",
+    approach: "Multi-sensor 3D detection in a bird's-eye view, plus tracking and prediction. Leaders combine cameras, lidar and radar with large foundation models. See the simulator below.",
+    needs: {Speed: 5, Accuracy: 5, "Edge compute": 5, "Label effort": 5, "Open vocabulary": 4}}
+})
+viewof uc = Inputs.select(Object.keys(cases), {value: "Barcode and QR reading", label: "Use case"})
+```
+
+```{ojs}
+//| echo: false
+c = cases[uc]
+html`<div style="border:1px solid var(--ms-border,#ddd);border-radius:16px;padding:1rem 1.2rem;background:var(--ms-surface-2,transparent)">
+  <div style="font-weight:700;font-size:1.1rem;margin-bottom:.4rem">${uc}</div>
+  <p style="margin:.2rem 0"><b>Goal:</b> ${c.what}</p>
+  <p style="margin:.2rem 0"><b>What makes it hard:</b> ${c.hard}</p>
+  <p style="margin:.2rem 0 .6rem"><b>Recommended approach:</b> ${c.approach}</p>
+  ${Plot.plot({...msStyle, height: 190, marginLeft: 120, x: {domain: [0, 5], label: "How demanding (1 to 5) →", ticks: 5}, y: {label: null, domain: Object.keys(c.needs)},
+     marks: [Plot.barX(Object.entries(c.needs).map(([k, v]) => ({k, v})), {y: "k", x: "v", fill: ms.indigo, fillOpacity: 0.8, sort: null}),
+             Plot.text(Object.entries(c.needs).map(([k, v]) => ({k, v})), {y: "k", x: "v", text: "v", dx: 10, fill: "currentColor"})]})}
+</div>`
+```
+
+### Niche case: reading barcodes
+
+Barcodes look trivial, but warehouse cameras see dozens per frame, at angles, under plastic wrap. The modern recipe splits the job: a **detector** finds where codes are, and a **decoder** reads the bars. OpenCV's barcode module can load a super-resolution network to sharpen small crops before decoding ([OpenCV docs](https://docs.opencv.org/4.x/d6/d25/tutorial_barcode_detect_and_decode.html)).
+
+```{.python filename="read_barcodes.py"}
+import cv2, zxingcpp
+
+img = cv2.imread("parcel.jpg")
+# find and decode every code in the image
+for code in zxingcpp.read_barcodes(img):
+    print(code.format, code.text, code.position)
+```
+
+For very hard images, train a small YOLO model to find codes first, crop each box, and pass the crops to the decoder.
+
+### Critical case: driverless cars
+
+A self-driving car must detect objects in **3D**, know how fast they move, and never be blinded by one failure. Waymo's 6th-generation Driver uses **13 cameras, 4 lidars and 6 radars** ([Waymo](https://waymo.com/blog/2024/08/meet-the-6th-generation-waymo-driver/)). Its foundation model uses a "Think Fast, Think Slow" design: a sensor-fusion encoder fuses camera, lidar and radar over time for fast reactions, while a driving vision-language model trained with Gemini reasons about rare scenes such as a burning vehicle ahead ([Waymo](https://waymo.com/blog/2025/12/demonstrably-safe-ai-for-autonomous-driving/)). Tesla takes a different path: cameras only, with one end-to-end network from pixels to steering ([vFuture Media](https://vfuturemedia.com/electric-vehicles/tesla-vision-only-self-driving-2026-inside-ai-powered-fsd-strategy/)).
+
+Why combine sensors? Try this toy bird's-eye-view simulator. Each sensor has a different range and weakness. Add fog or night and watch which objects are still seen.
+
+```{ojs}
+//| echo: false
+viewof sensors = Inputs.checkbox(["Camera", "Lidar", "Radar"], {value: ["Camera", "Lidar", "Radar"], label: "Sensors"})
+viewof fog = Inputs.range([0, 1], {value: 0, step: 0.05, label: "Fog density"})
+viewof night = Inputs.toggle({label: "Night", value: false})
+```
+
+```{ojs}
+//| echo: false
+road = [
+  {id: "car ahead", x: 60, y: 0, kind: "vehicle"}, {id: "truck", x: 150, y: -8, kind: "vehicle"},
+  {id: "cyclist", x: 35, y: 10, kind: "small"}, {id: "pedestrian", x: 22, y: -16, kind: "small"},
+  {id: "car behind", x: -45, y: 4, kind: "vehicle"}, {id: "deer", x: 105, y: 22, kind: "small"},
+  {id: "fast car", x: 235, y: -4, kind: "vehicle"}, {id: "child", x: -10, y: 14, kind: "small"}
+]
+range = ({
+  cam: 160 * (1 - 0.8 * fog) * (night ? 0.45 : 1),
+  lidar: 200 * (1 - 0.6 * fog),
+  radar: 250
+})
+FOV = 0.6   // front camera half-angle in radians
+seenBy = o => {
+  const d = Math.hypot(o.x, o.y), out = [];
+  const front = o.x > 0 && Math.abs(Math.atan2(o.y, o.x)) < FOV && d < range.cam;
+  if (sensors.includes("Camera") && (front || d < range.cam * 0.3)) out.push("C");     // long-range front + short surround
+  if (sensors.includes("Lidar") && d < range.lidar) out.push("L");
+  if (sensors.includes("Radar") && d < (o.kind === "vehicle" ? range.radar : 70)) out.push("R");
+  return out;
+}
+view = road.map(o => ({...o, s: seenBy(o)}))
+circle = r => d3.range(0, 361, 3).map(a => ({x: r * Math.cos(a * Math.PI / 180), y: r * Math.sin(a * Math.PI / 180)}))
+Plot.plot({
+  ...msStyle, height: 330, width: 760, marginLeft: 50, marginRight: 20, clip: true,
+  x: {domain: [-70, 260], label: "metres ahead →"}, y: {domain: [-50, 50], label: "↑ metres left"},
+  marks: [
+    Plot.rect([{}], {x1: -70, x2: 260, y1: -7, y2: 7, fill: "currentColor", fillOpacity: 0.06}),
+    sensors.includes("Lidar") ? Plot.line(circle(range.lidar), {x: "x", y: "y", stroke: ms.teal, strokeDasharray: "4,4", strokeOpacity: 0.7}) : null,
+    sensors.includes("Camera") ? Plot.line([{x: 0, y: 0}, {x: range.cam * Math.cos(FOV), y: range.cam * Math.sin(FOV)}, {x: range.cam, y: 0}, {x: range.cam * Math.cos(FOV), y: -range.cam * Math.sin(FOV)}, {x: 0, y: 0}], {x: "x", y: "y", stroke: ms.indigo, strokeOpacity: 0.7, strokeDasharray: "2,3"}) : null,
+    sensors.includes("Camera") ? Plot.line(circle(range.cam * 0.3), {x: "x", y: "y", stroke: ms.indigo, strokeOpacity: 0.4, strokeDasharray: "2,3"}) : null,
+    Plot.dot([{x: 0, y: 0}], {x: "x", y: "y", r: 9, symbol: "square", fill: ms.amber}),
+    Plot.dot(view, {x: "x", y: "y", r: 7, fill: d => d.s.length >= 2 ? ms.teal : d.s.length === 1 ? ms.amber : ms.rose, stroke: "white", strokeWidth: 1.5}),
+    Plot.text(view, {x: "x", y: "y", text: d => `${d.id} ${d.s.length ? "(" + d.s.join("+") + ")" : "(missed)"}`, dy: -13, fontSize: 11, fill: "currentColor"})
+  ]
+})
+```
+
+```{ojs}
+//| echo: false
+html`<div class="ms-readout"><span>Seen by 2+ sensors</span><b>${view.filter(d => d.s.length >= 2).length}</b><span>by only 1</span><b>${view.filter(d => d.s.length === 1).length}</b><span>missed</span><b style="color:${ms.rose}">${view.filter(d => d.s.length === 0).length}</b><span>of ${view.length}</span></div>`
+```
+
+The orange square is our car. Dashed lines show each sensor's reach: the front camera's long cone plus short surround cameras (C), lidar's 360° circle (L), and radar (R), which sees vehicles far away but small objects only up close. Teal objects are confirmed by two or more sensors, amber by one, red are missed. Turn off lidar and radar, then add fog: a camera-only car loses distant objects first. This is a simplified toy, not a model of any real vehicle, but it shows why redundancy matters when lives are at stake.
+
+## Getting started in code
+
+::: {.panel-tabset}
+## YOLO26 (edge, fast)
+```{.python filename="yolo26_detect.py"}
+from ultralytics import YOLO
+
+model = YOLO("yolo26n.pt")                     # nano model, runs on CPU
+results = model("dock.jpg")                    # boxes, classes, confidences
+model.train(data="my_data.yaml", epochs=50)    # fine-tune on your images
+model.export(format="onnx")                    # deploy anywhere
+```
+## RF-DETR (top accuracy)
+```{.python filename="rfdetr_detect.py"}
+from PIL import Image
+from rfdetr import RFDETRBase
+
+model = RFDETRBase()                            # COCO-pretrained
+detections = model.predict(Image.open("dock.jpg"), threshold=0.5)
+print(detections.class_id, detections.confidence)
+```
+## YOLOE (open vocabulary)
+```{.python filename="yoloe_prompt.py"}
+from ultralytics import YOLOE
+
+model = YOLOE("yoloe-26s-seg.pt")
+model.set_classes(["package with barcode", "safety cone"])   # any words
+results = model.predict("dock.jpg")
+```
+:::
+
+Code patterns follow the [Ultralytics YOLO26 docs](https://docs.ultralytics.com/models/yolo26/), the [RF-DETR repository](http://github.com/roboflow/rf-detr) and the [YOLOE docs](https://docs.ultralytics.com/models/yoloe). Check licences before commercial use: Ultralytics models are AGPL-3.0 unless you buy an enterprise licence, while RF-DETR's base sizes are Apache 2.0.
+
+## How to choose
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A["What must the model find?"] --> B{"Fixed list of objects?"}
+  B -- "No, it changes" --> C["Open vocabulary:<br/>YOLOE, Grounding DINO, SAM 3"]
+  B -- Yes --> D{"Where does it run?"}
+  D -- "Phone, drone, edge chip" --> E["YOLO26 N/S<br/>export to TFLite, CoreML, TensorRT"]
+  D -- "Server GPU" --> F["RF-DETR or D-FINE<br/>for top accuracy"]
+  E --> G["Fine-tune on your own images"]
+  F --> G
+  C --> H["Use it to auto-label,<br/>then train a small fast model"]
+  H --> G
+```
+
+A popular 2026 workflow combines the families: use a large promptable model such as SAM 3 or Grounding DINO to **auto-label** thousands of images, check them by hand, then train a small, fast YOLO or RF-DETR model to run in production.
+
+## Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| Trusting COCO scores for your domain | Benchmark on a sample of your own images |
+| One global confidence threshold | Tune per class and per cost of error |
+| Ignoring licences | Check AGPL, Apache and custom licences before shipping |
+| Small objects in huge images | Tile the image or raise input resolution |
+| Testing only in good conditions | Collect night, rain, glare and motion-blur samples |
+
+## Summary
+
+- Detection covers **boxes, masks, oriented boxes and open-vocabulary prompts**, not just labels.
+- **YOLO26** leads on edge speed, **RF-DETR** and the DETR family lead on real-time accuracy, **SAM 3** and **YOLOE** find what you describe, and **DINOv3** supplies general-purpose features.
+- Compare models with **mAP** (@eq-map) and latency, then choose a **confidence threshold** that matches the cost of mistakes.
+- Use cases range from a **barcode decoder** on a phone to **multi-sensor 3D perception** in a driverless car; the stakes decide how much redundancy you need.

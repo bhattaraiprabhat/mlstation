@@ -1,0 +1,256 @@
+---
+title: "Memory and State in AI Applications"
+description: "Understand context, workflow state, short-term conversation history, and persistent memory without treating them as the same thing."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, Memory, State]
+draft: false
+---
+
+Humans say:
+
+> Remember what I told you earlier.
+
+Software engineers should immediately ask:
+
+> **Remember where, for how long, and for which future request?**
+
+"Memory" is one of the most overloaded words in AI applications. This chapter separates the pieces.
+
+::: {.callout-tip}
+## What you will learn
+- The difference between **context, state and memory**
+- Why conversation history is not unlimited memory
+- Short-lived vs. persistent information
+- A simple state/memory design
+- What should and should not be stored
+:::
+
+## The desk, notebook and filing cabinet
+
+Use three physical objects as a mental model.
+
+### Desk — current context
+
+What is directly in front of the model for this call:
+
+```text
+system instructions
++ current user request
++ selected history
++ retrieved information
++ tool observations
+```
+
+### Notebook — workflow state
+
+Information the running application needs:
+
+```text
+current step
+selected tool
+retrieved documents
+attempt count
+draft answer
+```
+
+### Filing cabinet — persistent memory
+
+Information intentionally stored beyond the current run:
+
+```text
+saved preference
+approved project fact
+long-lived task state
+prior structured record
+```
+
+These are related, but they are not identical.
+
+::: {#def-state-memory}
+## State and memory
+**State** is information an application carries through a workflow or session so later steps know what has already happened.
+
+**Persistent memory** is selected information stored so it can be available in future sessions or runs.
+:::
+
+## Context is finite
+
+A model receives a finite amount of input context.
+
+Conceptually:
+
+$$
+\text{Context}
+=
+\text{Instructions}
++
+\text{History}
++
+\text{Retrieved Data}
++
+\text{Current Request}
+$$
+
+As conversations grow, applications may need to:
+
+- retain recent messages,
+- summarize older history,
+- retrieve only relevant past information,
+- discard information that is no longer useful.
+
+"Just send everything forever" is not a robust memory strategy.
+
+## A small state object
+
+```{.python filename="state_and_memory.py"}
+import json
+from pathlib import Path
+
+state = {
+    "session_id": "session_001",
+    "goal": "Prepare a short RAG explanation",
+    "step": "draft",
+    "retrieved_sources": ["rag_notes_01"],
+    "attempt": 1,
+    "draft": None
+}
+
+state["draft"] = (
+    "RAG retrieves relevant information "
+    "before asking the LLM to generate."
+)
+
+Path("sessions").mkdir(exist_ok=True)
+
+Path("sessions/session_001.json").write_text(
+    json.dumps(state, indent=2)
+)
+```
+
+This is **state persistence**. It lets the application resume or inspect the workflow.
+
+## Not every past fact deserves memory
+
+Suppose a user says:
+
+> For this one answer, use exactly three bullets.
+
+That is probably a temporary instruction.
+
+Suppose a project configuration says:
+
+> Production answers must cite the approved knowledge base.
+
+That may be persistent project configuration.
+
+A useful memory decision asks:
+
+```text
+Is it relevant later?
+Is it appropriate to retain?
+How long should it live?
+Who can access it?
+Can it become stale?
+How can it be corrected or deleted?
+```
+
+::: {.callout-warning}
+## Memory creates responsibility
+Persistent storage can retain sensitive, incorrect or outdated information. Store deliberately, apply appropriate access controls and retention rules, and provide mechanisms to update or remove stored information where the application requires them.
+:::
+
+## Memory can itself use retrieval
+
+A persistent memory store may become large.
+
+Instead of inserting every stored item into every prompt:
+
+```text
+All memories → prompt
+```
+
+we can retrieve relevant memory:
+
+```text
+Current request
+      ↓
+Memory retrieval
+      ↓
+Relevant stored items
+      ↓
+Model context
+```
+
+Notice the familiar pattern: this resembles RAG.
+
+The difference is largely **what the knowledge represents and how it is managed**.
+
+## State makes agents resumable
+
+Consider an agent interrupted after tool call 3.
+
+Without saved state:
+
+```text
+restart from beginning
+```
+
+With checkpoints:
+
+```text
+goal
++ completed actions
++ observations
++ current step
+        ↓
+resume
+```
+
+This is particularly valuable for long-running or expensive workflows.
+
+## What should you save?
+
+Separate temporary run state from durable memory:
+
+```text
+application/
+├── sessions/
+│   └── session_001.json
+├── checkpoints/
+│   └── run_001_step_03.json
+└── memory/
+    └── structured_records.json
+```
+
+Also record metadata such as:
+
+```text
+created_at
+updated_at
+source
+scope
+expiration/retention rule
+```
+
+where appropriate.
+
+::: {.callout-tip}
+## The durable distinction
+**Context is what the model sees now.**
+
+**State is what the workflow carries.**
+
+**Memory is what the application intentionally retains for later.**
+:::
+
+## Summary
+
+- Context, state and persistent memory are different concepts.
+- Conversation history is one possible input to context, not an infinite memory mechanism.
+- State helps multi-step workflows continue and resume.
+- Persistent memory should be selective, governed and correctable.
+- Large memory stores can use retrieval to select relevant items.
+- Save checkpoints and memory metadata so stored information has provenance and lifecycle.
+
+**Next:** *Validation and Evaluation of LLM Applications*

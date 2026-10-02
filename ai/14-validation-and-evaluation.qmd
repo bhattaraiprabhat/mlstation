@@ -1,0 +1,298 @@
+---
+title: "Validation and Evaluation of LLM Applications"
+description: "Move from 'the output looks good' to systematic checks of correctness, grounding, retrieval, tool use, and end-to-end behavior."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM, Evaluation, Validation]
+draft: false
+---
+
+A fluent answer can be wrong.
+
+A correct answer can be based on the wrong retrieved document.
+
+A successful tool call can still violate the user's request.
+
+So the final question in an AI pipeline cannot be merely:
+
+> **Did the model produce text?**
+
+We need to ask:
+
+> **Did the system do the right thing?**
+
+::: {.callout-tip}
+## What you will learn
+- The difference between validation and evaluation
+- Why AI systems should be tested at multiple layers
+- Simple deterministic checks
+- RAG and agent-specific evaluation ideas
+- How to build a small evaluation set and save results
+:::
+
+## The airport-checkpoint model
+
+Think of an AI response moving through several checkpoints.
+
+```text
+INPUT
+  ↓
+[ Retrieval correct? ]
+  ↓
+[ Tool use correct? ]
+  ↓
+[ Output structurally valid? ]
+  ↓
+[ Answer supported? ]
+  ↓
+[ Task completed? ]
+  ↓
+OUTPUT
+```
+
+A single final score can hide where failure occurred.
+
+## Validation vs. evaluation
+
+The words overlap in practice, but this distinction is useful for learning.
+
+::: {#def-validation-evaluation}
+## Validation and evaluation
+**Validation** checks whether an output satisfies explicit requirements or constraints.
+
+**Evaluation** measures how well the system performs on desired qualities or tasks, often across a dataset of examples.
+:::
+
+Examples of validation:
+
+```text
+Is this valid JSON?
+Are required fields present?
+Is the value within an allowed range?
+Did the model cite only retrieved source IDs?
+```
+
+Examples of evaluation:
+
+```text
+How often does retrieval find the relevant document?
+How accurate are answers across 100 questions?
+How often does the agent choose the correct tool?
+How useful do human reviewers find the responses?
+```
+
+## Start with deterministic checks
+
+If a requirement can be checked with normal code, use normal code.
+
+```{.python filename="validate_output.py"}
+def validate_invoice(result):
+    required = [
+        "invoice_number",
+        "date",
+        "total"
+    ]
+
+    errors = []
+
+    for field in required:
+        if field not in result:
+            errors.append(
+                f"Missing field: {field}"
+            )
+
+    if "total" in result:
+        if not isinstance(
+            result["total"],
+            (int, float)
+        ):
+            errors.append(
+                "total must be numeric"
+            )
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors
+    }
+
+prediction = {
+    "invoice_number": "A-104",
+    "date": "2026-10-01",
+    "total": 125.50
+}
+
+print(validate_invoice(prediction))
+```
+
+Do not ask another LLM whether a number is numeric when Python can answer exactly.
+
+## Evaluate the layers separately
+
+### LLM / answer layer
+
+Possible questions:
+
+- Is the answer relevant?
+- Is it correct?
+- Does it follow required format?
+- Is unsupported information introduced?
+
+### RAG layer
+
+Evaluate both:
+
+```text
+RETRIEVAL
+Did we retrieve useful evidence?
+
+GENERATION
+Did the answer faithfully use that evidence?
+```
+
+A poor answer with perfect retrieval is a different problem from a poor answer caused by bad retrieval.
+
+### Agent layer
+
+Evaluate:
+
+```text
+Was the correct tool selected?
+Were arguments valid?
+Were unnecessary calls avoided?
+Did the agent stop appropriately?
+Did it respect permission boundaries?
+```
+
+### Workflow layer
+
+Evaluate:
+
+```text
+Did the request take the correct route?
+Were failures handled?
+Did required checkpoints occur?
+```
+
+## Build a small golden set
+
+Do not begin evaluation with thousands of examples.
+
+Start with a small, inspectable set:
+
+```json
+[
+  {
+    "id": "q1",
+    "question": "What is the hotel limit?",
+    "expected_source": "travel-1",
+    "expected_answer": "$220 per night"
+  },
+  {
+    "id": "q2",
+    "question": "What is the meal limit?",
+    "expected_source": "meal-1",
+    "expected_answer": "$65 per day"
+  }
+]
+```
+
+Then run the application against every case.
+
+A basic accuracy metric is:
+
+$$
+\text{Accuracy}
+=
+\frac{\text{Number of correct cases}}
+{\text{Total number of cases}}
+$$
+
+But do not force every quality dimension into accuracy. Some tasks need exact checks, some need graded rubrics, and some require human review.
+
+## Evaluation should resemble reality
+
+A test set containing only easy questions creates false confidence.
+
+Include cases such as:
+
+```text
+✓ ordinary request
+✓ paraphrased request
+✓ missing information
+✓ ambiguous request
+✓ irrelevant document
+✓ tool failure
+✓ malformed tool arguments
+✓ request that should be refused/escalated
+```
+
+These are **behavioral cases**, not just happy-path examples.
+
+::: {.callout-note}
+## Evaluate changes, not impressions
+When you change the model, prompt, chunking, retrieval settings or agent policy, rerun the same evaluation set. This turns "I think it improved" into a measurable comparison.
+:::
+
+## LLM-as-judge: useful, but not ground truth
+
+An LLM can help grade qualities that are difficult to encode deterministically, especially with a clear rubric.
+
+But model-based grading can itself be inconsistent or biased.
+
+Use it as one signal, and calibrate important evaluations against trusted references or human judgments when appropriate.
+
+::: {.callout-warning}
+## Never confuse a grader with truth
+A high evaluation score only means performance was strong under the chosen data, metric and grader. Always inspect what the evaluation actually measures.
+:::
+
+## What should you save?
+
+Evaluation artifacts should make comparisons possible:
+
+```text
+evaluation/
+├── dataset_v1.json
+├── rubric_v1.md
+├── system_config.json
+├── predictions.jsonl
+├── per_case_results.jsonl
+└── summary.json
+```
+
+A useful result preserves:
+
+```text
+input
+expected behavior
+actual output
+retrieved evidence
+tool trace
+validator results
+score / judgment
+```
+
+Now a regression can be investigated case by case.
+
+::: {.callout-tip}
+## The engineering shift
+Prototype question:
+
+**"Can it work?"**
+
+Evaluation question:
+
+**"How often, under which conditions, and where does it fail?"**
+:::
+
+## Summary
+
+- Fluent output is not evidence of correctness.
+- Validate explicit constraints with deterministic code when possible.
+- Evaluate retrieval, generation, tools, agents and workflows at their own layers.
+- Build a small golden set before scaling evaluation.
+- Include difficult and failure cases, not only happy paths.
+- Model-based graders can help but should not be treated as ground truth.
+- Save datasets, configurations and per-case results so changes can be compared.
+
+**Next:** *Production AI — From Prototype to Reliable System*

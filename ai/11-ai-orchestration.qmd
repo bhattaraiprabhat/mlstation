@@ -1,0 +1,250 @@
+---
+title: "AI Orchestration: Managing Agents, Tools, and Workflows"
+description: "Understand the control layer that coordinates models, tools, agents, state, retries, branching, and human checkpoints."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, Orchestration]
+draft: false
+---
+
+An orchestra may contain excellent musicians, but someone—or something—must keep the performance coordinated.
+
+AI applications face the same problem as they grow.
+
+```text
+LLMs + tools + retrieval + agents + state
+```
+
+The question becomes:
+
+> **Who decides what runs, in what order, with what state, and what happens when something fails?**
+
+That is the job of **orchestration**.
+
+::: {.callout-tip}
+## What you will learn
+- What orchestration means
+- How orchestration differs from an agent
+- Sequential, branching and looping workflows
+- Why state, retries and checkpoints belong in the control layer
+- How to make workflows observable
+:::
+
+## The conductor is not another instrument
+
+Consider:
+
+```text
+User
+ ↓
+Classifier
+ ├── billing → Billing Agent
+ ├── technical → Support Agent
+ └── unknown → Human Review
+```
+
+The routing rule is not necessarily another "agent." It is part of the **workflow control**.
+
+::: {#def-orchestration}
+## Orchestration
+**AI orchestration** is the coordination layer that manages the execution and data flow among models, agents, tools, retrieval systems, state, validations, and human checkpoints.
+:::
+
+## Agent vs. orchestrator
+
+The boundary can vary by framework, but this mental model is useful:
+
+```text
+AGENT
+"What action should I take toward this goal?"
+
+ORCHESTRATOR
+"Which component runs now, what state does it receive,
+and where does the result go next?"
+```
+
+An orchestrator can contain deterministic rules **and** agentic decisions.
+
+## Workflows are graphs
+
+A simple chain:
+
+```text
+A → B → C
+```
+
+A branch:
+
+```text
+          ┌→ B → D
+A → ROUTE ┤
+          └→ C → D
+```
+
+A loop:
+
+```text
+A → VALIDATE
+    ↑       │
+    └─retry─┘
+```
+
+A human checkpoint:
+
+```text
+Generate → Review needed?
+              │
+        ┌─────┴─────┐
+       no           yes
+       ↓             ↓
+    Publish     Human approval
+                     ↓
+                  Publish
+```
+
+Thinking in graphs makes complex AI applications easier to reason about.
+
+## A tiny orchestrator
+
+```{.python filename="orchestrator.py"}
+import json
+from pathlib import Path
+
+def classify_request(text):
+    text = text.lower()
+
+    if "invoice" in text or "charge" in text:
+        return "billing"
+
+    if "error" in text or "broken" in text:
+        return "technical"
+
+    return "unknown"
+
+def billing_workflow(text):
+    return "Route to billing workflow."
+
+def technical_workflow(text):
+    return "Route to technical support workflow."
+
+def human_review(text):
+    return "Escalate for human review."
+
+request = "I see an unknown charge on my invoice."
+
+route = classify_request(request)
+
+handlers = {
+    "billing": billing_workflow,
+    "technical": technical_workflow,
+    "unknown": human_review
+}
+
+result = handlers[route](request)
+
+trace = {
+    "request": request,
+    "route": route,
+    "result": result
+}
+
+Path("workflow_runs").mkdir(exist_ok=True)
+Path("workflow_runs/run_001.json").write_text(
+    json.dumps(trace, indent=2)
+)
+```
+
+Nothing here requires an LLM. That is intentional.
+
+Orchestration is about **coordination**, not about forcing intelligence into every edge of the graph.
+
+## State is the baton passed between steps
+
+Suppose a workflow has:
+
+```text
+retrieve → draft → validate → revise
+```
+
+Each step needs information produced earlier.
+
+A state object might be:
+
+```python
+state = {
+    "question": "...",
+    "documents": [],
+    "draft": None,
+    "validation": None,
+    "attempt": 0
+}
+```
+
+Each node reads and updates part of the state.
+
+This is easier to inspect than hiding important information inside unrelated prompts.
+
+## Failure is part of the workflow
+
+Real systems need paths for:
+
+```text
+timeout
+rate limit
+invalid tool output
+empty retrieval
+validation failure
+human escalation
+```
+
+A robust workflow is not only the happy path.
+
+::: {.callout-note}
+## Retry is a policy, not a reflex
+Some failures are transient and worth retrying. Others are deterministic and will fail repeatedly. Record the failure type and use bounded retry policies.
+:::
+
+## What should you save?
+
+Orchestration introduces a **workflow-level trace**:
+
+```text
+workflow_run/
+├── workflow_version.json
+├── initial_state.json
+├── events.jsonl
+├── checkpoints/
+├── errors.jsonl
+└── final_state.json
+```
+
+Each event can record:
+
+```json
+{
+  "node": "validator",
+  "status": "failed",
+  "attempt": 1,
+  "next_node": "revise"
+}
+```
+
+Now the application can answer:
+
+> Where did this request go, and why?
+
+::: {.callout-tip}
+## The architectural lesson
+**Models generate. Tools act. Agents decide. Orchestration coordinates.**
+:::
+
+## Summary
+
+- Orchestration coordinates models, agents, tools, state and workflow transitions.
+- Workflows can be chains, branches, loops or human-in-the-loop graphs.
+- Not every routing decision requires an LLM.
+- State should move explicitly between workflow steps.
+- Failures, retries and escalation paths are part of the design.
+- Save workflow versions, state transitions and events for observability.
+
+**Next:** *MCP — Connecting AI Systems to Tools and Data*

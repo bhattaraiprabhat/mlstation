@@ -1,0 +1,311 @@
+---
+title: "Agentic AI: Building Your First AI Agent"
+description: "Turn the decision loop into a working agent that can choose a tool, observe its result, and decide when the task is complete."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, LLM]
+draft: false
+---
+
+Article 7 introduced the skeleton:
+
+```text
+Request → Decide → Act → Observe → Decide again
+```
+
+But its `choose_action()` function was deliberately hard-coded. A real LLM agent becomes interesting when the **model participates in choosing the next action**.
+
+::: {.callout-tip}
+## What you will learn
+- The minimum parts of an AI agent
+- How an LLM can return a **structured action**
+- The agent loop: **decide → act → observe**
+- Why a stopping condition matters
+- What to save when an agent runs
+:::
+
+## Give the model a steering wheel
+
+A normal LLM application asks the model for text:
+
+```text
+USER → LLM → "The answer is ..."
+```
+
+An agent can instead ask:
+
+> **What should the application do next?**
+
+The model might return:
+
+```json
+{
+  "action": "calculator",
+  "arguments": {
+    "expression": "0.18 * 240"
+  }
+}
+```
+
+The important change is subtle:
+
+```text
+LLM generates prose          LLM selects an action
+        ↓                            ↓
+      Answer                     Application
+                                     ↓
+                                   Tool
+```
+
+The model does **not** magically execute Python or call an API. The surrounding application interprets the structured decision and performs the allowed action.
+
+## The five pieces of a small agent
+
+Think of an agent as a tiny control room:
+
+```text
+                 ┌─────────────┐
+Goal ───────────▶│   DECIDER   │
+                 │    (LLM)    │
+                 └──────┬──────┘
+                        │ action
+                        ▼
+                 ┌─────────────┐
+                 │    TOOL     │
+                 └──────┬──────┘
+                        │ observation
+                        ▼
+                 ┌─────────────┐
+                 │    STATE    │
+                 └──────┬──────┘
+                        │
+                   done?│
+                 ┌──────┴──────┐
+                 │ yes      no │
+                 ▼             └────▶ DECIDER
+              RESPONSE
+```
+
+We need:
+
+1. a **goal**,
+2. a **decision maker**,
+3. one or more **tools**,
+4. an **observation/state**,
+5. a **stopping rule**.
+
+::: {#def-agent-loop}
+## Agent loop
+An **agent loop** repeatedly uses the current goal and state to select an action, executes that action, observes the result, and either continues or terminates.
+:::
+
+## Structured decisions
+
+Free-form prose is awkward for software to execute.
+
+This:
+
+```text
+I think I should probably use the calculator.
+```
+
+is harder to process reliably than:
+
+```json
+{
+  "action": "calculator",
+  "arguments": {"expression": "17 * 23"}
+}
+```
+
+Structured output creates a contract between the model and the application.
+
+## A provider-neutral agent skeleton
+
+The following code keeps the model call abstract so we can see the architecture clearly.
+
+```{.python filename="first_agent.py"}
+import json
+from pathlib import Path
+
+def calculator(expression):
+    allowed = set("0123456789.+-*/() ")
+    if not set(expression) <= allowed:
+        raise ValueError("Unsupported expression")
+    return eval(expression, {"__builtins__": {}})
+
+TOOLS = {
+    "calculator": calculator
+}
+
+def ask_model(goal, observations):
+    """
+    Replace this function with your LLM call.
+
+    Require the model to return:
+    {
+      "action": "calculator" | "finish",
+      "arguments": {...},
+      "answer": null | "final answer"
+    }
+    """
+    raise NotImplementedError
+
+goal = "What is 17 times 23?"
+observations = []
+trace = []
+
+for step in range(5):
+    decision = ask_model(goal, observations)
+
+    trace.append({
+        "step": step,
+        "decision": decision
+    })
+
+    if decision["action"] == "finish":
+        final_answer = decision["answer"]
+        break
+
+    tool_name = decision["action"]
+    arguments = decision["arguments"]
+
+    if tool_name not in TOOLS:
+        raise ValueError(f"Unknown tool: {tool_name}")
+
+    observation = TOOLS[tool_name](**arguments)
+
+    observations.append({
+        "tool": tool_name,
+        "result": observation
+    })
+
+    trace[-1]["observation"] = observation
+else:
+    final_answer = "Stopped: maximum steps reached."
+
+run_dir = Path("agent_runs/run_001")
+run_dir.mkdir(parents=True, exist_ok=True)
+
+(run_dir / "trace.json").write_text(
+    json.dumps(trace, indent=2)
+)
+
+(run_dir / "final_answer.txt").write_text(
+    final_answer
+)
+```
+
+The intentionally missing `ask_model()` is where a provider-specific model/API is connected. The **agent architecture around it remains the same**.
+
+## Why impose a maximum number of steps?
+
+Without a stopping boundary, an agent could repeatedly call tools:
+
+```text
+decide → tool → observe → decide → tool → observe → ...
+```
+
+A simple safeguard is:
+
+```python
+for step in range(MAX_STEPS):
+```
+
+Production systems may also stop because of:
+
+- time limits,
+- cost limits,
+- tool-call limits,
+- task completion,
+- validation failure, or
+- required human approval.
+
+::: {.callout-warning}
+## An agent should not have unlimited freedom
+Give an agent only the tools and permissions required for its task. A model choosing an action is not the same as the application granting unrestricted authority.
+:::
+
+## One request, two possible paths
+
+Consider:
+
+> Calculate 18% of 240 and explain the result.
+
+The agent might follow:
+
+```text
+Goal
+ ↓
+DECIDE: calculator
+ ↓
+ACT: 0.18 × 240
+ ↓
+OBSERVE: 43.2
+ ↓
+DECIDE: finish
+ ↓
+"18% of 240 is 43.2."
+```
+
+But for:
+
+> Explain what a percentage means.
+
+it may decide no calculator is needed:
+
+```text
+Goal
+ ↓
+DECIDE: finish
+ ↓
+Explanation
+```
+
+That variable path is the heart of agentic control.
+
+## What should you save?
+
+For an agent, the final answer is only the last page of the story.
+
+Save the **trace**:
+
+```text
+agent_runs/run_001/
+├── goal.txt
+├── agent_prompt.txt
+├── tool_definitions.json
+├── trace.json
+├── config.json
+└── final_answer.txt
+```
+
+A trace lets you distinguish:
+
+```text
+Bad final answer
+      │
+      ├── bad decision?
+      ├── wrong tool arguments?
+      ├── tool failure?
+      ├── misunderstood observation?
+      └── failure to stop?
+```
+
+::: {.callout-tip}
+## The durable idea
+The LLM is not the whole agent.
+
+**Agent = model decision + tools + state + control loop + boundaries.**
+:::
+
+## Summary
+
+- An agent can ask an LLM to select the **next action**, not merely generate prose.
+- Structured actions make model decisions usable by software.
+- The core loop is **decide → act → observe → repeat**.
+- Tools execute actions; the model itself does not magically perform them.
+- Always define stopping conditions and permission boundaries.
+- Save the execution trace so agent behavior can be inspected and reproduced.
+
+**Next:** *Tools and Function Calling — Giving an LLM Actions*

@@ -1,0 +1,278 @@
+---
+title: "Tools and Function Calling: Giving an LLM Actions"
+description: "How tool schemas connect model decisions to safe application functions, APIs, databases, and other capabilities."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, Agentic AI, Tools, Function Calling]
+draft: false
+---
+
+An LLM can describe the weather, but it cannot know today's temperature merely by wishing for fresh data. It can explain arithmetic, but for reliable calculation we may prefer a calculator.
+
+**Tools bridge language and action.**
+
+::: {.callout-tip}
+## What you will learn
+- What a tool is in an LLM application
+- What function/tool calling actually means
+- Why tools need schemas
+- The difference between **choosing** and **executing**
+- How to validate tool arguments before execution
+:::
+
+## The restaurant-menu analogy
+
+A restaurant customer does not walk into the kitchen and operate every appliance.
+
+Instead, the customer receives a **menu**:
+
+```text
+MENU
+────────────────────────────
+weather(city)
+calculator(expression)
+search_documents(query)
+────────────────────────────
+```
+
+The menu says what can be requested and what information is required.
+
+A tool schema plays a similar role for the model.
+
+```text
+Model
+  │
+  │ chooses from allowed menu
+  ▼
+Tool request
+  │
+  │ application validates
+  ▼
+Function / API
+  │
+  ▼
+Result
+```
+
+::: {#def-tool}
+## Tool
+A **tool** is a capability exposed to an AI application through a defined interface. It might wrap a Python function, API, database query, retrieval system, file operation, or another service.
+:::
+
+## A tool needs a contract
+
+Suppose we expose:
+
+```python
+def weather(city):
+    ...
+```
+
+The model needs to know:
+
+- the tool name,
+- what it does,
+- what arguments it accepts,
+- the type of each argument.
+
+Conceptually:
+
+```json
+{
+  "name": "weather",
+  "description": "Get current weather for a city.",
+  "parameters": {
+    "city": {
+      "type": "string"
+    }
+  }
+}
+```
+
+This is a **schema**.
+
+The schema does not execute the function. It describes the callable interface.
+
+## Selection is not execution
+
+This distinction prevents much confusion.
+
+```text
+1. MODEL DECISION
+   {"tool": "weather", "city": "Austin"}
+
+2. APPLICATION VALIDATION
+   Is "weather" allowed?
+   Is "city" present?
+   Is its type valid?
+
+3. TOOL EXECUTION
+   weather(city="Austin")
+
+4. OBSERVATION
+   {"temperature": ..., "condition": ...}
+
+5. MODEL RESPONSE
+   Natural-language answer
+```
+
+The model proposes.  
+The application controls execution.
+
+## Build a tiny tool registry
+
+```{.python filename="tool_registry.py"}
+import json
+
+def calculator(expression):
+    allowed = set("0123456789.+-*/() ")
+    if not set(expression) <= allowed:
+        raise ValueError("Unsupported expression")
+    return eval(expression, {"__builtins__": {}})
+
+def word_count(text):
+    return len(text.split())
+
+TOOLS = {
+    "calculator": {
+        "function": calculator,
+        "required": ["expression"]
+    },
+    "word_count": {
+        "function": word_count,
+        "required": ["text"]
+    }
+}
+
+def execute_tool(tool_call):
+    name = tool_call["name"]
+    arguments = tool_call.get("arguments", {})
+
+    if name not in TOOLS:
+        raise ValueError(f"Tool not allowed: {name}")
+
+    spec = TOOLS[name]
+
+    missing = [
+        key for key in spec["required"]
+        if key not in arguments
+    ]
+
+    if missing:
+        raise ValueError(
+            f"Missing arguments: {missing}"
+        )
+
+    return spec["function"](**arguments)
+
+tool_call = {
+    "name": "calculator",
+    "arguments": {
+        "expression": "18 / 100 * 240"
+    }
+}
+
+result = execute_tool(tool_call)
+
+print(json.dumps({
+    "tool_call": tool_call,
+    "result": result
+}, indent=2))
+```
+
+This small registry creates an important boundary:
+
+```text
+Model output
+    ↓
+Allowed tool?
+    ↓
+Arguments valid?
+    ↓
+Execute
+```
+
+## Read-only and write tools are different
+
+Compare:
+
+```text
+get_weather("Austin")
+```
+
+with:
+
+```text
+send_email(...)
+delete_record(...)
+purchase_item(...)
+```
+
+The first reads information. The others can change the outside world.
+
+::: {.callout-warning}
+## Side effects deserve stronger controls
+For tools that send, delete, purchase, publish, modify, or otherwise create consequential side effects, consider explicit authorization, confirmation, idempotency, access controls, and detailed audit logs.
+
+A valid-looking model request is not automatically permission to execute it.
+:::
+
+## Tool errors are observations too
+
+A tool may fail:
+
+```text
+Agent → weather("Atlantis")
+             ↓
+       city not found
+```
+
+The error should become a structured observation that the system can handle rather than an invisible crash.
+
+```python
+try:
+    result = execute_tool(tool_call)
+    observation = {
+        "status": "success",
+        "result": result
+    }
+except Exception as exc:
+    observation = {
+        "status": "error",
+        "message": str(exc)
+    }
+```
+
+Now the agent can decide whether to retry, ask the user, choose another tool, or stop.
+
+## What should you save?
+
+Tool-enabled applications should preserve an **audit trail**:
+
+```text
+tool_run/
+├── tool_schemas.json
+├── model_decision.json
+├── validated_arguments.json
+├── tool_result.json
+└── final_response.txt
+```
+
+For side-effecting tools, also preserve authorization/approval information appropriate to the application.
+
+::: {.callout-tip}
+## One sentence to remember
+**Function calling is structured intent; your application still owns execution.**
+:::
+
+## Summary
+
+- Tools extend an LLM application beyond text generation.
+- A schema tells the model what tools exist and what arguments they require.
+- Tool selection and tool execution are separate operations.
+- Validate tool names and arguments before executing anything.
+- Treat tool failures as structured observations.
+- Use stronger controls for tools that change external systems.
+- Save tool calls and results for reproducibility and auditing.
+
+**Next:** *Multi-Agent Systems — When One Agent Is Not Enough*
