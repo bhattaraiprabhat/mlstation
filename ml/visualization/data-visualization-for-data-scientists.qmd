@@ -1,1831 +1,890 @@
 ---
 title: "Data Visualization for Data Scientists: From Question to Plot"
-description: "A practical, Python-first guide to choosing and building the plots Data Scientists use most—from EDA and experimentation to model evaluation, time series and interactive business exploration."
+description: "A practical, Python-first guide to common Data Science plots with simulated data, reproducible code and interactive examples."
 author: "MLStation"
-date: 2026-10-01
+date: 2026-10-02
 categories: [Data Science, Visualization, Python]
 draft: false
 ---
 
 <style>
-.viz-hero {
-  padding: 1.3rem 1.45rem; border-radius:18px;
-  background:linear-gradient(135deg,#eff6ff 0%,#f5f3ff 48%,#ecfdf5 100%);
-  border:1px solid #dbeafe; margin:1rem 0 1.4rem;
-}
-.viz-hero .big {font-size:1.28rem;font-weight:760;margin-bottom:.35rem}
-.viz-flow {
-  padding:.9rem 1rem;border-radius:14px;background:#111827;color:#f9fafb;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto;
-}
-.viz-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:.8rem;margin:1rem 0}
-.viz-card {border:1px solid #e5e7eb;border-radius:14px;padding:.9rem 1rem;background:#fff}
-.viz-card h4 {margin-top:0}
-.viz-blue {border-left:5px solid #2563eb;background:#eff6ff;padding:.85rem 1rem;border-radius:10px}
-.viz-green {border-left:5px solid #059669;background:#ecfdf5;padding:.85rem 1rem;border-radius:10px}
-.viz-amber {border-left:5px solid #d97706;background:#fffbeb;padding:.85rem 1rem;border-radius:10px}
-.viz-red {border-left:5px solid #e11d48;background:#fff1f2;padding:.85rem 1rem;border-radius:10px}
+.viz-hero{padding:1.3rem 1.45rem;border-radius:18px;background:linear-gradient(135deg,#eff6ff,#f5f3ff,#ecfdf5);border:1px solid #dbeafe;margin:1rem 0 1.4rem}.viz-hero .big{font-size:1.28rem;font-weight:760}.viz-flow{padding:.9rem 1rem;border-radius:14px;background:#111827;color:#f9fafb;font-family:monospace;overflow-x:auto}.viz-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:.8rem;margin:1rem 0}.viz-card{border:1px solid #e5e7eb;border-radius:14px;padding:.9rem 1rem;background:#fff}.viz-blue{border-left:5px solid #2563eb;background:#eff6ff;padding:.85rem 1rem;border-radius:10px}.viz-green{border-left:5px solid #059669;background:#ecfdf5;padding:.85rem 1rem;border-radius:10px}.viz-amber{border-left:5px solid #d97706;background:#fffbeb;padding:.85rem 1rem;border-radius:10px}.viz-red{border-left:5px solid #e11d48;background:#fff1f2;padding:.85rem 1rem;border-radius:10px}
 </style>
 
-<div class="viz-hero">
-<div class="big">📊 A good plot is not decoration. It is a question made visible.</div>
+<div class="viz-hero"><div class="big">📊 A good plot is not decoration. It is a question made visible.</div>
 
-The Data Scientist's job is not to produce the largest possible collection of charts. It is to choose a visual representation that makes the **important comparison, pattern, uncertainty or failure** difficult to miss.
-</div>
+Choose the **question first**, the **plot second**, and the **library third**.</div>
 
-A histogram asks *what values are common?*  
-A box plot asks *how do distributions differ across groups?*  
-A scatter plot asks *how do two variables move together?*  
-A line plot asks *how does something evolve?*  
-A residual plot asks *where is my model systematically wrong?*
+Every worked example follows one contract:
 
-This chapter is organized around those questions.
+<div class="viz-flow">QUESTION → DATA SIMULATOR → PLOT CODE → VISIBLE CHART → INTERPRETATION</div>
+
+The chart is always visible. **View Data Simulator** and **View Plot Code** expand and collapse independently. This lets a beginner focus on the picture first and inspect reproducible Python when ready.
 
 ::: {.callout-tip}
 ## What you will learn
-
-- When to use Matplotlib, Seaborn, Plotly and Bokeh
-- Histogram, KDE, ECDF, box, violin and strip plots
-- Bar/count plots for categorical comparisons
-- Scatter, regression, hexbin and density plots
-- Line plots and uncertainty bands for time series
-- Correlation heatmaps and pair plots
-- Faceting and small multiples
-- Error bars and experimentation plots
-- Confusion matrices, ROC, PR, calibration and residual plots
-- Feature importance and diagnostic plots
-- Geographic, funnel and Sankey-style business visualization
-- Interactive hover, zoom, filtering and animation
-- How to simulate realistic datasets for visualization practice
-- How to avoid misleading plots
+Distribution, comparison, relationship, time-series, experimentation, multivariate, model-diagnostic, geographic and interactive visualization using Matplotlib, Seaborn, Plotly and Bokeh, plus guidance on modern alternatives.
 :::
 
 # 1. Visualization Starts with the Question
 
 <div class="viz-grid">
-
-<div class="viz-card">
-
-#### 🔍 Distribution
-What values are typical? Skewed? Multimodal? Extreme?
-
-**Histogram · KDE · ECDF · Box · Violin**
-
-</div>
-
-<div class="viz-card">
-
-#### ⚖️ Comparison
-Which group, product or experiment arm differs?
-
-**Bar · Box · Violin · Point · Error bar**
-
-</div>
-
-<div class="viz-card">
-
-#### 🔗 Relationship
-Do two variables move together?
-
-**Scatter · Regression · Hexbin · Heatmap**
-
-</div>
-
-<div class="viz-card">
-
-#### ⏱️ Time
-What changed, when, and how?
-
-**Line · Area · Rolling mean · Control-style plots**
-
-</div>
-
-<div class="viz-card">
-
-#### 🤖 Model
-Where does the model succeed or fail?
-
-**Residual · Confusion matrix · ROC · PR · Calibration**
-
-</div>
-
-<div class="viz-card">
-
-#### 🌍 Location / Flow
-Where does behavior occur? How does it move?
-
-**Maps · Funnel · Sankey · Network-like views**
-
-</div>
-
-</div>
-
-<div class="viz-flow">
-QUESTION → DATA TYPE → COMPARISON → PLOT → CHECK DISTORTION → COMMUNICATE
+<div class="viz-card"><b>🔍 Distribution</b><br>Histogram · KDE · ECDF · Box · Violin</div>
+<div class="viz-card"><b>⚖️ Comparison</b><br>Bar · Box · Error bars · Small multiples</div>
+<div class="viz-card"><b>🔗 Relationship</b><br>Scatter · Regression · Hexbin</div>
+<div class="viz-card"><b>⏱️ Time</b><br>Line · Rolling trend · Uncertainty band</div>
+<div class="viz-card"><b>🤖 Model</b><br>Confusion · ROC · PR · Calibration · Residuals</div>
+<div class="viz-card"><b>🌍 Location / Flow</b><br>Maps · Funnels</div>
 </div>
 
 # 2. The Python Visualization Ecosystem
 
-## 2.1 Matplotlib: the foundation
+**Matplotlib** is the low-level foundation and is commonly static-first. **Seaborn** builds statistical graphics on Matplotlib. **Plotly** and **Bokeh** make browser interaction—hover, zoom, selection and widgets—a central strength. Matplotlib can also use interactive backends, so “Matplotlib is never interactive” is not technically correct.
 
-Matplotlib gives fine control over figures, axes, annotations, layouts and export.
+## 2.1. Matplotlib — Precise Figure Control
 
-```python
-import matplotlib.pyplot as plt
-
-fig, ax = plt.subplots(figsize=(8, 4))
-ax.plot(x, y)
-ax.set(
-    title="Weekly Revenue",
-    xlabel="Week",
-    ylabel="Revenue ($)"
-)
-plt.show()
-```
-
-**Best fit:** publication/report figures, custom analytical plots, low-level control.
-
-## 2.2 Seaborn: statistical visualization with strong defaults
-
-Seaborn sits on top of Matplotlib and makes many statistical plots concise.
-
-```python
-import seaborn as sns
-
-sns.boxplot(data=df, x="segment", y="revenue")
-```
-
-**Best fit:** EDA, distributions, grouped comparisons, regression views, statistical graphics.
-
-## 2.3 Plotly: browser-native exploration
-
-Plotly figures naturally support hover, zoom, pan, selection and other browser interactions.
-
-```python
-import plotly.express as px
-
-fig = px.scatter(
-    df,
-    x="sessions",
-    y="revenue",
-    color="segment",
-    hover_data=["customer_id"]
-)
-fig.show()
-```
-
-**Best fit:** exploratory interactive figures, stakeholder-facing HTML, dashboards and drill-down.
-
-## 2.4 Bokeh: interactive browser visualization and applications
-
-Bokeh is another strong Python ecosystem for browser-based interactive visualization, linked selections, widgets and applications.
-
-```python
-from bokeh.plotting import figure, show
-
-p = figure(
-    title="Revenue vs Sessions",
-    tools="pan,wheel_zoom,box_zoom,reset,hover"
-)
-p.scatter(df["sessions"], df["revenue"])
-show(p)
-```
-
-## 2.5 Static versus interactive: an important nuance
-
-<div class="viz-blue">
-
-### Matplotlib/Seaborn vs. Plotly/Bokeh
-
-For ordinary Data Science work:
-
-- **Matplotlib** → commonly used for static figures, but it also supports interactive backends and animation.
-- **Seaborn** → statistical plotting interface built on Matplotlib; most commonly used for static EDA/report figures.
-- **Plotly** → interactive browser visualization is a core strength.
-- **Bokeh** → designed around interactive browser plots, widgets and data applications.
-
-So “Matplotlib cannot be interactive” is too strong. A better practical distinction is **static-first analytical plotting versus browser-interactive-first plotting**.
-
-</div>
-
-# 3. Build One Simulated Company Dataset
-
-Throughout the chapter we will reuse a fictional subscription/product company.
-
-The simulation code is intentionally hidden by default in rendered Quarto output.
+**Company question:** How is weekly revenue changing?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show simulated company-data code"
+#| code-summary: "View Data Simulator"
+#| warning: false
 import numpy as np
 import pandas as pd
-
-rng = np.random.default_rng(42)
-n = 3500
-
-customers = pd.DataFrame({
-    "customer_id": np.arange(1, n + 1),
-    "segment": rng.choice(
-        ["Consumer", "SMB", "Enterprise"],
-        n, p=[.58, .30, .12]
-    ),
-    "region": rng.choice(
-        ["North", "South", "East", "West"],
-        n
-    ),
-    "device": rng.choice(
-        ["Web", "iOS", "Android"],
-        n, p=[.45, .28, .27]
-    ),
-    "sessions": rng.poisson(9, n) + 1,
-    "tenure_months": rng.integers(1, 72, n),
-    "support_tickets": rng.poisson(1.4, n),
-})
-
-segment_value = customers["segment"].map({
-    "Consumer": 0,
-    "SMB": 35,
-    "Enterprise": 115
-}).to_numpy()
-
-customers["monthly_revenue"] = np.maximum(
-    5,
-    18
-    + 4.8 * customers["sessions"].to_numpy()
-    + segment_value
-    + rng.normal(0, 28, n)
-)
-
-customers["satisfaction"] = np.clip(
-    4.4
-    - .20 * customers["support_tickets"].to_numpy()
-    + rng.normal(0, .55, n),
-    1, 5
-)
-
-churn_logit = (
-    -2.3
-    + .38 * customers["support_tickets"].to_numpy()
-    - .025 * customers["tenure_months"].to_numpy()
-    - .35 * (customers["segment"].to_numpy() == "Enterprise")
-)
-
-p_churn = 1 / (1 + np.exp(-churn_logit))
-customers["churn"] = rng.binomial(1, p_churn)
-
-customers.head()
+rng=np.random.default_rng(1)
+mat_df=pd.DataFrame({"week":np.arange(1,21)})
+mat_df["revenue"]=85000+1800*mat_df["week"]+rng.normal(0,4500,20)
 ```
-
-::: {.callout-note}
-## Quarto: hide simulation code but keep the result
-
-Use:
-
-```text
-#| code-fold: true
-#| code-summary: "Show simulated data code"
-```
-
-The reader sees the output/plot and can expand the code when interested.
-
-Use `#| echo: false` instead if the code should never be displayed.
-:::
-
-# 4. Histogram — “What Does This Variable Look Like?”
-
-## Use when
-
-- checking skew,
-- identifying multiple modes,
-- understanding range,
-- spotting extreme tails,
-- comparing observed values with assumptions.
-
-### Company question
-
-> What does monthly customer revenue look like?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show Matplotlib histogram code"
+#| code-summary: "View Plot Code"
+#| warning: false
 import matplotlib.pyplot as plt
-
-fig, ax = plt.subplots(figsize=(8, 4))
-ax.hist(customers["monthly_revenue"], bins=35, edgecolor="white")
-ax.set(
-    title="Distribution of Monthly Customer Revenue",
-    xlabel="Monthly revenue ($)",
-    ylabel="Customers"
-)
-plt.show()
+fig,ax=plt.subplots(figsize=(8,4))
+ax.plot(mat_df["week"],mat_df["revenue"],marker="o")
+ax.set(title="Weekly Revenue",xlabel="Week",ylabel="Revenue ($)")
+fig.tight_layout(); plt.show()
 ```
 
-### Seaborn
+**Best for:** custom static analytical figures, reports, annotations and fine control.
 
-```python
+
+## 2.2. Seaborn — Statistical Visualization
+
+**Company question:** How does revenue differ across segments?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(2)
+seg=rng.choice(["Consumer","SMB","Enterprise"],900,p=[.55,.3,.15])
+base=pd.Series(seg).map({"Consumer":70,"SMB":125,"Enterprise":220}).to_numpy()
+sns_df=pd.DataFrame({"segment":seg,"revenue":np.maximum(5,base+rng.normal(0,32,900))})
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
 import seaborn as sns
-
-sns.histplot(
-    data=customers,
-    x="monthly_revenue",
-    bins=35,
-    kde=True
-)
+fig,ax=plt.subplots(figsize=(7.5,4))
+sns.boxplot(data=sns_df,x="segment",y="revenue",ax=ax)
+ax.set(title="Monthly Revenue by Segment",ylabel="Revenue ($)")
+fig.tight_layout(); plt.show()
 ```
 
-<div class="viz-amber">
+**Best for:** EDA, grouped distributions, statistical comparisons and regression views.
 
-### Bin width changes the story
 
-Too few bins hide structure. Too many bins emphasize random noise.
+## 2.3. Plotly — Interactive Exploration
 
-Never interpret tiny histogram bumps before checking whether they survive reasonable bin choices.
-
-</div>
-
-# 5. KDE — “What Is the Smooth Distribution Shape?”
-
-Kernel Density Estimation creates a smoothed estimate of density.
-
-```python
-sns.kdeplot(
-    data=customers,
-    x="monthly_revenue",
-    hue="segment",
-    common_norm=False
-)
-```
-
-Useful for comparing smooth shapes, but remember: the smoothness is estimated.
-
-**Do not use KDE carelessly for strongly discrete variables** such as number of support tickets.
-
-# 6. ECDF — “What Fraction Is Below This Value?”
-
-The empirical cumulative distribution function answers:
-
-$$
-\widehat F(x)
-=
-\frac{\#\{X_i\le x\}}{n}.
-$$
+**Company question:** Which individual customers sit behind the overall pattern?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show ECDF code"
-import seaborn as sns
-
-g = sns.ecdfplot(
-    data=customers,
-    x="monthly_revenue",
-    hue="segment"
-)
-g.set(
-    title="ECDF of Revenue by Customer Segment",
-    xlabel="Monthly revenue ($)",
-    ylabel="Fraction ≤ x"
-)
-plt.show()
-```
-
-### Why Data Scientists should use ECDFs more often
-
-Unlike a histogram, an ECDF has **no bin-width choice**.
-
-You can directly answer questions such as:
-
-> What fraction of SMB customers generate at most $100/month?
-
-# 7. Box Plot — “How Do Groups Differ?”
-
-A box plot compresses a distribution into:
-
-- median,
-- quartiles,
-- IQR,
-- whiskers,
-- potential outliers.
-
-### Company question
-
-> Does revenue differ by customer segment?
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show box-plot code"
-fig, ax = plt.subplots(figsize=(7.5, 4))
-sns.boxplot(
-    data=customers,
-    x="segment",
-    y="monthly_revenue",
-    ax=ax
-)
-ax.set(
-    title="Monthly Revenue by Segment",
-    xlabel="Customer segment",
-    ylabel="Revenue ($)"
-)
-plt.show()
-```
-
-<div class="viz-green">
-
-### Why box plots survive in companies
-
-They are compact, familiar, and excellent when you need to compare **many groups without drawing thousands of individual observations**.
-
-</div>
-
-# 8. Violin + Strip Plot — “Show Me Shape AND Observations”
-
-A violin plot exposes density shape. A strip plot shows actual observations.
-
-For a manageable sample:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show violin/strip code"
-sample = customers.sample(500, random_state=7)
-
-fig, ax = plt.subplots(figsize=(8, 4))
-sns.violinplot(
-    data=sample,
-    x="segment",
-    y="monthly_revenue",
-    inner=None,
-    ax=ax
-)
-sns.stripplot(
-    data=sample,
-    x="segment",
-    y="monthly_revenue",
-    alpha=.28,
-    size=2.5,
-    ax=ax
-)
-ax.set_title("Distribution Shape + Individual Customers")
-plt.show()
-```
-
-Use violin plots when the **shape itself** matters.
-
-Use box plots when compact comparison matters more.
-
-# 9. Bar Plot — “Compare Categories”
-
-Bar plots are excellent for categorical summaries.
-
-### Company question
-
-> What is average churn rate by segment?
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show aggregation and bar-chart code"
-churn_by_segment = (
-    customers.groupby("segment", as_index=False)
-    .agg(churn_rate=("churn", "mean"))
-)
-
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.bar(
-    churn_by_segment["segment"],
-    churn_by_segment["churn_rate"]
-)
-ax.set(
-    title="Churn Rate by Segment",
-    xlabel="Segment",
-    ylabel="Churn rate"
-)
-ax.set_ylim(0, churn_by_segment["churn_rate"].max() * 1.25)
-plt.show()
-```
-
-<div class="viz-red">
-
-### Bar-chart rule: zero usually matters
-
-Bar length encodes magnitude. Truncating the y-axis can dramatically exaggerate differences.
-
-Line and scatter plots have different geometry; their axes need not always begin at zero.
-
-</div>
-
-# 10. Count Plot — “How Many Cases Are in Each Category?”
-
-```python
-sns.countplot(
-    data=customers,
-    x="device",
-    hue="segment"
-)
-```
-
-Before interpreting percentages or model performance across groups, first check **how much data each group actually contains**.
-
-# 11. Scatter Plot — “How Are Two Numerical Variables Related?”
-
-### Company question
-
-> Do customers with more sessions generate more revenue?
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show scatter-plot code"
-fig, ax = plt.subplots(figsize=(8, 4.5))
-ax.scatter(
-    customers["sessions"],
-    customers["monthly_revenue"],
-    alpha=.22,
-    s=18
-)
-ax.set(
-    title="Sessions vs Monthly Revenue",
-    xlabel="Monthly sessions",
-    ylabel="Monthly revenue ($)"
-)
-plt.show()
-```
-
-Look for:
-
-- direction,
-- nonlinearity,
-- clusters,
-- changing variance,
-- outliers.
-
-# 12. Regression Plot — “What Is the Trend?”
-
-```python
-sns.regplot(
-    data=customers,
-    x="sessions",
-    y="monthly_revenue",
-    scatter_kws={"alpha": .15},
-    line_kws={"linewidth": 2}
-)
-```
-
-The fitted line summarizes an association.
-
-::: {.callout-warning}
-## A regression line is not a causal arrow
-
-A beautiful trend line does not prove that changing $X$ will cause $Y$ to change.
-:::
-
-# 13. Overplotting: Hexbin and 2D Density
-
-Scatter plots become dark clouds with hundreds of thousands of points.
-
-Simulate a larger event dataset:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show dense-data simulation"
-rng_dense = np.random.default_rng(8)
-m = 75_000
-
-x_dense = rng_dense.normal(size=m)
-y_dense = .65*x_dense + rng_dense.normal(0, .75, m)
-```
-
-Use hexagonal bins:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show hexbin code"
-fig, ax = plt.subplots(figsize=(7, 5))
-hb = ax.hexbin(
-    x_dense,
-    y_dense,
-    gridsize=45,
-    mincnt=1
-)
-fig.colorbar(hb, ax=ax, label="Observations")
-ax.set(
-    title="Hexbin Reveals Density Hidden by Overplotting",
-    xlabel="x",
-    ylabel="y"
-)
-plt.show()
-```
-
-**Company use cases:** telemetry, clickstream, transaction clouds, sensor data.
-
-# 14. Line Plot — “What Changed Over Time?”
-
-Simulate daily business metrics:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show time-series simulation"
-rng_ts = np.random.default_rng(14)
-dates = pd.date_range("2026-01-01", periods=240, freq="D")
-t = np.arange(len(dates))
-
-daily = pd.DataFrame({
-    "date": dates,
-    "revenue": (
-        120_000
-        + 180*t
-        + 10_000*np.sin(2*np.pi*t/7)
-        + rng_ts.normal(0, 6500, len(t))
-    )
-})
-
-daily["rolling_14d"] = daily["revenue"].rolling(14).mean()
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(3); n=650
+px_df=pd.DataFrame({"customer_id":np.arange(10001,10001+n),"segment":rng.choice(["Consumer","SMB","Enterprise"],n,p=[.55,.3,.15]),"sessions":rng.poisson(9,n)+1,"tickets":rng.poisson(1.5,n)})
+px_df["revenue"]=25+5.5*px_df["sessions"]+px_df["segment"].map({"Consumer":0,"SMB":40,"Enterprise":110})+rng.normal(0,25,n)
 ```
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show line-plot code"
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(
-    daily["date"],
-    daily["revenue"],
-    alpha=.35,
-    label="Daily"
-)
-ax.plot(
-    daily["date"],
-    daily["rolling_14d"],
-    linewidth=2,
-    label="14-day rolling mean"
-)
-ax.set(
-    title="Revenue: Daily Noise vs Underlying Movement",
-    xlabel="Date",
-    ylabel="Revenue ($)"
-)
-ax.legend()
-plt.show()
-```
-
-<div class="viz-blue">
-
-### Time belongs on an ordered axis
-
-Do not sort time-series rows by the metric before plotting. The chronology **is information**.
-
-</div>
-
-# 15. Uncertainty Bands
-
-A line without uncertainty can imply false precision.
-
-Simulate an estimated metric and interval:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show uncertainty simulation"
-weeks = np.arange(1, 21)
-estimate = .12 + .002*weeks + rng_ts.normal(0, .004, len(weeks))
-se = np.linspace(.012, .006, len(weeks))
-
-lower = estimate - 1.96*se
-upper = estimate + 1.96*se
-
-fig, ax = plt.subplots(figsize=(8, 4))
-ax.plot(weeks, estimate, linewidth=2)
-ax.fill_between(weeks, lower, upper, alpha=.2)
-ax.set(
-    title="Estimate with 95% Uncertainty Band",
-    xlabel="Week",
-    ylabel="Conversion rate"
-)
-plt.show()
-```
-
-Use uncertainty visualization for:
-
-- forecasts,
-- experiments,
-- model estimates,
-- survey estimates,
-- statistical effects.
-
-# 16. Error-Bar Plot — Essential for Experiments
-
-### Company question
-
-> Which experiment variant improved conversion—and how uncertain is the estimate?
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show A/B-test simulation and error-bar code"
-rng_ab = np.random.default_rng(55)
-
-experiment = pd.DataFrame({
-    "variant": ["Control", "Treatment A", "Treatment B"],
-    "conversion": [.100, .112, .107],
-    "n": [12000, 11850, 12120]
-})
-
-experiment["se"] = np.sqrt(
-    experiment["conversion"]
-    * (1 - experiment["conversion"])
-    / experiment["n"]
-)
-experiment["ci95"] = 1.96 * experiment["se"]
-
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.errorbar(
-    experiment["variant"],
-    experiment["conversion"],
-    yerr=experiment["ci95"],
-    fmt="o",
-    capsize=5
-)
-ax.set(
-    title="Experiment Conversion Rate ± 95% Approximate CI",
-    xlabel="Variant",
-    ylabel="Conversion rate"
-)
-plt.show()
-```
-
-A table gives numbers. The error-bar plot makes **effect size and uncertainty visible simultaneously**.
-
-# 17. Heatmap — “Where Is the Pattern in a Matrix?”
-
-## 17.1 Correlation heatmap
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show correlation-heatmap code"
-cols = [
-    "sessions",
-    "tenure_months",
-    "support_tickets",
-    "monthly_revenue",
-    "satisfaction",
-    "churn"
-]
-
-corr = customers[cols].corr()
-
-fig, ax = plt.subplots(figsize=(7, 5))
-sns.heatmap(
-    corr,
-    annot=True,
-    fmt=".2f",
-    center=0,
-    ax=ax
-)
-ax.set_title("Correlation Matrix")
-plt.show()
-```
-
-Use it for **screening relationships**, not declaring causality.
-
-## 17.2 Operational heatmap
-
-Heatmaps are also excellent for:
-
-```text
-hour × weekday
-product × region
-model × metric
-segment × funnel stage
-```
-
-They are not restricted to correlations.
-
-# 18. Pair Plot — “Give Me a Multivariate First Look”
-
-```python
-sns.pairplot(
-    customers.sample(600, random_state=1),
-    vars=[
-        "sessions",
-        "monthly_revenue",
-        "tenure_months",
-        "satisfaction"
-    ],
-    hue="segment"
-)
-```
-
-Pair plots are excellent during early EDA.
-
-They become unwieldy as the number of variables grows:
-
-$$
-p\text{ variables}\quad\Rightarrow\quad p^2\text{ panels}.
-$$
-
-Choose a meaningful subset.
-
-# 19. Faceting / Small Multiples
-
-Instead of forcing everything into color and marker style, create repeated panels.
-
-```python
-sns.relplot(
-    data=customers.sample(1200, random_state=3),
-    x="sessions",
-    y="monthly_revenue",
-    col="segment",
-    hue="device",
-    kind="scatter",
-    alpha=.45
-)
-```
-
-Small multiples are powerful because each panel uses the **same visual grammar**.
-
-### Company question
-
-> Does the sessions–revenue relationship look similar across customer segments?
-
-# 20. Stacked Bars: Useful, but Use Carefully
-
-A stacked bar can show composition:
-
-```python
-mix = pd.crosstab(
-    customers["region"],
-    customers["device"],
-    normalize="index"
-)
-
-mix.plot(
-    kind="bar",
-    stacked=True,
-    figsize=(8,4)
-)
-plt.ylabel("Share")
-plt.title("Device Mix by Region")
-plt.show()
-```
-
-<div class="viz-amber">
-
-### Comparison problem
-
-Only the first stack segment shares a common baseline. Middle segments are harder to compare precisely.
-
-If precise cross-group comparison matters, consider grouped bars, a heatmap or small multiples.
-</div>
-
-# 21. Interactive Plotly — Let the Reader Investigate
-
-Static scatter plot:
-
-```text
-point at (12, $150)
-```
-
-Interactive scatter plot:
-
-```text
-hover →
-customer 1842
-segment: SMB
-sessions: 12
-revenue: $150
-support tickets: 3
-```
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show Plotly interactive-scatter code"
+#| code-summary: "View Plot Code"
+#| warning: false
 import plotly.express as px
-
-plot_sample = customers.sample(1200, random_state=11)
-
-fig = px.scatter(
-    plot_sample,
-    x="sessions",
-    y="monthly_revenue",
-    color="segment",
-    size="support_tickets",
-    hover_data=[
-        "customer_id",
-        "region",
-        "device",
-        "satisfaction"
-    ],
-    title="Interactive Customer Explorer"
-)
-
+fig=px.scatter(px_df,x="sessions",y="revenue",color="segment",size="tickets",hover_data=["customer_id"],title="Interactive Customer Explorer")
 fig.show()
 ```
 
-With Plotly, the reader can typically:
+Hover, zoom, pan, select and toggle legend groups directly in the rendered chart.
 
-- hover,
-- zoom,
-- pan,
-- select,
-- toggle legend groups,
-- inspect exact values.
 
-<div class="viz-green">
+## 2.4. Bokeh — Interactive Browser Plots
 
-### Static explains. Interactive lets the reader ask follow-up questions.
-
-Neither is universally better.
-
-Use static plots when you control the narrative.
-
-Use interactive plots when exploration and detail-on-demand create value.
-</div>
-
-# 22. Interactive Plotly Time Series
+**Company question:** Can an analyst inspect and zoom into customers?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show interactive time-series code"
-fig = px.line(
-    daily,
-    x="date",
-    y=["revenue", "rolling_14d"],
-    title="Interactive Revenue Timeline"
-)
-
-fig.update_xaxes(
-    rangeslider_visible=True
-)
-
-fig.show()
-```
-
-This is particularly useful for long time series because users can zoom into incidents or campaigns.
-
-# 23. Plotly Animation — Show Change, Not Just State
-
-Simulate quarterly segment metrics:
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show animation-data simulation"
-rng_anim = np.random.default_rng(77)
-rows = []
-
-for quarter in ["Q1", "Q2", "Q3", "Q4"]:
-    q = int(quarter[-1])
-    for segment, base in [
-        ("Consumer", 70),
-        ("SMB", 115),
-        ("Enterprise", 205)
-    ]:
-        rows.append({
-            "quarter": quarter,
-            "segment": segment,
-            "revenue": base + 8*q + rng_anim.normal(0,5),
-            "retention": min(.98, .72 + .045*q + base/2000)
-        })
-
-quarterly = pd.DataFrame(rows)
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(4); n=500
+bk_df=pd.DataFrame({"customer_id":np.arange(1,n+1),"sessions":rng.poisson(10,n)+1})
+bk_df["revenue"]=(35+6*bk_df["sessions"]+rng.normal(0,30,n)).clip(5)
 ```
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show Plotly animation code"
-fig = px.scatter(
-    quarterly,
-    x="revenue",
-    y="retention",
-    color="segment",
-    animation_frame="quarter",
-    size="revenue",
-    range_x=[50,270],
-    range_y=[.65,1.0],
-    title="Segment Performance Through the Year"
-)
-
-fig.show()
-```
-
-Animation is useful when **change itself is the message**.
-
-Do not animate merely because the library allows it.
-
-# 24. Bokeh — Interactive Browser Plotting
-
-```{python}
-#| code-fold: true
-#| code-summary: "Show Bokeh interactive-plot code"
-from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, HoverTool
-
-bokeh_sample = customers.sample(700, random_state=13)
-source = ColumnDataSource(bokeh_sample)
-
-p = figure(
-    width=800,
-    height=400,
-    title="Bokeh: Revenue vs Sessions",
-    tools="pan,wheel_zoom,box_zoom,box_select,reset,save"
-)
-
-p.scatter(
-    x="sessions",
-    y="monthly_revenue",
-    source=source,
-    size=7,
-    alpha=.45
-)
-
-p.add_tools(HoverTool(tooltips=[
-    ("Customer", "@customer_id"),
-    ("Segment", "@segment"),
-    ("Sessions", "@sessions"),
-    ("Revenue", "@monthly_revenue{0.0}")
-]))
-
-p.xaxis.axis_label = "Sessions"
-p.yaxis.axis_label = "Monthly revenue ($)"
-
+#| code-summary: "View Plot Code"
+#| warning: false
+from bokeh.plotting import figure,show
+from bokeh.models import ColumnDataSource,HoverTool
+source=ColumnDataSource(bk_df)
+p=figure(width=800,height=380,title="Bokeh: Revenue vs Sessions",tools="pan,wheel_zoom,box_zoom,reset")
+p.scatter(x="sessions",y="revenue",source=source,size=7,alpha=.45)
+p.add_tools(HoverTool(tooltips=[("Customer","@customer_id"),("Revenue","@revenue{0.0}")]))
 show(p)
 ```
 
-Bokeh becomes particularly interesting when you need:
+Bokeh is especially useful for linked selections, widgets and browser applications.
 
-- linked plots,
-- widgets,
-- selections,
-- streaming updates,
-- browser applications.
 
-# 25. Model Visualization: Confusion Matrix
+# 3. Histogram — Distribution Shape
 
-Simulate a binary classifier:
+**Company question:** What does monthly customer revenue look like?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show classification simulation"
-from sklearn.metrics import (
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    roc_curve,
-    roc_auc_score,
-    precision_recall_curve,
-    average_precision_score
-)
-
-rng_model = np.random.default_rng(88)
-m = 2500
-
-y_true = rng_model.binomial(1, .18, m)
-score = np.clip(
-    .12 + .55*y_true + rng_model.normal(0, .22, m),
-    0, 1
-)
-
-y_pred = (score >= .5).astype(int)
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(10)
+hist_df=pd.DataFrame({"revenue":rng.lognormal(4.35,.62,2500)})
 ```
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show confusion-matrix code"
-cm = confusion_matrix(y_true, y_pred)
-
-disp = ConfusionMatrixDisplay(
-    confusion_matrix=cm,
-    display_labels=["No churn", "Churn"]
-)
-disp.plot()
-plt.title("Churn Classifier: Confusion Matrix")
-plt.show()
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(8,4)); ax.hist(hist_df["revenue"],bins=38,edgecolor="white")
+ax.set(title="Distribution of Monthly Revenue",xlabel="Revenue ($)",ylabel="Customers"); fig.tight_layout(); plt.show()
 ```
 
-This answers:
+<div class="viz-amber"><b>Bin width matters.</b> Too few bins hide structure; too many emphasize noise.</div>
 
-> **What kinds of mistakes are being made?**
 
-Not merely:
+# 4. KDE — Smooth Distribution Comparison
 
-> What is accuracy?
-
-# 26. ROC Curve
-
-The ROC curve plots:
-
-$$
-TPR
-\quad\text{versus}\quad
-FPR
-$$
-
-across thresholds.
+**Company question:** Do segments have differently shaped revenue distributions?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show ROC-curve code"
-fpr, tpr, _ = roc_curve(y_true, score)
-auc = roc_auc_score(y_true, score)
-
-fig, ax = plt.subplots(figsize=(5.5, 5))
-ax.plot(fpr, tpr, label=f"AUC = {auc:.3f}")
-ax.plot([0,1], [0,1], linestyle="--")
-ax.set(
-    xlabel="False Positive Rate",
-    ylabel="True Positive Rate",
-    title="ROC Curve"
-)
-ax.legend()
-plt.show()
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(11)
+kde_df=pd.concat([pd.DataFrame({"segment":s,"revenue":rng.lognormal(mu,sd,700)}) for s,mu,sd in [("Consumer",4,.55),("SMB",4.55,.48),("Enterprise",5.25,.40)]],ignore_index=True)
 ```
-
-# 27. Precision–Recall Curve
-
-For rare positive classes, precision–recall views can be especially informative.
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show precision-recall code"
-precision, recall, _ = precision_recall_curve(
-    y_true,
-    score
-)
-
-ap = average_precision_score(y_true, score)
-
-fig, ax = plt.subplots(figsize=(5.5, 5))
-ax.plot(recall, precision, label=f"AP = {ap:.3f}")
-ax.set(
-    xlabel="Recall",
-    ylabel="Precision",
-    title="Precision–Recall Curve"
-)
-ax.legend()
-plt.show()
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(8,4)); sns.kdeplot(data=kde_df,x="revenue",hue="segment",common_norm=False,ax=ax)
+ax.set(title="Revenue Density by Segment",xlabel="Revenue ($)"); fig.tight_layout(); plt.show()
 ```
 
-### Company question
+KDE is estimated smoothness. Do not interpret every bump as a real population mode.
 
-> If Fraud Operations can investigate only a limited number of cases, what precision/recall tradeoff is acceptable?
 
-That is more actionable than a generic accuracy score.
+# 5. ECDF — Cumulative Distribution
 
-# 28. Calibration Plot — “Can I Trust 0.8 to Mean About 80%?”
-
-Ranking and probability calibration are different.
+**Company question:** What fraction of each segment falls below a revenue threshold?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show calibration-plot code"
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(12)
+ecdf_df=pd.concat([pd.DataFrame({"segment":s,"revenue":np.maximum(5,rng.normal(c,c*.28,600))}) for s,c in [("Consumer",65),("SMB",125),("Enterprise",225)]],ignore_index=True)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(8,4)); sns.ecdfplot(data=ecdf_df,x="revenue",hue="segment",ax=ax)
+ax.set(title="ECDF of Revenue by Segment",xlabel="Revenue ($)",ylabel="Fraction ≤ x"); fig.tight_layout(); plt.show()
+```
+
+The ECDF has no histogram-bin choice and makes percentile questions direct.
+
+
+# 6. Box Plot — Compact Group Comparison
+
+**Company question:** Which segment has the widest revenue distribution?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(13)
+box_df=pd.DataFrame({"segment":np.repeat(["Consumer","SMB","Enterprise"],500)})
+c=box_df["segment"].map({"Consumer":70,"SMB":130,"Enterprise":230}).to_numpy(); box_df["revenue"]=np.maximum(5,c+rng.normal(0,c*.25))
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(7.5,4)); sns.boxplot(data=box_df,x="segment",y="revenue",ax=ax)
+ax.set(title="Revenue by Segment",ylabel="Revenue ($)"); fig.tight_layout(); plt.show()
+```
+
+Box plots summarize median, quartiles, spread and potential outliers.
+
+
+# 7. Violin + Strip — Shape and Observations
+
+**Company question:** Do plans differ in the whole engagement distribution?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(14)
+violin_df=pd.DataFrame({"plan":np.repeat(["Standard","Premium"],220),"engagement":np.r_[rng.beta(2.2,4,220),rng.beta(4,2.4,220)]})
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(7,4)); sns.violinplot(data=violin_df,x="plan",y="engagement",inner=None,ax=ax); sns.stripplot(data=violin_df,x="plan",y="engagement",alpha=.28,size=2.5,ax=ax)
+ax.set_title("Engagement Distribution by Plan"); fig.tight_layout(); plt.show()
+```
+
+Use violin plots when distribution shape itself matters.
+
+
+# 8. Bar Plot — Categorical Summary
+
+**Company question:** Which segment has the highest churn rate?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(15); n=2400
+seg=rng.choice(["Consumer","SMB","Enterprise"],n,p=[.55,.3,.15]); prob=pd.Series(seg).map({"Consumer":.19,"SMB":.13,"Enterprise":.08}).to_numpy(); raw=pd.DataFrame({"segment":seg,"churn":rng.binomial(1,prob)}); bar_df=raw.groupby("segment",as_index=False).agg(churn_rate=("churn","mean"))
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(7,4)); ax.bar(bar_df["segment"],bar_df["churn_rate"]); ax.set(title="Churn Rate by Segment",ylabel="Churn rate",ylim=(0,bar_df["churn_rate"].max()*1.25)); fig.tight_layout(); plt.show()
+```
+
+<div class="viz-red"><b>Bar lengths need an honest baseline.</b> Truncating the y-axis can exaggerate differences.</div>
+
+
+# 9. Count Plot — Group Size
+
+**Company question:** How many customers use each device?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(16)
+count_df=pd.DataFrame({"device":rng.choice(["Web","iOS","Android"],1800,p=[.46,.28,.26]),"segment":rng.choice(["Consumer","SMB","Enterprise"],1800,p=[.56,.3,.14])})
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(8,4)); sns.countplot(data=count_df,x="device",hue="segment",ax=ax); ax.set(title="Customer Count by Device and Segment",ylabel="Customers"); fig.tight_layout(); plt.show()
+```
+
+Inspect sample size before interpreting subgroup metrics.
+
+
+# 10. Scatter Plot — Numerical Relationship
+
+**Company question:** Do more sessions correspond to more revenue?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(17); n=1300
+scatter_df=pd.DataFrame({"sessions":rng.poisson(10,n)+1}); scatter_df["revenue"]=(30+6.2*scatter_df["sessions"]+rng.normal(0,32,n)).clip(5)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(8,4.5)); ax.scatter(scatter_df["sessions"],scatter_df["revenue"],alpha=.25,s=18); ax.set(title="Sessions vs Monthly Revenue",xlabel="Sessions",ylabel="Revenue ($)"); fig.tight_layout(); plt.show()
+```
+
+Look for direction, curvature, clusters, changing variance and outliers.
+
+
+# 11. Regression Plot — Average Trend
+
+**Company question:** What average relationship is visible?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(18); n=900
+reg_df=pd.DataFrame({"sessions":rng.uniform(1,25,n)}); reg_df["revenue"]=25+5.8*reg_df["sessions"]+rng.normal(0,28,n)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(8,4.5)); sns.regplot(data=reg_df,x="sessions",y="revenue",scatter_kws={"alpha":.18,"s":18},ax=ax); ax.set_title("Average Revenue Trend with Sessions"); fig.tight_layout(); plt.show()
+```
+
+::: {.callout-warning}
+A fitted trend summarizes association, not causation.
+:::
+
+
+# 12. Hexbin — Dense Relationships
+
+**Company question:** How do two telemetry measures relate across 75,000 events?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+rng=np.random.default_rng(19); n=75000
+hex_x=rng.normal(size=n); hex_y=.65*hex_x+rng.normal(0,.75,n)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(7,5)); hb=ax.hexbin(hex_x,hex_y,gridsize=45,mincnt=1); fig.colorbar(hb,ax=ax,label="Observations"); ax.set(title="Density Hidden by Overplotting",xlabel="Feature X",ylabel="Feature Y"); fig.tight_layout(); plt.show()
+```
+
+Use hexbin, density, sampling or rasterization when scatter points become an opaque cloud.
+
+
+# 13. Line Plot — Change Over Time
+
+**Company question:** Is revenue rising beneath daily noise?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(20); dates=pd.date_range("2026-01-01",periods=220,freq="D"); t=np.arange(220)
+line_df=pd.DataFrame({"date":dates,"revenue":120000+180*t+10000*np.sin(2*np.pi*t/7)+rng.normal(0,6500,220)}); line_df["rolling_14d"]=line_df["revenue"].rolling(14).mean()
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(10,4)); ax.plot(line_df["date"],line_df["revenue"],alpha=.35,label="Daily"); ax.plot(line_df["date"],line_df["rolling_14d"],linewidth=2,label="14-day mean"); ax.set(title="Revenue: Noise vs Trend",ylabel="Revenue ($)"); ax.legend(); fig.tight_layout(); plt.show()
+```
+
+Chronology is information. Keep time on an ordered axis.
+
+
+# 14. Uncertainty Band — Show What We Do Not Know
+
+**Company question:** Is a conversion trend larger than its uncertainty?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(21); w=np.arange(1,21); est=.12+.002*w+rng.normal(0,.004,20); se=np.linspace(.012,.006,20)
+band_df=pd.DataFrame({"week":w,"estimate":est,"lower":est-1.96*se,"upper":est+1.96*se})
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(8,4)); ax.plot(band_df["week"],band_df["estimate"],linewidth=2); ax.fill_between(band_df["week"],band_df["lower"],band_df["upper"],alpha=.2); ax.set(title="Conversion Estimate with 95% Band",xlabel="Week",ylabel="Conversion rate"); fig.tight_layout(); plt.show()
+```
+
+Use uncertainty bands for forecasts, experiments and estimated quantities.
+
+
+# 15. Error Bars — Experiment Estimates
+
+**Company question:** How do A/B variants compare with uncertainty?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+exp_df=pd.DataFrame({"variant":["Control","Treatment A","Treatment B"],"conversion":[.100,.112,.107],"n":[12000,11850,12120]}); exp_df["se"]=np.sqrt(exp_df["conversion"]*(1-exp_df["conversion"])/exp_df["n"]); exp_df["ci95"]=1.96*exp_df["se"]
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(7,4)); ax.errorbar(exp_df["variant"],exp_df["conversion"],yerr=exp_df["ci95"],fmt="o",capsize=5); ax.set(title="Conversion ± 95% Approximate CI",ylabel="Conversion rate"); fig.tight_layout(); plt.show()
+```
+
+Effect magnitude and uncertainty belong in the same comparison.
+
+
+# 16. Correlation Heatmap — Matrix Pattern
+
+**Company question:** Which numerical variables move together?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(22); n=1200
+heat_df=pd.DataFrame({"sessions":rng.poisson(10,n)+1,"tenure":rng.integers(1,72,n),"tickets":rng.poisson(1.5,n)}); heat_df["revenue"]=25+6*heat_df["sessions"]+.6*heat_df["tenure"]+rng.normal(0,30,n); heat_df["satisfaction"]=np.clip(4.5-.28*heat_df["tickets"]+rng.normal(0,.5,n),1,5); corr=heat_df.corr(numeric_only=True)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+fig,ax=plt.subplots(figsize=(7,5)); sns.heatmap(corr,annot=True,fmt=".2f",center=0,ax=ax); ax.set_title("Correlation Matrix"); fig.tight_layout(); plt.show()
+```
+
+Correlation is a screening tool, not a causal map.
+
+
+# 17. Pair Plot — Multivariate First Look
+
+**Company question:** How do several customer measures relate at once?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(23); n=450
+pair_df=pd.DataFrame({"segment":rng.choice(["Consumer","SMB","Enterprise"],n,p=[.55,.3,.15]),"sessions":rng.poisson(9,n)+1,"tenure":rng.integers(1,72,n),"satisfaction":np.clip(rng.normal(4,.65,n),1,5)}); pair_df["revenue"]=30+5.5*pair_df["sessions"]+pair_df["segment"].map({"Consumer":0,"SMB":40,"Enterprise":105})+rng.normal(0,25,n)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+g=sns.pairplot(pair_df,vars=["sessions","revenue","tenure","satisfaction"],hue="segment",corner=True); g.fig.suptitle("Multivariate Customer Overview",y=1.02); plt.show()
+```
+
+Pair plots are excellent for early EDA but become unwieldy as the number of variables grows.
+
+
+# 18. Faceting — Small Multiples
+
+**Company question:** Does a relationship change by segment?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(24); n=1000
+facet_df=pd.DataFrame({"segment":rng.choice(["Consumer","SMB","Enterprise"],n,p=[.55,.3,.15]),"device":rng.choice(["Web","iOS","Android"],n),"sessions":rng.poisson(9,n)+1}); facet_df["revenue"]=25+5.8*facet_df["sessions"]+facet_df["segment"].map({"Consumer":0,"SMB":45,"Enterprise":110})+rng.normal(0,30,n)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+import seaborn as sns
+g=sns.relplot(data=facet_df,x="sessions",y="revenue",col="segment",hue="device",kind="scatter",alpha=.45,height=3.3); g.fig.suptitle("Sessions vs Revenue Across Segments",y=1.05); plt.show()
+```
+
+Small multiples often beat one overloaded plot with too many visual encodings.
+
+
+# 19. Interactive Time Series — Zoom into Events
+
+**Company question:** Can an analyst inspect a long timeline around an incident?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(27); dates=pd.date_range("2025-01-01",periods=420,freq="D"); t=np.arange(420)
+its_df=pd.DataFrame({"date":dates,"revenue":100000+120*t+8000*np.sin(2*np.pi*t/7)+rng.normal(0,5500,420)}); its_df["rolling_21d"]=its_df["revenue"].rolling(21).mean()
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import plotly.express as px
+fig=px.line(its_df,x="date",y=["revenue","rolling_21d"],title="Interactive Revenue Timeline"); fig.update_xaxes(rangeslider_visible=True); fig.show()
+```
+
+The range slider and zoom controls are valuable for campaigns, incidents and long monitoring windows.
+
+
+# 20. Confusion Matrix — Classification Errors
+
+**Company question:** Is the churn model missing positives or generating false alarms?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+rng=np.random.default_rng(30); n=2500
+cm_y=rng.binomial(1,.18,n); cm_score=np.clip(.12+.55*cm_y+rng.normal(0,.22,n),0,1); cm_pred=(cm_score>=.5).astype(int)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix,ConfusionMatrixDisplay
+cm=confusion_matrix(cm_y,cm_pred); ConfusionMatrixDisplay(cm,display_labels=["No churn","Churn"]).plot(); plt.title("Churn Classifier: Confusion Matrix"); plt.show()
+```
+
+A confusion matrix shows *which kind* of error occurs, not merely how often the model is correct.
+
+
+# 21. ROC Curve — Ranking Across Thresholds
+
+**Company question:** How well does the classifier separate classes?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+rng=np.random.default_rng(31); n=2800
+roc_y=rng.binomial(1,.20,n); roc_score=np.clip(.10+.60*roc_y+rng.normal(0,.24,n),0,1)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve,roc_auc_score
+fpr,tpr,_=roc_curve(roc_y,roc_score); auc=roc_auc_score(roc_y,roc_score); fig,ax=plt.subplots(figsize=(5.5,5)); ax.plot(fpr,tpr,label=f"AUC={auc:.3f}"); ax.plot([0,1],[0,1],linestyle="--"); ax.set(title="ROC Curve",xlabel="False Positive Rate",ylabel="True Positive Rate"); ax.legend(); plt.show()
+```
+
+ROC summarizes threshold-dependent ranking behavior.
+
+
+# 22. Precision–Recall Curve — Rare Positive Classes
+
+**Company question:** What tradeoff is available when positive cases are scarce?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+rng=np.random.default_rng(32); n=3500
+pr_y=rng.binomial(1,.08,n); pr_score=np.clip(.05+.58*pr_y+rng.normal(0,.23,n),0,1)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_curve,average_precision_score
+p,r,_=precision_recall_curve(pr_y,pr_score); ap=average_precision_score(pr_y,pr_score); fig,ax=plt.subplots(figsize=(5.5,5)); ax.plot(r,p,label=f"AP={ap:.3f}"); ax.set(title="Precision–Recall Curve",xlabel="Recall",ylabel="Precision"); ax.legend(); plt.show()
+```
+
+Often more operationally revealing than accuracy for rare events such as fraud.
+
+
+# 23. Calibration — Can We Trust 0.8?
+
+**Company question:** Do predicted probabilities correspond to observed frequencies?
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+rng=np.random.default_rng(33); n=4500
+x=rng.normal(size=n); true_p=1/(1+np.exp(-1.3*x)); cal_y=rng.binomial(1,true_p); cal_score=np.clip(1/(1+np.exp(-.75*x)),.001,.999)
+```
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
 from sklearn.calibration import calibration_curve
-
-prob_true, prob_pred = calibration_curve(
-    y_true,
-    score,
-    n_bins=8
-)
-
-fig, ax = plt.subplots(figsize=(5.5,5))
-ax.plot(prob_pred, prob_true, marker="o")
-ax.plot([0,1], [0,1], linestyle="--")
-ax.set(
-    xlabel="Mean predicted probability",
-    ylabel="Observed positive rate",
-    title="Calibration Plot"
-)
-plt.show()
+obs,pred=calibration_curve(cal_y,cal_score,n_bins=10); fig,ax=plt.subplots(figsize=(5.5,5)); ax.plot(pred,obs,marker="o"); ax.plot([0,1],[0,1],linestyle="--"); ax.set(title="Calibration Plot",xlabel="Mean predicted probability",ylabel="Observed positive rate"); plt.show()
 ```
 
-Important for:
+Ranking quality and probability calibration are different properties.
 
-- credit risk,
-- fraud,
-- churn,
-- medical risk,
-- any decision system where probability magnitude drives action.
 
-# 29. Regression Diagnostics: Actual vs Predicted + Residuals
+# 24. Residual Plot — Regression Diagnostics
+
+**Company question:** Does prediction error change systematically?
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show regression simulation and diagnostics"
-rng_reg = np.random.default_rng(91)
-m = 1000
-
-actual = rng_reg.normal(100, 25, m)
-predicted = actual + .10*(actual - 100) + rng_reg.normal(0, 12, m)
-residual = actual - predicted
-
-fig, ax = plt.subplots(figsize=(6, 4.5))
-ax.scatter(predicted, residual, alpha=.3)
-ax.axhline(0, linestyle="--")
-ax.set(
-    title="Residual Plot",
-    xlabel="Predicted",
-    ylabel="Actual − Predicted"
-)
-plt.show()
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(34); n=1200
+actual=rng.normal(100,25,n); predicted=actual+.10*(actual-100)+rng.normal(0,12,n); resid_df=pd.DataFrame({"predicted":predicted,"residual":actual-predicted})
 ```
-
-Residual plots reveal:
-
-- bias,
-- nonlinearity,
-- heteroscedasticity,
-- unusual observations,
-- missing segments.
-
-# 30. Feature Importance
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Show feature-importance example"
-importance = pd.DataFrame({
-    "feature": [
-        "last_login_days",
-        "support_tickets",
-        "tenure",
-        "monthly_spend",
-        "sessions"
-    ],
-    "importance": [.31, .25, .19, .14, .11]
-}).sort_values("importance")
-
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.barh(
-    importance["feature"],
-    importance["importance"]
-)
-ax.set(
-    title="Model Feature Importance",
-    xlabel="Importance"
-)
-plt.show()
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(7,4.5)); ax.scatter(resid_df["predicted"],resid_df["residual"],alpha=.28); ax.axhline(0,linestyle="--"); ax.set(title="Residual Plot",xlabel="Predicted",ylabel="Actual − Predicted"); fig.tight_layout(); plt.show()
 ```
 
-<div class="viz-red">
+Residuals can reveal bias, nonlinearity and changing variance hidden by a single RMSE.
 
-### Importance is not causality
 
-A feature can be useful to a predictive model because it is a proxy, consequence, correlated signal or even leakage.
+# 25. Feature Importance — What Does the Model Rely On?
 
-A feature-importance chart does **not** establish causal influence.
-</div>
+**Company question:** Which inputs contribute most under this importance definition?
 
-# 31. Funnel Charts
-
-A common company question:
-
-> Where do customers disappear in the journey?
-
-```text
-Visitors       100,000
-   ↓
-Product View    62,000
-   ↓
-Cart            21,000
-   ↓
-Checkout        12,000
-   ↓
-Purchase         9,200
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import pandas as pd
+imp_df=pd.DataFrame({"feature":["last_login_days","support_tickets","tenure","monthly_spend","sessions"],"importance":[.31,.25,.19,.14,.11]}).sort_values("importance")
 ```
 
-Plotly supports funnel charts directly:
-
-```python
-funnel = pd.DataFrame({
-    "stage": [
-        "Visitors",
-        "Product View",
-        "Cart",
-        "Checkout",
-        "Purchase"
-    ],
-    "users": [100000, 62000, 21000, 12000, 9200]
-})
-
-fig = px.funnel(
-    funnel,
-    x="users",
-    y="stage",
-    title="Purchase Funnel"
-)
-fig.show()
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import matplotlib.pyplot as plt
+fig,ax=plt.subplots(figsize=(7,4)); ax.barh(imp_df["feature"],imp_df["importance"]); ax.set(title="Model Feature Importance",xlabel="Importance"); fig.tight_layout(); plt.show()
 ```
 
-Use for acquisition, onboarding, checkout, application and workflow stages.
+<div class="viz-red"><b>Importance is not causality.</b> A predictive feature can be a proxy, consequence, correlated signal or leakage.</div>
 
-# 32. Geographic Visualization
 
-When geography is central, a map can reveal structure a table cannot.
+# 26. Funnel — Where Do Users Drop Out?
 
-Typical company questions:
+**Company question:** At which purchase stage is the largest loss?
 
-- Where are customers concentrated?
-- Which regions have unusually high churn?
-- Where are deliveries delayed?
-- Where should the next facility be placed?
-
-With Plotly, geographic figures can remain interactive so the reader can inspect regions and values.
-
-```python
-# Conceptual pattern
-fig = px.scatter_map(
-    geo_df,
-    lat="latitude",
-    lon="longitude",
-    color="metric",
-    hover_name="location"
-)
-fig.show()
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import pandas as pd
+funnel_df=pd.DataFrame({"stage":["Visitors","Product View","Cart","Checkout","Purchase"],"users":[100000,62000,21000,12000,9200]})
 ```
 
-<div class="viz-amber">
-
-### Map only when location matters
-
-A map is often worse than a sorted bar chart for simply comparing state totals.
-
-Use geography when **spatial relationships themselves carry meaning**.
-</div>
-
-# 33. Other Modern Visualization Libraries
-
-The Python ecosystem extends well beyond four libraries.
-
-## Altair
-
-A declarative grammar-of-graphics approach.
-
-You describe mappings such as:
-
-```text
-x = sessions
-y = revenue
-color = segment
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import plotly.express as px
+fig=px.funnel(funnel_df,x="users",y="stage",title="Purchase Funnel"); fig.show()
 ```
 
-rather than manually constructing every visual element.
+Common in acquisition, onboarding, checkout and application workflows.
 
-Good for concise statistical and interactive graphics.
 
-## HoloViews / hvPlot
+# 27. Geographic Plot — When Location Matters
 
-Useful for high-level exploratory plotting and connections to the broader HoloViz ecosystem.
+**Company question:** Where are orders concentrated around a service area?
 
-Particularly attractive when working with pandas/xarray-style data and wanting interactive output with little code.
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+import numpy as np
+import pandas as pd
+rng=np.random.default_rng(35); n=500
+geo_df=pd.DataFrame({"latitude":30.27+rng.normal(0,.055,n),"longitude":-97.74+rng.normal(0,.065,n),"orders":rng.poisson(5,n)+1})
+```
 
-## Datashader
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+import plotly.express as px
+fig=px.scatter_map(geo_df,lat="latitude",lon="longitude",size="orders",hover_data=["orders"],zoom=9,height=500,title="Interactive Geographic Distribution of Orders"); fig.show()
+```
 
-Designed for rendering very large datasets by aggregating data into pixels rather than attempting to draw every individual mark.
+Use a map when spatial relationships matter. If the question is only “which region is largest?”, a sorted bar chart may be clearer.
 
-Useful when “just plot all 20 million points” stops being sensible.
+# 28. Other Modern Visualization Libraries
 
-## PyDeck / deck.gl ecosystems
+- **Altair** — declarative grammar-of-graphics and concise interactive statistical charts.
+- **hvPlot / HoloViews** — high-level interactive plotting for DataFrame/xarray workflows.
+- **Datashader** — rasterizes/aggregates huge datasets rather than drawing every point.
+- **PyDeck / deck.gl ecosystem** — rich large-scale geospatial visualization.
 
-Useful for rich geospatial visualization and large map-oriented datasets.
+<div class="viz-blue">The state of the art is not “use the newest library.” Match the tool to <b>data volume + analytical question + audience + interaction + deployment environment</b>.</div>
 
-<div class="viz-blue">
-
-### State of the art is not “pick the newest library”
-
-The best library is the one that matches:
-
-**data volume + visual question + audience + interaction needs + deployment environment**.
-</div>
-
-# 34. Which Library Should I Reach for?
+# 29. Which Library Should I Reach For?
 
 | Need | Good starting choice |
 |---|---|
-| Fast custom static figure | Matplotlib |
+| Custom static figure | Matplotlib |
 | Statistical EDA | Seaborn |
 | Publication/report control | Matplotlib |
-| Interactive exploratory chart | Plotly |
-| Interactive stakeholder HTML | Plotly |
+| Interactive exploration | Plotly |
 | Browser widgets / linked interaction | Bokeh |
-| Concise declarative grammar | Altair |
+| Declarative grammar | Altair |
 | Huge point clouds | Datashader ecosystem |
-| Interactive geospatial exploration | Plotly / PyDeck |
-| Dashboard/application | Plotly + Dash, Bokeh, Streamlit ecosystem |
+| Interactive geospatial work | Plotly / PyDeck |
 
-These are starting points, not hard boundaries.
+# 30. Visualization Mistakes That Mislead
 
-# 35. The Same Plot: Matplotlib vs Seaborn vs Plotly
+- **Truncated bar axes** can exaggerate small differences.
+- **Too many categories** turn legends into puzzles.
+- **Dual y-axes** can manufacture apparent relationships through scaling.
+- **Many-slice pie charts** make precise comparison difficult.
+- **Rainbow scales** can create false perceptual boundaries.
+- **Lines between unrelated categories** imply continuity that does not exist.
+- **Means without uncertainty/sample size** can hide noise.
+- **Overplotting** calls for transparency, sampling, hexbin, density or rasterization.
 
-Suppose the question is:
+# 31. Exploratory vs Explanatory Visualization
 
-> How does revenue relate to sessions?
+**Exploratory:** “What is happening?” → many views, interaction, diagnostics.
 
-### Matplotlib
+**Explanatory:** “Here is what matters.” → fewer views, intentional ordering, annotation, uncertainty, restrained color.
 
-```python
-plt.scatter(
-    customers["sessions"],
-    customers["monthly_revenue"],
-    alpha=.25
-)
-plt.xlabel("Sessions")
-plt.ylabel("Revenue")
-plt.show()
-```
+<div class="viz-flow">EDA → DISCOVERY → ANALYSIS → DECISION → COMMUNICATION</div>
 
-### Seaborn
-
-```python
-sns.scatterplot(
-    data=customers,
-    x="sessions",
-    y="monthly_revenue",
-    hue="segment",
-    alpha=.4
-)
-```
-
-### Plotly
-
-```python
-fig = px.scatter(
-    customers,
-    x="sessions",
-    y="monthly_revenue",
-    color="segment",
-    hover_data=["customer_id", "region"]
-)
-fig.show()
-```
-
-### Bokeh
-
-```python
-p = figure(
-    tools="pan,wheel_zoom,box_zoom,reset,hover"
-)
-p.scatter(
-    customers["sessions"],
-    customers["monthly_revenue"]
-)
-show(p)
-```
-
-The underlying statistical question is unchanged.
-
-The **interaction model and amount of plotting machinery** change.
-
-# 36. Visualization Mistakes That Mislead
-
-## 36.1 Truncated bar axes
-
-Can exaggerate small differences.
-
-## 36.2 Too many categories
-
-A 47-color legend is not communication.
-
-Group, filter, rank or facet.
-
-## 36.3 Dual y-axes
-
-They can create visual relationships that depend strongly on arbitrary scaling.
-
-Use cautiously.
-
-## 36.4 Pie charts with many slices
-
-Angles are difficult to compare precisely.
-
-A sorted bar chart is often clearer.
-
-## 36.5 Rainbow color scales
-
-Color order may be perceptually irregular and can introduce false boundaries.
-
-## 36.6 Connecting unrelated observations
-
-A line implies ordering or continuity.
-
-Do not connect categories merely because you can.
-
-## 36.7 Plotting means without uncertainty or sample size
-
-A difference may be noise—or one group may have only 12 observations.
-
-## 36.8 Overplotting
-
-Use:
-
-- transparency,
-- sampling,
-- hexbin,
-- 2D density,
-- aggregation,
-- Datashader-like rasterization.
-
-# 37. Color Is Data
-
-Use color deliberately.
+# 32. A Data Scientist's Plot Selector
 
 ```text
-Sequential
-low ─────────── high
-
-Diverging
-negative ── neutral ── positive
-
-Categorical
-A   B   C   D
+ONE NUMERIC → Histogram / KDE / ECDF / Box
+NUMERIC + CATEGORY → Box / Violin / Bar + CI
+TWO NUMERIC → Scatter / Regression / Hexbin
+TIME → Line / Rolling trend / Uncertainty band
+MATRIX → Heatmap
+CLASSIFIER → Confusion / ROC / PR / Calibration
+REGRESSION → Actual-vs-predicted / Residuals
+LOCATION → Map only when spatial structure matters
 ```
 
-Do not use a continuous gradient for unrelated categories.
+# 33. A Company Visualization Workflow
 
-Do not use 20 categorical colors if labels or facets would communicate better.
+If Product asks **“Why did conversion fall last month?”**:
 
-# 38. Annotation: Tell the Reader Where to Look
+1. Line plot → *when did it begin?*
+2. Facets → *which device/segment/region?*
+3. Funnel → *which stage?*
+4. Distributions → *did population mix change?*
+5. Event annotations → *what changed around that date?*
+6. Statistical analysis → *is the change beyond noise?*
+7. Explanatory chart → *communicate the finding.*
 
-A useful chart often needs one sentence of guidance.
+# 34. The Visualization Ladder
 
-```python
-ax.annotate(
-    "Pricing launch",
-    xy=(launch_date, launch_value),
-    xytext=(launch_date, launch_value + 20000),
-    arrowprops={"arrowstyle": "->"}
-)
-```
+<div class="viz-flow">SEE → COMPARE → RELATE → SEGMENT → DIAGNOSE → EXPLORE → EXPLAIN → SHIP</div>
 
-Annotations can mark:
+# 35. Final Perspective
 
-- launches,
-- outages,
-- experiments,
-- policy changes,
-- unusual points,
-- thresholds.
+<div class="viz-hero"><div class="big">✨ Choose the question first. Choose the plot second. Choose the library third.</div>
 
-<div class="viz-green">
-
-### Titles should communicate, not merely identify
-
-Weak:
-
-> “Revenue Plot”
-
-Better:
-
-> “Revenue recovered within two weeks of the June outage”
-
-Use the second style when the conclusion is supported and the chart is meant to communicate that conclusion.
-</div>
-
-# 39. Exploratory vs Explanatory Visualization
-
-These are different jobs.
-
-## Exploratory
-
-You are asking:
-
-> What is happening?
-
-Useful characteristics:
-
-- many plots,
-- interactive filtering,
-- pair plots,
-- raw distributions,
-- diagnostic detail.
-
-## Explanatory
-
-You are saying:
-
-> Here is what matters.
-
-Useful characteristics:
-
-- fewer plots,
-- intentional ordering,
-- annotations,
-- restrained color,
-- explicit units,
-- uncertainty where appropriate,
-- descriptive title.
-
-```text
-EDA chart
-    ↓ discovery
-analysis
-    ↓ decision
-communication chart
-```
-
-Do not assume the chart you used to discover an insight is automatically the best chart to explain it.
-
-# 40. A Data Scientist's Practical Plot Selector
-
-```text
-ONE NUMERIC VARIABLE
-│
-├─ shape? ───────────── Histogram / KDE
-├─ cumulative share? ─ ECDF
-└─ compact summary? ── Box plot
-
-NUMERIC + CATEGORY
-│
-├─ compare distribution? ─ Box / Violin
-└─ compare estimate? ───── Point / Bar + CI
-
-TWO NUMERIC VARIABLES
-│
-├─ ordinary n? ─────────── Scatter
-├─ trend? ──────────────── Regression plot
-└─ huge n? ─────────────── Hexbin / density
-
-TIME
-│
-├─ metric through time? ─ Line
-├─ uncertainty? ────────── Line + band
-└─ multiple groups? ────── Facet / selected lines
-
-MATRIX
-│
-└─ magnitude/pattern? ──── Heatmap
-
-CLASSIFIER
-│
-├─ errors? ─────────────── Confusion matrix
-├─ threshold tradeoff? ─── ROC / PR
-└─ probability quality? ── Calibration
-
-REGRESSION MODEL
-│
-├─ error structure? ────── Residual plot
-└─ prediction quality? ─── Actual vs predicted
-```
-
-# 41. Reusable Python Plotting Pattern
-
-A professional codebase benefits from functions.
-
-```python
-def plot_metric_by_group(
-    df,
-    group,
-    metric,
-    title=None
-):
-    fig, ax = plt.subplots(figsize=(8, 4))
-
-    sns.boxplot(
-        data=df,
-        x=group,
-        y=metric,
-        ax=ax
-    )
-
-    ax.set(
-        title=title or f"{metric} by {group}",
-        xlabel=group.replace("_", " ").title(),
-        ylabel=metric.replace("_", " ").title()
-    )
-
-    fig.tight_layout()
-    return fig, ax
-```
-
-Then:
-
-```python
-fig, ax = plot_metric_by_group(
-    customers,
-    "segment",
-    "monthly_revenue",
-    "Revenue Distribution by Customer Segment"
-)
-```
-
-Reusable plotting functions improve consistency across analyses.
-
-# 42. Saving Figures
-
-## Matplotlib / Seaborn
-
-```python
-fig.savefig(
-    "revenue_by_segment.png",
-    dpi=200,
-    bbox_inches="tight"
-)
-```
-
-For vector output:
-
-```python
-fig.savefig(
-    "revenue_by_segment.svg",
-    bbox_inches="tight"
-)
-```
-
-## Plotly
-
-Interactive HTML:
-
-```python
-fig.write_html(
-    "customer_explorer.html"
-)
-```
-
-The interactive artifact can preserve hover/zoom behavior for browser viewing.
-
-# 43. A Company Visualization Workflow
-
-Imagine Product asks:
-
-> “Why did conversion fall last month?”
-
-Do not begin with a fancy dashboard.
-
-Start systematically:
-
-```text
-1. Time-series line
-   ↓
-When did the drop begin?
-
-2. Segment / device / region facets
-   ↓
-Where is it concentrated?
-
-3. Funnel
-   ↓
-At which stage?
-
-4. Distribution plots
-   ↓
-Did user/product mix change?
-
-5. Experiment / release annotations
-   ↓
-What changed around that time?
-
-6. Statistical analysis
-   ↓
-Is the difference beyond expected noise?
-
-7. Explanatory chart
-   ↓
-Communicate the finding
-```
-
-Visualization is part of the **reasoning process**, not the final cosmetic step.
-
-# 44. The Visualization Ladder
-
-<div class="viz-flow">
-LEVEL 1  SEE       → histogram, bar, line
-LEVEL 2  COMPARE   → box, violin, error bars
-LEVEL 3  RELATE    → scatter, regression, heatmap
-LEVEL 4  SEGMENT   → hue, facet, small multiples
-LEVEL 5  DIAGNOSE  → residuals, confusion, ROC/PR
-LEVEL 6  EXPLORE   → hover, zoom, select, filter
-LEVEL 7  EXPLAIN   → annotation, uncertainty, narrative
-LEVEL 8  SHIP      → reusable code, HTML, dashboard, monitoring
-</div>
-
-# 45. Final Perspective
-
-A visualization library answers:
-
-> **How can I draw this?**
-
-A Data Scientist must first answer:
-
-> **What comparison should the reader be able to make?**
-
-That is the deeper skill.
-
-<div class="viz-hero">
-<div class="big">✨ Choose the question first. Choose the plot second. Choose the library third.</div>
-
-A sophisticated interactive chart cannot rescue the wrong visual encoding.  
-A simple line or scatter plot can reveal the entire story when it represents the right question.
-</div>
+A sophisticated interactive chart cannot rescue the wrong visual encoding. A simple plot can reveal the entire story when it represents the right question.</div>
 
 # Summary
 
-- Use **histograms/KDE/ECDF** to understand distributions.
-- Use **box/violin/strip plots** to compare distributions across groups.
-- Use **bar/count plots** for categorical summaries.
-- Use **scatter/regression plots** for numerical relationships.
-- Use **hexbin/density** when scatter plots suffer from overplotting.
-- Use **line plots and uncertainty bands** for ordered time.
-- Use **heatmaps** for matrix-like patterns.
-- Use **faceting** instead of encoding too many dimensions into one panel.
-- Use **error bars** to show uncertainty in experiments and estimates.
-- Use **confusion matrices, ROC, PR and calibration** for classification diagnostics.
-- Use **residual plots** for regression diagnostics.
-- Use **Plotly/Bokeh** when exploration benefits from browser-native interaction.
-- Use **Matplotlib/Seaborn** when static analytical communication and precise figure control are the priority.
-- Hide long simulation setup with Quarto `code-fold: true`, but make it available to curious readers.
-- Visualization should support a decision or understanding—not merely prove that Python can draw a chart.
+- Distribution → histogram, KDE, ECDF, box, violin.
+- Comparison → bars, box/violin, error bars, facets.
+- Relationship → scatter, regression, hexbin.
+- Time → line, rolling trend, uncertainty.
+- Classification → confusion, ROC, PR, calibration.
+- Regression → residual diagnostics.
+- Plotly/Bokeh → browser-native exploration.
+- Matplotlib/Seaborn → static-first analytical communication and statistical EDA.
+- Every worked chart in this chapter has independently expandable **data simulator code** and **plot code**, with the visualization left visible.
 
 # Learning Resources
 
-- Matplotlib documentation and plot gallery: https://matplotlib.org/stable/
-- Seaborn statistical visualization documentation: https://seaborn.pydata.org/
-- Plotly Python documentation and interactive chart gallery: https://plotly.com/python/
-- Bokeh documentation: https://docs.bokeh.org/en/latest/
+- Matplotlib: https://matplotlib.org/stable/
+- Seaborn: https://seaborn.pydata.org/
+- Plotly Python: https://plotly.com/python/
+- Bokeh: https://docs.bokeh.org/en/latest/
