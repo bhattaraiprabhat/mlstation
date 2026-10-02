@@ -1,0 +1,414 @@
+---
+title: "Finding Hidden Groups: K-Means on a Cloud Server Fleet"
+description: "No labels, 900 servers and one big cloud bill. Learn clustering, scaling, choosing k, PCA and t-SNE by discovering how a server fleet really behaves."
+author: "MLStation"
+date: 2026-10-01
+categories: [ML, Unsupervised Learning]
+draft: false
+---
+
+A company runs **900 cloud servers**. Nobody remembers what half of them do. Finance wants to cut the bill, engineering refuses to touch anything without proof, and there is no label that says "this one is wasted". This is exactly the situation unsupervised learning was made for: **find the structure first, name it afterwards.**
+
+::: {.callout-tip}
+## What you will learn
+- How to turn raw monitoring data into a "behaviour fingerprint" per server
+- How K-Means finds groups, step by step (with an interactive demo)
+- How to choose the number of clusters with the elbow and silhouette methods
+- How PCA and t-SNE let you *see* data with seven dimensions
+- How to turn clusters into decisions a business can act on
+:::
+
+## Supervised vs unsupervised, in one table
+
+| | Supervised | Unsupervised |
+|---|---|---|
+| You have | Inputs **and** the correct answer | Inputs only |
+| Goal | Predict the answer | Discover structure |
+| Example | "Will this customer churn?" | "What kinds of customers do we have?" |
+| Here | "Is this server wasted?" (no one knows) | "Which servers behave alike?" |
+
+## The data: a week of server telemetry
+
+Every server reports CPU and memory use every hour. We simulate one week (168 readings) for each of the 900 servers. Below are four of them. Can you tell which ones are alike?
+
+```{python}
+#| label: setup
+#| code-fold: true
+#| code-summary: "Simulate the fleet (click to see how)"
+import numpy as np, pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from ms_charts import COLORS, PLOTLY_CONFIG
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+rng = np.random.default_rng(42)
+H = 24 * 7                                    # one week of hourly readings
+hours, dow = np.arange(H) % 24, (np.arange(H) // 24) % 7
+work = ((hours >= 8) & (hours < 18) & (dow < 5)).astype(float)   # weekday office hours
+
+# hidden behaviour types (the model never sees these)
+spec = {  # count, cpu base, office-hours lift, cpu noise, memory base, memory noise
+    "idle":   (150,  3,  0, 1.5, 14, 3),
+    "office": (220, 10, 45, 8.0, 30, 5),
+    "batch":  (140, 66,  0, 6.0, 40, 5),
+    "memory": (130, 15,  6, 4.0, 84, 3),
+    "steady": (260, 30,  2, 4.0, 46, 4),
+}
+series, rows, kinds = [], [], []
+for kind, (n, cb, lift, cn, mb, mn) in spec.items():
+    for _ in range(n):
+        c0, l, m0 = cb * rng.uniform(.8, 1.2), lift * rng.uniform(.7, 1.3), mb * rng.uniform(.88, 1.1)
+        spikes = (rng.random(H) < .03) * rng.uniform(10, 40, H) * (kind != "idle")
+        cpu = np.clip(c0 + l * work + rng.normal(0, cn, H) + spikes, 0, 100)
+        mem = np.clip(m0 + (6 * work if kind == "office" else 0) + rng.normal(0, mn, H), 0, 100)
+        series.append(cpu); kinds.append(kind)
+        day, night = cpu[work == 1].mean(), cpu[work == 0].mean()
+        rows.append(dict(avg_cpu=cpu.mean(), p95_cpu=np.percentile(cpu, 95), cpu_std=cpu.std(),
+                         avg_mem=mem.mean(), p95_mem=np.percentile(mem, 95),
+                         day_night_ratio=min((day + 1) / (night + 1), 8), idle_share=(cpu < 5).mean()))
+features = pd.DataFrame(rows)
+series, kinds = np.array(series), np.array(kinds)
+order = rng.permutation(len(features))          # shuffle so nothing is in order
+features, series, kinds = features.iloc[order].reset_index(drop=True), series[order], kinds[order]
+```
+
+```{python}
+#| label: fig-raw
+#| fig-cap: "Hourly CPU of four servers over one week. Some spike every weekday, some never move."
+#| code-fold: true
+fig = go.Figure()
+picks = [int(np.where(kinds == k)[0][0]) for k in ["office", "idle", "batch", "memory"]]   # one of each, still unnamed
+for i, c in zip(picks, ["#6366F1", "#14B8A6", "#F59E0B", "#F43F5E"]):
+    fig.add_scatter(x=np.arange(H) / 24, y=series[i], mode="lines", name=f"server {i}", line=dict(width=1.4, color=c))
+fig.update_layout(height=340, xaxis_title="Day of the week (0 = Monday)", yaxis_title="CPU %", hovermode="x unified")
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Raw curves are hard to compare. 900 of them are impossible. We need a short summary of each server.
+
+## Step 1: a fingerprint for every server
+
+We compress each week of readings into **seven numbers** that describe *behaviour*, not size or price.
+
+| Feature | What it captures |
+|---|---|
+| `avg_cpu`, `avg_mem` | Typical load |
+| `p95_cpu`, `p95_mem` | Busy-moment load (95th percentile) |
+| `cpu_std` | How much the load jumps around |
+| `day_night_ratio` | Office-hours CPU ÷ night CPU (people-driven or not) |
+| `idle_share` | Share of hours with CPU below 5% |
+
+: Seven behaviour features per server {#tbl-features}
+
+```{python}
+#| echo: false
+features.describe().T[["mean", "min", "max"]].round(1)
+```
+
+## Step 2: put every feature on the same scale
+
+K-Means measures **distance**. Without scaling, a feature measured in large numbers (CPU %) would drown out one measured in small numbers (a ratio of 1 to 8). Standardising gives every feature mean 0 and standard deviation 1:
+
+$$
+z = \frac{x - \mu}{\sigma}
+$$ {#eq-zscore}
+
+```{python}
+#| code-fold: false
+X = StandardScaler().fit_transform(features)
+```
+
+## Step 3: how K-Means thinks
+
+K-Means looks for $k$ centres (centroids) so that every point is close to its own centre. Formally it minimises the **within-cluster sum of squares**:
+
+$$
+\text{WCSS} = \sum_{j=1}^{k} \sum_{x_i \in C_j} \lVert x_i - \mu_j \rVert^2
+$$ {#eq-wcss}
+
+It does that with a simple two-step loop, repeated until nothing changes:
+
+1. **Assign** every point to its nearest centroid.
+2. **Move** every centroid to the mean of its points.
+
+Try it below. These are our 900 servers, using just two of the seven features so we can draw them. Pick $k$, then drag **Iteration** to watch the centroids travel and the WCSS fall.
+
+```{python}
+#| echo: false
+ojs_define(pts=pd.DataFrame({"x": X[:, 0], "y": X[:, 3]}).round(3).to_dict(orient="records"))
+```
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof k    = Inputs.range([2, 7], {value: 4, step: 1, label: "Clusters k"})
+viewof iter = Inputs.range([0, 10], {value: 0, step: 1, label: "Iteration"})
+viewof seed = Inputs.range([1, 9], {value: 3, step: 1, label: "Random start"})
+```
+
+```{ojs}
+//| echo: false
+frames = {
+  let s = seed * 9973;
+  const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const P = pts.map(p => [p.x, p.y]);
+  const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+  let C = d3.range(k).map(() => P[Math.floor(rand() * P.length)].slice());   // random starting points
+  const out = [];
+  for (let t = 0; t <= 10; t++) {
+    const lab = P.map(p => d3.minIndex(C, c => d2(p, c)));
+    const wcss = d3.sum(P, (p, i) => d2(p, C[lab[i]]));
+    out.push({C: C.map(c => c.slice()), lab, wcss});
+    C = C.map((c, j) => {
+      const m = P.filter((_, i) => lab[i] === j);
+      return m.length ? [d3.mean(m, p => p[0]), d3.mean(m, p => p[1])] : c;
+    });
+  }
+  return out;
+}
+f = frames[iter]
+trail = d3.range(k).flatMap(j => frames.slice(0, iter + 1).map((fr, t) => ({j, t, x: fr.C[j][0], y: fr.C[j][1]})))
+
+html`<div class="ms-readout"><span>WCSS at iteration ${iter}</span><b>${f.wcss.toFixed(0)}</b></div>`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 400,
+  x: {label: "Average CPU (standardised) →"}, y: {label: "↑ Average memory (standardised)"},
+  color: {range: ms.seq},
+  marks: [
+    Plot.dot(pts, {x: "x", y: "y", r: 2.6, fill: (d, i) => f.lab[i], fillOpacity: 0.55}),
+    Plot.line(trail, {x: "x", y: "y", z: "j", stroke: "currentColor", strokeOpacity: 0.45, strokeDasharray: "3,3"}),
+    Plot.dot(f.C.map((c, j) => ({x: c[0], y: c[1], j})), {x: "x", y: "y", r: 9, fill: "j", stroke: "white", strokeWidth: 2.5, symbol: "diamond"})
+  ]
+})
+```
+
+::: {.callout-note}
+## Notice two things
+WCSS only ever goes **down**, and it usually settles within a few iterations. Change **Random start**: a bad start can end in a worse solution. That is why real code runs K-Means several times (`n_init=10`) and keeps the best.
+:::
+
+## Step 4: how many clusters?
+
+K-Means needs $k$ up front. Two checks help:
+
+- **Elbow:** plot WCSS for each $k$. Look for the bend where adding clusters stops paying off.
+- **Silhouette:** for each point, compare $a$ (average distance to its own cluster) with $b$ (average distance to the nearest other cluster). Values near 1 mean clean, separate groups.
+
+$$
+s = \frac{b - a}{\max(a, b)}
+$$ {#eq-silhouette}
+
+```{python}
+#| label: fig-k
+#| fig-cap: "WCSS bends at k = 5 and the silhouette score peaks there too."
+#| code-fold: true
+ks = range(2, 10)
+wcss, sil = [], []
+for k in ks:
+    km = KMeans(n_clusters=k, n_init=10, random_state=0).fit(X)
+    wcss.append(km.inertia_); sil.append(silhouette_score(X, km.labels_))
+best = list(ks)[int(np.argmax(sil))]
+
+fig = make_subplots(rows=1, cols=2, subplot_titles=("Elbow: WCSS", "Silhouette score"), horizontal_spacing=0.12)
+fig.add_scatter(x=list(ks), y=wcss, mode="lines+markers", line=dict(color=COLORS["indigo"], width=3), row=1, col=1, name="WCSS")
+fig.add_scatter(x=list(ks), y=sil, mode="lines+markers", line=dict(color=COLORS["teal"], width=3), row=1, col=2, name="Silhouette")
+for c in (1, 2):
+    fig.add_vline(x=best, line_dash="dash", line_color="#8A93A3", row=1, col=c)
+fig.update_xaxes(title_text="k", dtick=1)
+fig.update_layout(height=340, showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Both checks point to **k = `{python} best`**, so we train the final model:
+
+```{python}
+#| code-fold: false
+kmeans = KMeans(n_clusters=best, n_init=10, random_state=0).fit(X)
+features["cluster"] = kmeans.labels_
+```
+
+## Step 5: seeing seven dimensions
+
+We clustered in **seven** dimensions, but screens have two. Dimensionality reduction squeezes the data down for viewing:
+
+- **PCA** finds the directions with the most variance. It is linear, fast and keeps global distances meaningful.
+- **t-SNE** keeps close neighbours close. It shows clusters beautifully, but distances *between* clusters and cluster sizes in the picture mean little.
+
+```{python}
+#| code-fold: true
+# name each cluster from its average behaviour (the model only gives numbers)
+prof = features.groupby("cluster").mean()
+name = {}
+name[prof.idle_share.idxmax()] = "Idle / zombie"
+name[prof.day_night_ratio.idxmax()] = "Office-hours bursty"
+rest = prof.drop(index=list(name))
+name[rest.avg_mem.idxmax()] = "Memory-heavy"
+rest = rest.drop(index=rest.avg_mem.idxmax())
+name[rest.avg_cpu.idxmax()] = "Always-on batch"
+for c in prof.index:
+    name.setdefault(c, "Steady production")
+features["archetype"] = features.cluster.map(name)
+PALETTE = {"Idle / zombie": "#64748B", "Office-hours bursty": "#F59E0B", "Always-on batch": "#F43F5E",
+           "Memory-heavy": "#A855F7", "Steady production": "#14B8A6"}
+
+pca = PCA(n_components=3, random_state=0).fit(X)
+P = pca.transform(X)
+T = TSNE(n_components=2, perplexity=50, init="pca", random_state=0).fit_transform(X)
+```
+
+::: {.panel-tabset}
+## t-SNE (2D)
+```{python}
+#| label: fig-tsne
+#| fig-cap: "t-SNE map of 900 servers, coloured by K-Means cluster. Hover a point for its numbers."
+#| code-fold: true
+fig = go.Figure()
+for a, col in PALETTE.items():
+    m = features.archetype == a
+    fig.add_scatter(x=T[m, 0], y=T[m, 1], mode="markers", name=a,
+                    marker=dict(size=6, color=col, opacity=.8, line=dict(width=.5, color="white")),
+                    customdata=features.loc[m, ["avg_cpu", "avg_mem", "day_night_ratio"]].round(1),
+                    hovertemplate="CPU %{customdata[0]}% · Mem %{customdata[1]}%<br>day/night %{customdata[2]}<extra>" + a + "</extra>")
+fig.update_layout(height=440, xaxis=dict(showticklabels=False, title=""), yaxis=dict(showticklabels=False, title=""))
+fig.show(config=PLOTLY_CONFIG)
+```
+## PCA (3D, drag to rotate)
+```{python}
+#| label: fig-pca
+#| fig-cap: "The first three principal components. Drag to rotate, scroll to zoom."
+#| code-fold: true
+ev = pca.explained_variance_ratio_ * 100
+fig = go.Figure()
+for a, col in PALETTE.items():
+    m = (features.archetype == a).to_numpy()
+    fig.add_scatter3d(x=P[m, 0], y=P[m, 1], z=P[m, 2], mode="markers", name=a,
+                      marker=dict(size=3, color=col, opacity=.85))
+fig.update_layout(height=480, margin=dict(l=0, r=0, t=10, b=0),
+                  scene=dict(xaxis_title=f"PC1 ({ev[0]:.0f}%)", yaxis_title=f"PC2 ({ev[1]:.0f}%)", zaxis_title=f"PC3 ({ev[2]:.0f}%)",
+                             xaxis=dict(backgroundcolor="rgba(0,0,0,0)"), yaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
+                             zaxis=dict(backgroundcolor="rgba(0,0,0,0)")))
+fig.show(config=PLOTLY_CONFIG)
+```
+:::
+
+The first three components explain `{python} f"{pca.explained_variance_ratio_[:3].sum()*100:.0f}%"` of the variation, so the 3D view is a faithful summary.
+
+## Step 6: give the clusters a meaning
+
+Cluster numbers mean nothing to a CFO. We read each cluster's **average fingerprint** and give it a name. In the heatmap, each cell shows how far a cluster sits above (purple) or below (teal) the fleet average, in standard deviations.
+
+```{python}
+#| label: fig-profile
+#| fig-cap: "Cluster fingerprints. Each row is one archetype, each column one feature."
+#| code-fold: true
+cols = ["avg_cpu", "p95_cpu", "cpu_std", "avg_mem", "p95_mem", "day_night_ratio", "idle_share"]
+z = pd.DataFrame(X, columns=cols).assign(archetype=features.archetype).groupby("archetype").mean()
+z = z.loc[[a for a in PALETTE if a in z.index]]
+raw = features.groupby("archetype")[cols].mean().loc[z.index]
+fig = go.Figure(go.Heatmap(z=z.values, x=cols, y=z.index, zmid=0,
+                           colorscale=[[0, "#14B8A6"], [.5, "#CBD5E1"], [1, "#6366F1"]],
+                           text=raw.round(1).values, texttemplate="%{text}", textfont=dict(size=12),
+                           hovertemplate="%{y}<br>%{x}: %{text}<extra></extra>", colorbar=dict(title="z", thickness=10)))
+fig.update_layout(height=380, margin=dict(l=150, b=90), yaxis=dict(autorange="reversed"), xaxis=dict(tickangle=-35))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+And here is what a typical day looks like for each group. The difference that was invisible in @fig-raw is now obvious:
+
+```{python}
+#| label: fig-daily
+#| fig-cap: "Average hourly CPU on a weekday, by archetype."
+#| code-fold: true
+weekday = (dow < 5)
+fig = go.Figure()
+for a, col in PALETTE.items():
+    m = (features.archetype == a).to_numpy()
+    curve = series[m][:, weekday].reshape(m.sum(), -1, 24).mean(axis=(0, 1))
+    fig.add_scatter(x=np.arange(24), y=curve, mode="lines", name=a, line=dict(color=col, width=3))
+fig.update_layout(height=340, xaxis_title="Hour of day", yaxis_title="Average CPU %", xaxis=dict(dtick=3), hovermode="x unified")
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## Step 7: from clusters to decisions
+
+```{python}
+#| echo: false
+from IPython.display import Markdown
+size = features.archetype.value_counts()
+act = {
+  "Idle / zombie": ("Almost no CPU, ever", "Find an owner or switch off"),
+  "Office-hours bursty": ("Busy 8 to 6 on weekdays", "Schedule-based autoscaling"),
+  "Always-on batch": ("High, flat CPU day and night", "Cheaper interruptible capacity"),
+  "Memory-heavy": ("Memory near full, CPU low", "Move to memory-optimised machines"),
+  "Steady production": ("Moderate and predictable", "Commit to reserved pricing"),
+}
+lines = ["| Archetype | Servers | Signature | Action |", "|---|---|---|---|"]
+for a in PALETTE:
+    lines.append(f"| **{a}** | {size.get(a, 0)} ({size.get(a, 0) / len(features):.0%}) | {act[a][0]} | {act[a][1]} |")
+Markdown("\n".join(lines))
+```
+
+Instead of debating 900 servers one by one, leadership approves **five policies**. That is the real value of clustering: it turns a pile of data into a short list of decisions.
+
+::: {.callout-warning}
+## Look before you cut
+A CPU-only rule ("below 10% CPU = waste") would wrongly flag the **memory-heavy** group, which barely uses CPU but is nearly out of memory. Using several features together is what keeps the clusters honest.
+:::
+
+## The whole workflow
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A["Hourly metrics<br/>to fingerprints"] --> B["Standardise"] --> C["Pick k<br/>elbow + silhouette"] --> D["K-Means"] --> E["Check with<br/>PCA / t-SNE"] --> F["Name clusters<br/>one policy each"]
+```
+
+## The core code
+
+```{.python filename="segment_servers.py"}
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+# 1. put features on the same scale
+X = StandardScaler().fit_transform(features)
+
+# 2. try several k and keep the best silhouette
+scores = {}
+for k in range(2, 10):
+    labels = KMeans(k, n_init=10, random_state=0).fit_predict(X)
+    scores[k] = silhouette_score(X, labels)
+best_k = max(scores, key=scores.get)
+
+# 3. final model, then read the fingerprints
+model = KMeans(best_k, n_init=10, random_state=0).fit(X)
+features["cluster"] = model.labels_
+print(features.groupby("cluster").mean().round(1))
+```
+
+## Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| Forgetting to scale | Always standardise before distance-based methods |
+| Using labels you already know as inputs | Keep them for **interpreting** clusters, not for building them |
+| Trusting one random start | Use `n_init=10` or more |
+| Reading t-SNE distances literally | Use t-SNE to look, PCA and metrics to measure |
+| Expecting odd-shaped groups | K-Means likes round, similar-size clusters; try DBSCAN or Gaussian mixtures otherwise |
+
+## Summary
+
+- **Unsupervised learning** finds structure when nobody has labelled the data.
+- **K-Means** repeats two steps, assign and move, to minimise WCSS (@eq-wcss).
+- Choose **k** with the elbow and silhouette (@eq-silhouette), then check the result visually with **PCA** and **t-SNE**.
+- The payoff comes when you **name** each cluster and attach **one clear action** to it.
+
+For a deeper treatment of clustering and PCA, see @hastie2009.
