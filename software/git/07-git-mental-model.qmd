@@ -1,0 +1,82 @@
+---
+title: "Git: A Mental Model for Version Control"
+description: "Learn commits, branches, merge, rebase and recovery by thinking of Git as a graph rather than memorizing commands."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Git, Version Control]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Git becomes much easier when you stop treating it as a bag of commands.
+
+Think of it as a **graph of snapshots**.
+
+::: {.callout-tip}
+## Key ideas
+`repository` `working tree` `staging area` `commit` `branch`
+`HEAD` `merge` `rebase` `remote` `fetch` `pull` `push`
+:::
+
+## The three places
+
+```text
+Working directory
+      │ git add
+      ▼
+Staging area
+      │ git commit
+      ▼
+Repository history
+```
+
+A basic rhythm:
+
+```bash
+git status
+git add analysis.py
+git commit -m "Add bootstrap analysis"
+git log --oneline
+```
+
+## Best resources
+
+**Pro Git — free official book:**  
+https://git-scm.com/book/en/v2
+
+**Git Reference:**  
+https://git-scm.com/docs
+
+**Learn Git Branching — visual and interactive:**  
+https://learngitbranching.js.org/
+
+**GitHub's Introduction to Git:**  
+https://github.com/skills/introduction-to-git
+
+## Practice visually
+
+Use Learn Git Branching to see:
+
+```text
+A──B──C  main
+    \
+     D──E  experiment
+```
+
+Commands such as merge and rebase make far more sense when you can visualize the commit graph.
+
+::: {.callout-warning}
+## Git is also a recovery system
+Before using destructive-looking commands copied from the internet, understand what will happen to the working tree, index and commit graph. `git status` is your friend.
+:::
+
+**Next:** *GitHub — Collaboration, Pull Requests & Portfolio*

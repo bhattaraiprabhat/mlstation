@@ -1,0 +1,89 @@
+---
+title: "GitHub: Collaboration, Pull Requests & Portfolio"
+description: "Use GitHub as a collaboration layer over Git and as a clear public record of technical projects."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, GitHub, Collaboration]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Git and GitHub are related, but they are not the same thing.
+
+```text
+Git     = version-control system
+GitHub  = hosting + collaboration + review + automation around repositories
+```
+
+::: {.callout-tip}
+## Key ideas
+`remote` `clone` `fork` `issue` `pull request` `review`
+`Actions` `README` `release` `Pages`
+:::
+
+## Collaboration loop
+
+```text
+Issue
+ ↓
+Branch
+ ↓
+Commits
+ ↓
+Push
+ ↓
+Pull Request
+ ↓
+Review
+ ↓
+Merge
+```
+
+## Learn interactively
+
+**GitHub Skills:**  
+https://skills.github.com/
+
+**GitHub Get Started:**  
+https://docs.github.com/en/get-started
+
+**GitHub Actions:**  
+https://docs.github.com/en/actions
+
+**GitHub Pages:**  
+https://docs.github.com/en/pages
+
+## A Data Science repository should explain itself
+
+```text
+project/
+├── README.md
+├── data/          # or instructions to obtain data
+├── notebooks/
+├── src/
+├── tests/
+├── requirements.txt
+└── results/
+```
+
+A strong README answers:
+
+1. What problem does this solve?
+2. What data is used?
+3. How do I run it?
+4. What did you find/build?
+5. How is the repository organized?
+
+::: {.callout-tip}
+## Portfolio principle
+Three understandable, reproducible projects usually communicate more than dozens of unexplained notebooks.
+:::

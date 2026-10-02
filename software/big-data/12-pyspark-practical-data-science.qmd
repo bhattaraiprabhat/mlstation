@@ -1,0 +1,127 @@
+---
+title: "PySpark for Practical Data Science"
+description: "Translate familiar DataFrame thinking into distributed PySpark and learn the habits that matter for scalable pipelines."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, PySpark, Big Data, Data Science]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+PySpark is easiest to learn by connecting it to concepts you already know from pandas and SQL—then noticing where distributed execution changes the rules.
+
+::: {.callout-tip}
+## Key ideas
+`SparkSession` `schema` `select` `filter` `withColumn`
+`groupBy` `join` `window` `partition` `Parquet` `explain`
+:::
+
+## A small PySpark pipeline
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.getOrCreate()
+
+df = spark.read.parquet("events/")
+
+result = (
+    df.filter(F.col("event") == "purchase")
+      .groupBy("country")
+      .agg(
+          F.sum("amount").alias("revenue"),
+          F.count("*").alias("orders")
+      )
+)
+
+result.show()
+```
+
+The syntax is not the hard part. The important question is:
+
+> **What physical work will Spark need to perform?**
+
+## Learn in this order
+
+```text
+DataFrame basics
+ ↓
+schemas + data types
+ ↓
+select/filter/withColumn
+ ↓
+groupBy
+ ↓
+joins
+ ↓
+window functions
+ ↓
+read/write Parquet
+ ↓
+partitions + shuffle
+ ↓
+query plans
+ ↓
+performance
+```
+
+## Resources
+
+**PySpark DataFrame Quickstart:**  
+https://spark.apache.org/docs/latest/api/python/getting_started/quickstart_df.html
+
+**PySpark User Guide:**  
+https://spark.apache.org/docs/latest/api/python/user_guide/index.html
+
+**Spark SQL Guide:**  
+https://spark.apache.org/docs/latest/sql-programming-guide.html
+
+**Databricks DataFrame Tutorial:**  
+https://docs.databricks.com/en/getting-started/dataframes.html
+
+## pandas vs. Spark
+
+```text
+pandas
+DataFrame → usually local/in-memory
+
+Spark
+DataFrame → logical distributed dataset
+          → optimized plan
+          → tasks over partitions
+```
+
+Avoid Python UDFs when equivalent built-in Spark expressions exist; built-in expressions give Spark more opportunity to optimize execution.
+
+## DS/ML bridge
+
+A common architecture is:
+
+```text
+raw distributed data
+       ↓
+Spark cleaning / aggregation / features
+       ↓
+training dataset
+       ↓
+ML training
+       ↓
+batch/stream scoring pipeline
+```
+
+Spark is often the **data engineering layer around ML**, not necessarily the algorithm that trains every model.
+
+::: {.callout-tip}
+## Best debugging habit
+When a Spark job is surprisingly slow, do not only stare at Python code. Inspect the execution plan, partitions, joins, shuffles and data volume.
+:::

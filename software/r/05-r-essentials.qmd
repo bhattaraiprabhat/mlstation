@@ -1,0 +1,94 @@
+---
+title: "R Essentials: Statistics as a Programming Language"
+description: "A short learning map for R fundamentals, vectors, data frames, functions, visualization and reproducible analysis."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, R, Statistics]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+R was built around statistical computing and graphics, which makes it unusually expressive for exploratory analysis and statistical modeling.
+
+::: {.callout-tip}
+## Key ideas
+`vector` `data.frame` `factor` `NA` `function` `formula`
+`subset` `apply` `package` `plot` `ggplot2`
+:::
+
+## Start with the vector
+
+```r
+x <- c(8, 11, 7, 14, 10)
+
+mean(x)
+sd(x)
+x[x > 10]
+```
+
+Much of R becomes easier once you think in **vectors rather than row-by-row loops**.
+
+## Learning resources
+
+<div class="resource-grid">
+<div class="resource-card">
+
+#### ★ Official Introduction to R
+Foundational reference for the language and statistical environment.
+
+https://cran.r-project.org/doc/manuals/r-release/R-intro.html
+
+</div>
+<div class="resource-card">
+
+#### ★ R for Data Science
+A modern, free book centered on real data-science workflows.
+
+https://r4ds.hadley.nz/
+
+</div>
+<div class="resource-card">
+
+#### ★ Posit Cheatsheets
+Excellent compact references after you have learned a concept once.
+
+https://posit.co/resources/cheatsheets/
+
+</div>
+</div>
+
+## Learn in this order
+
+```text
+vectors + types
+ ↓
+data frames
+ ↓
+indexing
+ ↓
+functions
+ ↓
+missing values
+ ↓
+visualization
+ ↓
+packages
+ ↓
+statistical models
+```
+
+::: {.callout-note}
+## Base R and tidyverse are not enemies
+Learn enough **base R** to read ordinary R code and understand vectors/functions. Learn **tidyverse** tools because they provide a coherent workflow for transformation, visualization and modern data analysis.
+:::
+
+**Next:** *R for Statistics & Data Science*

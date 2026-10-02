@@ -1,0 +1,109 @@
+---
+title: "SQL Essentials: Think in Tables"
+description: "Learn the relational mental model, core SQL clauses, joins and aggregation with high-quality interactive practice."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, SQL, Data Science]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+SQL is not merely another programming syntax. Its superpower is that you describe **the result you want from relational data**.
+
+::: {.callout-tip}
+## Key ideas
+`table` `row` `column` `primary key` `foreign key` `SELECT`
+`WHERE` `GROUP BY` `HAVING` `ORDER BY` `JOIN` `NULL` `aggregate`
+:::
+
+## The mental model
+
+```text
+FROM / JOIN   → Which data?
+WHERE         → Which rows?
+GROUP BY      → Which groups?
+HAVING        → Which groups survive?
+SELECT        → What output?
+ORDER BY      → In what order?
+```
+
+Example:
+
+```sql
+SELECT department,
+       AVG(salary) AS avg_salary
+FROM employees
+WHERE active = TRUE
+GROUP BY department
+HAVING COUNT(*) >= 5
+ORDER BY avg_salary DESC;
+```
+
+## Start here
+
+<div class="resource-grid">
+<div class="resource-card">
+
+#### ★ SQLBolt
+Excellent first resource because lessons and exercises run interactively in the browser.
+
+https://sqlbolt.com/
+
+</div>
+<div class="resource-card">
+
+#### ★ PostgreSQL Tutorial
+A more formal path through relational concepts, queries, joins, aggregates and advanced features.
+
+https://www.postgresql.org/docs/current/tutorial.html
+
+</div>
+<div class="resource-card">
+
+#### ★ SQLite Tutorial / Docs
+Useful when you want a lightweight local database requiring little setup.
+
+https://www.sqlite.org/docs.html
+
+</div>
+</div>
+
+## Practice order
+
+```text
+SELECT
+ ↓
+WHERE + ORDER BY
+ ↓
+GROUP BY + aggregates
+ ↓
+INNER / LEFT JOIN
+ ↓
+CASE
+ ↓
+subqueries / CTEs
+ ↓
+window functions
+```
+
+::: {.callout-tip}
+## Data Scientist checkpoint
+If you can confidently combine **JOIN + GROUP BY + CASE + window functions**, you can solve a large fraction of everyday analytical SQL tasks.
+:::
+
+## Practice
+
+- **SQLBolt:** https://sqlbolt.com/
+- **HackerRank SQL:** https://www.hackerrank.com/domains/sql
+- **LeetCode Database problems:** https://leetcode.com/problemset/database/
+
+**Next:** *Analytical SQL & Interview Patterns*

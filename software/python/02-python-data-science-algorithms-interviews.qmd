@@ -1,0 +1,117 @@
+---
+title: "Python for Data Science, Algorithms & Interviews"
+description: "Move from Python syntax to NumPy, pandas, algorithms, complexity, coding practice and technical interview preparation."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Python, Data Science, Algorithms]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Knowing Python syntax is different from being effective with Python.
+
+For Data Science, the next layer is:
+
+```text
+Python
+ ├── NumPy       → numerical arrays
+ ├── pandas      → tabular data
+ ├── visualization
+ ├── scikit-learn → ML workflows
+ └── algorithms  → computational thinking
+```
+
+::: {.callout-tip}
+## Key ideas
+`array` `shape` `axis` `vectorization` `DataFrame` `index`
+`groupby` `merge` `complexity` `stack` `queue` `hash map`
+`tree` `graph` `recursion`
+:::
+
+## Data Science Python
+
+Start with arrays before treating pandas as magic.
+
+**NumPy Quickstart:**  
+https://numpy.org/doc/stable/user/quickstart.html
+
+**pandas Getting Started:**  
+https://pandas.pydata.org/docs/getting_started/
+
+**10 Minutes to pandas:**  
+https://pandas.pydata.org/docs/user_guide/10min.html
+
+**scikit-learn Getting Started:**  
+https://scikit-learn.org/stable/getting_started.html
+
+A useful translation:
+
+```text
+Python list       → general collection
+NumPy ndarray     → numerical computation
+pandas DataFrame  → labeled tabular analysis
+Spark DataFrame   → distributed tabular computation
+```
+
+## Algorithms & data structures
+
+Learn the concepts before memorizing interview templates:
+
+```text
+Big-O
+arrays / strings
+hash maps / sets
+stacks / queues
+linked lists
+binary search
+sorting
+trees
+heaps
+graphs
+recursion
+dynamic programming
+```
+
+### Resources
+
+- **Python Data Structures tutorial:** https://docs.python.org/3/tutorial/datastructures.html
+- **VisuAlgo:** https://visualgo.net/en — visual intuition for algorithms/data structures.
+- **LeetCode:** https://leetcode.com/ — extensive coding-problem practice.
+- **HackerRank:** https://www.hackerrank.com/ — structured programming/problem-solving practice.
+
+## Interview preparation
+
+Use problems as **reasoning practice**, not a memorization contest.
+
+```text
+1. Restate problem
+2. Work a tiny example
+3. Describe brute force
+4. Identify data structure
+5. Improve complexity
+6. Code
+7. Test edge cases
+8. State time + space complexity
+```
+
+For DS interviews, also practice writing ordinary Python transformations without relying on pandas for everything.
+
+::: {.callout-warning}
+## Common trap
+Solving 300 problems badly is less useful than solving 60 problems while understanding **why the algorithm works, its invariants, complexity and alternatives**.
+:::
+
+## Recommended route
+
+**Python fundamentals → NumPy → pandas → 30–50 core algorithm problems → role-specific interview problems**
+
+Keep this page as a map; use the linked resources as the classroom.

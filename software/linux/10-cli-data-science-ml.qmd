@@ -1,0 +1,99 @@
+---
+title: "CLI for Data Science & ML"
+description: "Use shell pipelines, environments, processes, SSH and text tools to work effectively on real Data Science systems."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Linux, CLI, Data Science]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Data Science eventually leaves the notebook.
+
+Models run on servers. Jobs write logs. Environments break. Files become too large to open manually.
+
+That is where CLI fluency pays off.
+
+::: {.callout-tip}
+## Key ideas
+`grep` `find` `sort` `uniq` `wc` `cut` `awk` `sed`
+`ssh` `scp` `curl` `tar` `ps` `top` `kill` `PATH` `venv`
+:::
+
+## Inspect data without opening it
+
+```bash
+head -5 data.csv
+wc -l data.csv
+du -h data.csv
+grep "missing" pipeline.log
+```
+
+Find files:
+
+```bash
+find . -name "*.parquet"
+```
+
+Watch a running job:
+
+```bash
+tail -f training.log
+```
+
+## Understand redirection
+
+```bash
+python train.py > train.log 2>&1
+```
+
+means:
+
+```text
+stdout ─┐
+        ├──▶ train.log
+stderr ─┘
+```
+
+This tiny idea is enormously useful for long-running jobs.
+
+## Environments
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Know which Python is executing:
+
+```bash
+which python
+python --version
+python -m pip --version
+```
+
+## Resources
+
+**The Missing Semester:**  
+https://missing.csail.mit.edu/
+
+**Ubuntu CLI tutorial:**  
+https://ubuntu.com/desktop/docs/en/latest/tutorial/the-linux-command-line-for-beginners/
+
+**Bash manual:**  
+https://www.gnu.org/software/bash/manual/
+
+::: {.callout-tip}
+## Professional checkpoint
+You do not need to become a Linux administrator. For DS/ML, aim to navigate confidently, inspect files/logs, manage environments, understand processes, use SSH, and compose small shell pipelines.
+:::

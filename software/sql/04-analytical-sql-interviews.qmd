@@ -1,0 +1,95 @@
+---
+title: "Analytical SQL: Windows, CTEs & Interview Patterns"
+description: "Build the SQL patterns most useful for analytics, Data Science and technical interviews."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, SQL, Analytics, Interview]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Basic SQL retrieves data. Analytical SQL answers questions across **groups, sequences and time**.
+
+::: {.callout-tip}
+## Key ideas
+`CTE` `subquery` `window` `PARTITION BY` `ROW_NUMBER`
+`RANK` `LAG` `LEAD` `running total` `rolling average` `date arithmetic`
+:::
+
+## The pattern worth mastering
+
+```sql
+SELECT
+    employee_id,
+    department,
+    salary,
+    RANK() OVER (
+        PARTITION BY department
+        ORDER BY salary DESC
+    ) AS salary_rank
+FROM employees;
+```
+
+Unlike `GROUP BY`, a window function can calculate across related rows **without collapsing them into one row per group**.
+
+## Five interview families
+
+```text
+1. Top N per group
+2. Consecutive events / gaps
+3. Running and rolling metrics
+4. First / last / previous / next event
+5. Cohorts, retention and funnels
+```
+
+Learn patterns, then vary the problem.
+
+## References
+
+**PostgreSQL Window Functions:**  
+https://www.postgresql.org/docs/current/tutorial-window.html
+
+**PostgreSQL WITH / CTE queries:**  
+https://www.postgresql.org/docs/current/queries-with.html
+
+**HackerRank SQL:**  
+https://www.hackerrank.com/domains/sql
+
+**LeetCode Database:**  
+https://leetcode.com/problemset/database/
+
+## DS bridge
+
+SQL is often where a model's dataset is actually created:
+
+```text
+warehouse
+   ↓ SQL
+training table
+   ↓ Python/R
+model
+```
+
+A beautiful model trained on a badly joined table is still a bad model.
+
+::: {.callout-warning}
+## Always check the grain
+Before joining, state what **one row represents** in each table. Many analytical errors are accidental many-to-many joins, not mathematical errors.
+:::
+
+## Interview habit
+
+Before typing SQL, say:
+
+> “I need one row per ___.”
+
+That sentence often determines the entire query.

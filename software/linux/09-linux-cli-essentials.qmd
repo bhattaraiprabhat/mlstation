@@ -1,0 +1,85 @@
+---
+title: "Linux & CLI Essentials: Become Comfortable in the Terminal"
+description: "Learn the small set of shell concepts and commands that unlock servers, cloud systems, containers and ML environments."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Linux, CLI]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+The command line is not a punishment for avoiding a graphical interface. It is a **composable language for operating a computer**.
+
+::: {.callout-tip}
+## Key ideas
+`filesystem` `path` `shell` `stdin` `stdout` `stderr`
+`pipe` `redirect` `process` `permission` `environment variable`
+:::
+
+## The first commands
+
+```bash
+pwd
+ls -lah
+cd project
+mkdir results
+cp input.csv backup.csv
+mv old.txt new.txt
+rm temporary.txt
+```
+
+Then learn inspection:
+
+```bash
+cat file.txt
+less file.txt
+head file.txt
+tail file.txt
+grep "ERROR" app.log
+```
+
+## The superpower: composition
+
+```bash
+grep "ERROR" app.log | sort | uniq -c
+```
+
+Read it left to right:
+
+```text
+find error lines
+      ↓
+sort them
+      ↓
+count unique occurrences
+```
+
+## Resources
+
+**Ubuntu — Command Line for Beginners:**  
+https://ubuntu.com/desktop/docs/en/latest/tutorial/the-linux-command-line-for-beginners/
+
+**Linux Foundation — Introduction to Linux:**  
+https://training.linuxfoundation.org/training/introduction-to-linux/
+
+**GNU Bash manual:**  
+https://www.gnu.org/software/bash/manual/
+
+**The Missing Semester:**  
+https://missing.csail.mit.edu/
+
+::: {.callout-warning}
+## Respect destructive commands
+Before running `sudo`, recursive deletion, permission changes, or commands copied blindly from the web, understand what they will modify.
+:::
+
+**Next:** *CLI for Data Science & ML*

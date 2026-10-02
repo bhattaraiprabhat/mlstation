@@ -1,0 +1,145 @@
+---
+title: "Python Essentials: Learn → Write → Practice"
+description: "A compact roadmap for learning Python fundamentals and building programming fluency through deliberate practice."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Python, Programming]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Python is often the first programming language used in Data Science, ML and AI—not because it removes the need to think, but because its syntax lets you express ideas with relatively little ceremony.
+
+> **Goal:** learn enough syntax to stop thinking about syntax.
+
+::: {.callout-tip}
+## Key ideas
+<div class="keywords">
+
+`variables` `types` `list` `tuple` `dict` `set` `if` `for` `while` `function` `scope` `exception` `module` `class` `iterator` `comprehension`
+
+</div>
+:::
+
+## The 80/20 learning path
+
+```text
+Syntax → Collections → Control Flow → Functions
+        → Files/Errors → Modules → Classes → Practice
+```
+
+Do not wait until you “finish Python” before writing programs. Write tiny programs from day one.
+
+```python
+def summarize(values):
+    return {
+        "n": len(values),
+        "mean": sum(values) / len(values),
+        "minimum": min(values),
+        "maximum": max(values),
+    }
+
+print(summarize([8, 11, 7, 14, 10]))
+```
+
+## Learn
+
+<div class="resource-grid">
+<div class="resource-card">
+
+#### ★ Official Python Tutorial
+Best after you understand basic programming ideas. Concise and authoritative.
+
+https://docs.python.org/3/tutorial/
+
+</div>
+<div class="resource-card">
+
+#### ★ Python Documentation
+Keep this as your long-term reference for built-ins, standard library and language behavior.
+
+https://docs.python.org/3/
+
+</div>
+<div class="resource-card">
+
+#### ★ Automate the Boring Stuff
+Project-oriented introduction particularly useful if you learn by automating real tasks.
+
+https://automatetheboringstuff.com/
+
+</div>
+</div>
+
+## Practice
+
+<div class="resource-grid">
+<div class="resource-card">
+
+#### ★ Exercism — Python
+Small exercises with a structured track and feedback-oriented practice.
+
+https://exercism.org/tracks/python
+
+</div>
+<div class="resource-card">
+
+#### ★ HackerRank — Python
+Useful for syntax fluency and progressively constrained coding exercises.
+
+https://www.hackerrank.com/domains/python
+
+</div>
+<div class="resource-card">
+
+#### ★ Codewars
+Short kata are useful once basic syntax feels comfortable.
+
+https://www.codewars.com/
+
+</div>
+</div>
+
+## A better practice loop
+
+```text
+Read 15 min
+   ↓
+Close the tutorial
+   ↓
+Code from memory
+   ↓
+Get stuck
+   ↓
+Search documentation
+   ↓
+Improve solution
+```
+
+::: {.callout-note}
+## MLStation advice
+For Data Science, become very comfortable with **functions, dictionaries, list comprehensions, iterators, exceptions, modules and environments**. You need not master every corner of object-oriented Python before starting NumPy and pandas.
+:::
+
+## Checkpoint
+
+You are ready for applied Python when you can comfortably:
+
+- read a CSV/text file,
+- transform a collection,
+- write and call functions,
+- use dictionaries,
+- understand an error traceback,
+- import a module,
+- create and activate a virtual environment.
+
+**Next:** *Python for Data Science, Algorithms & Interviews*

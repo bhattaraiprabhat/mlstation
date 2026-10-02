@@ -1,0 +1,96 @@
+---
+title: "Spark & Big Data: Think Distributed"
+description: "Understand why distributed data processing is different and learn Spark's core execution mental model before memorizing APIs."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, Spark, Big Data]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+Spark matters when the problem is no longer simply:
+
+> Which pandas function should I call?
+
+but:
+
+> **How should this computation execute across machines and partitions?**
+
+::: {.callout-tip}
+## Key ideas
+`driver` `executor` `cluster` `partition` `DataFrame`
+`transformation` `action` `lazy evaluation` `shuffle`
+`stage` `task` `cache`
+:::
+
+## The distributed picture
+
+```text
+             DRIVER
+                │
+          execution plan
+                │
+       ┌────────┼────────┐
+       ▼        ▼        ▼
+   Executor  Executor  Executor
+   partitions partitions partitions
+```
+
+Spark divides data and computation into work that can be performed across executors.
+
+## Transformations are lazy
+
+```python
+filtered = df.filter(df.amount > 100)
+summary = filtered.groupBy("region").count()
+```
+
+Spark can build a plan before executing it. An action such as:
+
+```python
+summary.show()
+```
+
+causes work to be carried out.
+
+## Start here
+
+**Apache Spark Quick Start:**  
+https://spark.apache.org/docs/latest/quick-start.html
+
+**PySpark User Guide:**  
+https://spark.apache.org/docs/latest/api/python/user_guide/index.html
+
+**Spark SQL / DataFrames:**  
+https://spark.apache.org/docs/latest/sql-programming-guide.html
+
+**Databricks PySpark overview:**  
+https://docs.databricks.com/en/pyspark/
+
+## The concept to fear—in a healthy way
+
+```text
+local operation
+     ↓
+possible network SHUFFLE
+     ↓
+data moves between partitions
+```
+
+Joins, aggregations and repartitioning can move large amounts of data across a cluster. Distributed performance is often about reducing unnecessary movement.
+
+::: {.callout-note}
+## Do not start with RDDs
+For most modern structured-data learning, begin with **DataFrames and Spark SQL**. Learn lower-level abstractions later when you have a concrete reason.
+:::
+
+**Next:** *PySpark for Practical Data Science*

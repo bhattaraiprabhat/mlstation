@@ -1,0 +1,83 @@
+---
+title: "R for Statistics & Data Science"
+description: "Move from R syntax to tidy data, visualization, statistical modeling and reproducible Data Science."
+author: "MLStation"
+date: 2026-10-01
+categories: [Software, R, Data Science, Statistics]
+draft: false
+---
+
+
+<style>
+.resource-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin:1rem 0}
+.resource-card {border:1px solid #e5e7eb;border-radius:14px;padding:1rem;background:linear-gradient(145deg,#fff,#f8fafc)}
+.resource-card h4 {margin-top:0}
+.path {font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.keywords code {margin-right:.25rem}
+</style>
+
+
+R becomes especially powerful when code, statistical reasoning and communication live in one workflow.
+
+```text
+Import → Tidy → Transform → Visualize → Model → Communicate
+```
+
+::: {.callout-tip}
+## Key ideas
+`tidy data` `dplyr` `tidyr` `ggplot2` `readr`
+`lm` `glm` `tidymodels` `Quarto` `reproducibility`
+:::
+
+## Core learning path
+
+**R for Data Science (2e):**  
+https://r4ds.hadley.nz/
+
+It teaches the practical cycle of importing, transforming, visualizing and communicating data.
+
+**ggplot2 book:**  
+https://ggplot2-book.org/
+
+**Tidy Modeling with R:**  
+https://www.tmwr.org/
+
+**tidymodels:**  
+https://www.tidymodels.org/
+
+**Quarto:**  
+https://quarto.org/docs/get-started/
+
+## One beautiful idea: formulas
+
+```r
+model <- lm(
+  price ~ size + bedrooms + age,
+  data = homes
+)
+
+summary(model)
+```
+
+R's formula interface connects programming directly to statistical model specification.
+
+## Practice projects
+
+Do not practice R only through isolated syntax exercises. Pick a dataset and repeatedly perform:
+
+```text
+question
+ → clean
+ → visualize
+ → summarize
+ → model
+ → diagnose
+ → communicate
+```
+
+The free R for Data Science book deliberately emphasizes this end-to-end workflow.
+
+::: {.callout-tip}
+## Where R shines
+R is particularly strong when statistical analysis, visualization and reproducible scientific communication are central to the work.
+:::
