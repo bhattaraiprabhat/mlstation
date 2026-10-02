@@ -789,7 +789,7 @@ geo_df=pd.DataFrame({"latitude":30.27+rng.normal(0,.055,n),"longitude":-97.74+rn
 #| code-summary: "View Plot Code"
 #| warning: false
 import plotly.express as px
-fig=px.scatter_map(geo_df,lat="latitude",lon="longitude",size="orders",hover_data=["orders"],zoom=9,height=500,title="Interactive Geographic Distribution of Orders"); fig.show()
+fig=px.scatter_map(geo_df,lat="latitude",lon="longitude",size="orders",hover_data=["orders"],zoom=9,height=500,center={"lat": 30.2672, "lon": -97.7431},title="Interactive Geographic Distribution of Orders"); fig.show()
 ```
 
 Use a map when spatial relationships matter. If the question is only “which region is largest?”, a sorted bar chart may be clearer.
