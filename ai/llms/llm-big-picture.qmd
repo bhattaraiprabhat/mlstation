@@ -1,0 +1,333 @@
+---
+title: "Large Language Models (LLMs): The Big Picture"
+description: "What an LLM is, how text becomes tokens, how a model generates output, and the difference between training and inference."
+author: "MLStation"
+date: 2026-10-01
+categories: [AI, LLM]
+draft: false
+---
+
+Large Language Models (LLMs) power many modern AI applications: chat assistants, summarizers, coding tools, search systems and AI agents. Despite their impressive behavior, the basic idea is approachable: **give the model some text, and it predicts what text should come next.**
+
+::: {.callout-tip}
+## What you will learn
+- What a Large Language Model is
+- How text becomes **tokens**
+- The basic flow: **input → tokens → model → output**
+- The difference between **training** and **inference**
+- How to run a small end-to-end LLM example and save the result
+:::
+
+## Intuition
+
+Suppose you write:
+
+> The capital of France is ...
+
+A language model examines the text and assigns probabilities to possible next tokens. A well-trained model may give a high probability to `Paris`.
+
+It then selects a next token, adds it to the sequence, and repeats the process.
+
+$$
+\text{Input text}
+\rightarrow
+\text{Tokens}
+\rightarrow
+\text{LLM}
+\rightarrow
+\text{Next-token probabilities}
+\rightarrow
+\text{Generated text}
+$$
+
+The important idea is that an LLM does not generate an entire answer in one step. It generates the answer **token by token**.
+
+::: {#def-llm}
+## Large Language Model
+A **Large Language Model (LLM)** is a neural-network language model trained on large amounts of text to model patterns in language and predict tokens from the context it receives.
+:::
+
+## What is a token?
+
+An LLM does not directly read words the way we do. Before text enters the model, a **tokenizer** converts it into tokens.
+
+A token may be:
+
+- a whole word,
+- part of a word,
+- punctuation, or
+- another frequently occurring text unit.
+
+For example, conceptually:
+
+```text
+"Machine learning is useful."
+
+        ↓ tokenizer
+
+["Machine", " learning", " is", " useful", "."]
+```
+
+The exact tokens depend on the tokenizer used by the model.
+
+::: {.callout-note}
+## Tokens are not always words
+Do not assume that one word equals one token. A common word may be represented by one token, while an uncommon or long word may be split into several tokens.
+:::
+
+## From tokens to an answer
+
+Tokens are represented internally as numbers and then as learned vectors. The model processes those representations together with the preceding context and produces a score for possible next tokens.
+
+Conceptually:
+
+$$
+x_1,x_2,\ldots,x_t
+\quad \xrightarrow{\text{LLM}} \quad
+P(x_{t+1}\mid x_1,x_2,\ldots,x_t)
+$$ {#eq-next-token}
+
+The expression says:
+
+> Given all tokens seen so far, what is the probability of each possible next token?
+
+The model chooses a token, appends it to the context, and performs the same operation again.
+
+```text
+"The capital of France is"
+              ↓
+             LLM
+              ↓
+           " Paris"
+
+"The capital of France is Paris"
+              ↓
+             LLM
+              ↓
+              "."
+```
+
+This repeated next-token prediction is the basic mechanism behind text generation.
+
+## Training vs. inference
+
+Two terms appear constantly when working with LLMs.
+
+| Stage | What happens |
+|---|---|
+| **Training** | The model learns its parameters from large amounts of data |
+| **Inference** | A trained model receives new input and generates a response |
+
+: Training and inference serve different purposes {#tbl-training-inference}
+
+During **training**, the model repeatedly predicts tokens, compares its predictions with the expected tokens, and adjusts a very large collection of parameters called **weights**.
+
+A simplified training loop is:
+
+$$
+\text{Text}
+\rightarrow
+\text{Predict token}
+\rightarrow
+\text{Measure error}
+\rightarrow
+\text{Update weights}
+\rightarrow
+\text{Repeat}
+$$
+
+During **inference**, those learned weights are normally kept fixed:
+
+$$
+\text{Prompt}
+\rightarrow
+\text{Trained LLM}
+\rightarrow
+\text{Generated response}
+$$
+
+::: {.callout-tip}
+## A useful mental model
+**Training = learning the model's weights.**
+
+**Inference = using those learned weights.**
+
+Most application developers spend far more time performing inference with an existing LLM than training a large model from scratch.
+:::
+
+## Your first end-to-end LLM
+
+Let us run a small open model locally with the Hugging Face `transformers` library.
+
+The complete pipeline is:
+
+```text
+Prompt
+  ↓
+Tokenizer
+  ↓
+Tokens
+  ↓
+Pre-trained model
+  ↓
+Generated tokens
+  ↓
+Tokenizer decodes them
+  ↓
+Text response
+  ↓
+Save result
+```
+
+Install the required packages:
+
+```bash
+pip install transformers torch
+```
+
+Then run:
+
+```{.python filename="first_llm.py"}
+from pathlib import Path
+from transformers import pipeline
+
+# 1. Load a pretrained text-generation model.
+generator = pipeline(
+    "text-generation",
+    model="distilgpt2"
+)
+
+# 2. Give the model some input text.
+prompt = "Machine learning is useful because"
+
+# 3. Run inference.
+result = generator(
+    prompt,
+    max_new_tokens=40,
+    do_sample=False
+)
+
+response = result[0]["generated_text"]
+
+# 4. Inspect the output.
+print(response)
+
+# 5. Save the result so the experiment is reproducible.
+Path("outputs").mkdir(exist_ok=True)
+Path("outputs/first_llm.txt").write_text(response)
+```
+
+The first execution downloads the pretrained model. Later executions can reuse the cached model.
+
+Notice the separation of responsibilities:
+
+```text
+pipeline(...)     → load tokenizer + model
+prompt            → input
+generator(...)    → inference
+response          → generated output
+write_text(...)   → save the result
+```
+
+## Look one level deeper
+
+The convenient `pipeline` hides two important pieces: the **tokenizer** and the **model**.
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+model_name = "distilgpt2"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+
+inputs = tokenizer(
+    "Artificial intelligence can",
+    return_tensors="pt"
+)
+
+outputs = model.generate(
+    **inputs,
+    max_new_tokens=20
+)
+
+text = tokenizer.decode(
+    outputs[0],
+    skip_special_tokens=True
+)
+
+print(text)
+```
+
+This exposes the core flow more clearly:
+
+$$
+\text{Text}
+\xrightarrow{\text{tokenizer}}
+\text{Token IDs}
+\xrightarrow{\text{model}}
+\text{Generated Token IDs}
+\xrightarrow{\text{decoder}}
+\text{Text}
+$$
+
+## What should you save?
+
+When experimenting with LLMs, do not think only about saving the model. Save the pieces needed to reproduce what happened.
+
+For a simple experiment, that can include:
+
+```text
+outputs/
+├── first_llm.txt
+├── prompt.txt
+└── config.json
+```
+
+If you fine-tune or otherwise modify a model later, save both the model and tokenizer:
+
+```python
+model.save_pretrained("saved_model")
+tokenizer.save_pretrained("saved_model")
+```
+
+For the example in this article, however, the model is already published and identified by `"distilgpt2"`. Saving the **model name, prompt, generation settings and output** is often more useful than making another copy of unchanged pretrained weights.
+
+::: {.callout-warning}
+## Common mistake
+An LLM generates text from learned statistical patterns; fluent output is **not automatically a verified fact**. When factual correctness matters, the application needs appropriate grounding and validation.
+
+Later articles will show how techniques such as **RAG** provide external context and how **validation** can check generated results.
+:::
+
+## The big picture
+
+At this point, keep one picture in mind:
+
+```text
+                         TRAINING
+                    ┌───────────────┐
+Large text data ───▶│ Learn weights │
+                    └───────┬───────┘
+                            │
+                            ▼
+                       Trained LLM
+                            │
+                            │ used during
+                            ▼
+                         INFERENCE
+Prompt ─▶ Tokenizer ─▶ LLM ─▶ Generated tokens ─▶ Text response
+```
+
+You do **not** need to understand every internal transformer operation before building useful LLM applications. First understand the data flow. We can then add prompting, retrieval, tools, agents and validation around the same model.
+
+## Summary
+
+- An LLM is a neural-network language model trained on large amounts of text.
+- Text is converted into **tokens** before entering the model.
+- Generation is fundamentally repeated **next-token prediction** (@eq-next-token).
+- **Training** learns model weights; **inference** uses the learned model to generate output.
+- A minimal application follows **prompt → tokenizer → model → generated tokens → text**.
+- Save the prompt, model/version, generation settings and output so experiments can be reproduced.
+
+**Next:** *Prompting an LLM — System Prompts and User Prompts*
