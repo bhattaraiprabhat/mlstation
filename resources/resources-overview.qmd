@@ -1,0 +1,180 @@
+---
+title: "Where to Find Data Science Resources: A Practical Map 🧭"
+description: "A guided map of the best free places to learn data science, find datasets, copy real projects and industry use cases, and stay current, with a resource finder and a learning-loop simulation."
+author: "MLStation"
+date: 2026-10-01
+categories: [Resources, Learning, Projects]
+draft: false
+---
+
+The internet has more data science material than anyone could read in a lifetime. The problem is not finding something; it is finding the **right thing for where you are now**. This page is a map: what kind of resource to use for which goal, the best free places for each, and a simple loop that turns reading into real skill. 🚀
+
+::: {.callout-tip}
+## 🎯 What you will get
+- A map of six resource types and the best free sources for each
+- A resource finder: pick your goal and level, get a short list
+- Where to find **real projects and industry use cases** to copy and adapt
+- The learn → build → share loop, and a simulation of why projects beat passive reading
+:::
+
+{{< include _series-nav.md >}}
+
+## 🗺️ The six kinds of resources
+
+| | Type | Use it to | Best free starting points |
+|---|---|---|---|
+| 📘 | **Courses and books** | Learn concepts in order | [Kaggle Learn](https://www.kaggle.com/learn), [fast.ai](https://course.fast.ai/), [ISLP book](https://www.statlearning.com/), [Elements of Statistical Learning](https://hastie.su.domains/ElemStatLearn/) |
+| 🗄️ | **Datasets** | Practise on real data | [Kaggle Datasets](https://www.kaggle.com/datasets), [UCI repository](https://archive.ics.uci.edu/), [Hugging Face](https://huggingface.co/datasets), see our [20 open data sources](/resources/datasets/open-data-sources.qmd) |
+| 🏭 | **Projects and use cases** | See how real problems are framed and solved | Kaggle competitions and notebooks, company engineering blogs, our [learning paths](/resources/learning-paths/industrial-use-case-paths.qmd) |
+| 💻 | **Code and curated lists** | Reuse working code | [awesome-datascience](https://github.com/academic/awesome-datascience), library docs and example galleries |
+| 📄 | **Papers** | Understand state of the art | [Hugging Face Trending Papers](https://huggingface.co/papers/trending) (the old Papers with Code address now points here), arXiv |
+| 🧾 | **Quick references** | Look things up fast | Our [cheat sheets](/resources/cheat-sheets/data-science-cheat-sheets.qmd) and [glossary](/resources/glossary/data-science-glossary.qmd) |
+
+: Resource map {#tbl-map}
+
+::: {.callout-note}
+## 📝 Note
+The address `paperswithcode.com` now shows Hugging Face's **Trending Papers** page, which lists recent papers with their GitHub and arXiv links ([Papers with Code](https://paperswithcode.com/), [Hugging Face](https://huggingface.co/papers/trending)). Older tutorials that link to Papers with Code leaderboards may be out of date.
+:::
+
+## 🔎 Resource finder
+
+Tell us what you want to do and how far along you are.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof goal = Inputs.radio(["📘 Learn a concept", "🗄️ Find a dataset", "🏭 Copy a real project", "📄 Stay current", "🆘 Get unstuck"], {value: "🏭 Copy a real project", label: "I want to"})
+viewof level = Inputs.radio(["🌱 Beginner", "🌿 Intermediate", "🌳 Advanced"], {value: "🌱 Beginner", label: "My level"})
+```
+
+```{ojs}
+//| echo: false
+finder = ({
+  "📘 Learn a concept": {
+    "🌱 Beginner": [["Kaggle Learn micro-courses", "https://www.kaggle.com/learn", "Short, browser-based lessons in Python, pandas and ML."], ["MLStation Statistics section", "/statistics/", "Interactive p-values, distributions and regression."]],
+    "🌿 Intermediate": [["An Introduction to Statistical Learning (ISLP)", "https://www.statlearning.com/", "The classic free book, now with Python labs."], ["fast.ai Practical Deep Learning", "https://course.fast.ai/", "Top-down, code-first deep learning."]],
+    "🌳 Advanced": [["Elements of Statistical Learning", "https://hastie.su.domains/ElemStatLearn/", "The rigorous companion to ISLP."], ["Stanford CS229 cheat sheets", "https://stanford.edu/~shervine/teaching/cs-229/", "Dense, illustrated summaries of ML theory."]]
+  },
+  "🗄️ Find a dataset": {
+    "🌱 Beginner": [["UCI ML Repository", "https://archive.ics.uci.edu/", "Small, clean, well-documented classics."], ["Our World in Data", "https://ourworldindata.org/", "Tidy country-level charts with downloadable CSVs."]],
+    "🌿 Intermediate": [["Kaggle Datasets", "https://www.kaggle.com/datasets", "Large, messy, real-world tables with community notebooks."], ["Google Dataset Search", "https://datasetsearch.research.google.com/", "A search engine for datasets across the web."]],
+    "🌳 Advanced": [["AWS Open Data Registry", "https://registry.opendata.aws/", "Terabyte-scale data in cloud storage."], ["Common Crawl", "https://commoncrawl.org/", "Open web-crawl data for NLP at scale."]]
+  },
+  "🏭 Copy a real project": {
+    "🌱 Beginner": [["Kaggle 'Getting Started' competitions", "https://www.kaggle.com/competitions", "Titanic, house prices, digits: guided first projects."], ["MLStation learning paths", "/resources/learning-paths/industrial-use-case-paths.html", "Step-by-step paths for eight industry use cases."]],
+    "🌿 Intermediate": [["Kaggle notebooks on a featured competition", "https://www.kaggle.com/competitions", "Read the top public notebooks, then rebuild one yourself."], ["awesome-datascience", "https://github.com/academic/awesome-datascience", "Curated projects, tools and datasets."]],
+    "🌳 Advanced": [["Company engineering blogs", "https://netflixtechblog.com/", "How Netflix, Uber, Airbnb and others run ML in production."], ["MLStation Deployment series", "/deployment/deployment-overview.html", "Take a project from notebook to production."]]
+  },
+  "📄 Stay current": {
+    "🌱 Beginner": [["MLStation latest articles", "/", "Readable, interactive explainers."], ["Hugging Face Trending Papers", "https://huggingface.co/papers/trending", "What the community is reading this week."]],
+    "🌿 Intermediate": [["Hugging Face Trending Papers", "https://huggingface.co/papers/trending", "Papers with code links and community votes."], ["arXiv cs.LG listing", "https://arxiv.org/list/cs.LG/recent", "New machine learning preprints daily."]],
+    "🌳 Advanced": [["arXiv cs.LG and stat.ML", "https://arxiv.org/list/stat.ML/recent", "Primary sources, before peer review."], ["Conference proceedings (NeurIPS)", "https://papers.nips.cc/", "Peer-reviewed papers, free to read."]]
+  },
+  "🆘 Get unstuck": {
+    "🌱 Beginner": [["Official library docs", "https://pandas.pydata.org/docs/", "The pandas user guide answers most questions."], ["MLStation glossary", "/resources/glossary/data-science-glossary.html", "Plain-language definitions."]],
+    "🌿 Intermediate": [["Stack Overflow", "https://stackoverflow.com/questions/tagged/pandas", "Search before you ask; include a minimal example."], ["Cross Validated", "https://stats.stackexchange.com/", "Q&A for statistics questions."]],
+    "🌳 Advanced": [["GitHub issues of the library", "https://github.com/scikit-learn/scikit-learn/issues", "Known bugs and design discussions."], ["Cross Validated", "https://stats.stackexchange.com/", "Deep statistical discussions."]]
+  }
+})
+{
+  const list = finder[goal][level];
+  return htl.html`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">${list.map(([name, url, why]) => htl.html`
+    <a href="${url}" style="display:block;padding:14px 16px;border:1px solid rgba(127,127,127,.25);border-radius:14px;text-decoration:none">
+      <div style="font-weight:650;font-size:1.02rem;margin-bottom:4px">${name} →</div>
+      <div style="font-size:.92rem;opacity:.8">${why}</div></a>`)}</div>`;
+}
+```
+
+## 🏭 Where to find real projects and use cases
+
+Courses teach tools. **Use cases teach judgment**: how a business problem becomes a prediction, which metric matters and what "good enough" looks like. Four places are worth your time:
+
+1. 🏆 **Kaggle competitions and notebooks.** Each competition starts with a business framing, a dataset and a metric. The top public notebooks show many solutions to the same problem.
+2. 🏢 **Company engineering blogs.** Netflix, Uber, Airbnb, Spotify, DoorDash and others describe how they built recommendation, pricing, forecasting and fraud systems. Read them for the **problem framing and architecture**, not the code.
+3. 🧰 **Curated GitHub lists.** [awesome-datascience](https://github.com/academic/awesome-datascience) collects learning resources, tools, datasets and communities in one README.
+4. 🛤️ **Structured paths.** Our [learning paths](/resources/learning-paths/industrial-use-case-paths.qmd) turn eight industry problems (churn, fraud, forecasting, maintenance and more) into step-by-step projects with open datasets.
+
+::: {.callout-important}
+## ⚠️ Copy, then change one thing
+Re-running someone else's notebook teaches little. Rebuild it from scratch, then **change one thing**: a new dataset, a new metric, a new deployment target. That change is where the learning happens.
+:::
+
+## 🔁 The learning loop
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  A["📘 Learn<br/>one concept"] --> B["🗄️ Practise<br/>on a dataset"]
+  B --> C["🏗️ Build<br/>a small project"]
+  C --> D["📣 Share<br/>notebook, blog, repo"]
+  D --> E["💬 Feedback<br/>reviews, questions"]
+  E --> A
+```
+
+Why does building matter so much? The simulation below follows two learners for 24 weeks. Both study 6 hours a week. **Learner A** only reads and watches. **Learner B** spends half the time on small projects. Press **▶ Play**.
+
+```{python}
+#| label: fig-loop
+#| fig-cap: "Simulated skill growth over 24 weeks. Passive study plateaus as unused knowledge is forgotten; project work keeps compounding. Illustrative model, not measured data."
+#| code-fold: true
+import numpy as np, plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(1)
+weeks = np.arange(0, 25)
+def learner(project_share, forget):
+    s, out = 5.0, []
+    for w in weeks:
+        out.append(s)
+        gain = 6 * (1 - project_share) * 0.9 + 6 * project_share * 1.6 * (1 + s / 60)
+        s = s + gain * (1 - s / 100) - forget * s + rng.normal(0, 0.6)
+    return np.array(out)
+A = learner(0.0, 0.035)
+B = learner(0.5, 0.012)
+def frame(k):
+    return [go.Scatter(x=weeks[:k + 1], y=A[:k + 1], name="A: reading only", line=dict(color=COLORS["rose"], width=3.5)),
+            go.Scatter(x=weeks[:k + 1], y=B[:k + 1], name="B: half projects", line=dict(color=COLORS["teal"], width=3.5))]
+fig = go.Figure(data=frame(0), frames=[go.Frame(data=frame(k), name=str(k)) for k in weeks])
+fig.update_layout(
+    height=400, xaxis=dict(range=[0, 24], title="Week"), yaxis=dict(range=[0, 100], title="Skill score (0–100, simulated)"),
+    legend=dict(orientation="h", y=1.14),
+    updatemenus=[dict(type="buttons", x=0, y=-0.2, xanchor="left", showactive=False,
+                      buttons=[dict(label="▶ Play", method="animate", args=[None, dict(frame=dict(duration=180, redraw=False), fromcurrent=True, transition=dict(duration=120))]),
+                               dict(label="⏸ Pause", method="animate", args=[[None], dict(mode="immediate", frame=dict(duration=0))])])])
+fig.show(config=PLOTLY_CONFIG)
+```
+
+After 24 weeks the simulated project learner scores **`{python} f"{B[-1]:.0f}"`** vs **`{python} f"{A[-1]:.0f}"`** for the reader. The numbers are made up, but the shape matches common experience: knowledge you **use** sticks.
+
+## 🗓️ A sample week
+
+A realistic plan for someone with a job, at 6 hours a week:
+
+```{python}
+#| label: fig-week
+#| fig-cap: "A balanced 6-hour learning week."
+#| code-fold: true
+parts = ["📘 Learn a concept", "🗄️ Explore a dataset", "🏗️ Build the project", "📣 Write it up", "💬 Read others' work"]
+hours = [1.5, 1.0, 2.0, 1.0, 0.5]
+fig = go.Figure(go.Bar(x=hours, y=parts, orientation="h", text=[f"{h} h" for h in hours], textposition="outside",
+                       marker_color=[COLORS["indigo"], COLORS["violet"], COLORS["teal"], COLORS["amber"], COLORS["slate"]]))
+fig.update_layout(height=300, xaxis=dict(title="Hours", range=[0, 2.6]), yaxis=dict(autorange="reversed"), showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## ✅ A quick checklist for judging any resource
+
+| Question | Good sign 👍 | Warning sign 👎 |
+|---|---|---|
+| Is it current? | Updated in the last year or two, recent library versions | Old APIs, deprecated functions |
+| Does it show code and reasoning? | Explains why each step is done | Copy-paste code only |
+| Is the data real or realistic? | Messy data, missing values handled | Perfectly clean toy data only |
+| Does it measure results honestly? | Hold-out test set, clear metric | Accuracy on training data |
+| Can you run it? | Notebook or repo you can open | Screenshots only |
+
+## 🧩 Summary
+
+- Use the **right resource type** for the goal: courses for concepts, datasets for practice, use cases for judgment.
+- Start with **free, high-quality sources**: Kaggle, UCI, ISLP, fast.ai, Hugging Face, awesome lists.
+- **Build, share, get feedback**, and repeat. Projects compound; passive reading fades.
+- Continue with [learning paths](/resources/learning-paths/industrial-use-case-paths.qmd) 🛤️, [cheat sheets](/resources/cheat-sheets/data-science-cheat-sheets.qmd) 📝, the [glossary](/resources/glossary/data-science-glossary.qmd) 📖 and [20 open data sources](/resources/datasets/open-data-sources.qmd) 🗄️.

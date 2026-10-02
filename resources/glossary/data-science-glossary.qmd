@@ -1,0 +1,216 @@
+---
+title: "Data Science Glossary: 100+ Terms in Plain Language 📖"
+description: "A searchable glossary of statistics, machine learning, deep learning, data, evaluation, MLOps, NLP and computer vision terms, each explained in one or two plain sentences with an example."
+author: "MLStation"
+date: 2026-10-01
+categories: [Resources, Glossary, Reference]
+draft: false
+---
+
+Jargon is the first wall every learner hits. This glossary explains each term in **one or two plain sentences** plus a short example. Search it, filter by topic, or pull a random "term of the day" 🎲.
+
+::: {.callout-tip}
+## 🎯 How to use it
+- 🔎 Type in the search box to filter as you type
+- 🏷️ Pick a topic to narrow the list
+- 🎲 Press "Surprise me" to learn one new term a day
+- 📜 The full A–Z list is printed below the search tool, so `Ctrl+F` works too
+:::
+
+{{< include ../_series-nav.md >}}
+
+```{python}
+#| echo: false
+T = [
+ # (term, category, definition, example)
+ ("A/B test", "📊 Statistics", "A controlled experiment that randomly splits users between two versions and compares an outcome.", "Half of visitors see a new checkout button; compare conversion rates."),
+ ("Accuracy", "📏 Evaluation", "The share of predictions that are correct. Misleading when one class is rare.", "99% accuracy on fraud data can mean the model never flags fraud."),
+ ("Activation function", "🧠 Deep learning", "A non-linear function applied to a neuron's output so networks can learn curves, not just lines.", "ReLU returns max(0, x)."),
+ ("Anomaly detection", "🤖 Machine learning", "Finding data points that look very different from the rest.", "Flagging a server whose CPU pattern suddenly changes."),
+ ("API", "🚀 Deployment & MLOps", "A defined way for programs to talk to each other, often over HTTP.", "POST a payment as JSON, get back a fraud score."),
+ ("AUC (ROC AUC)", "📏 Evaluation", "The probability that the model ranks a random positive above a random negative. 0.5 is random, 1.0 is perfect.", "A churn model with AUC 0.82."),
+ ("Backpropagation", "🧠 Deep learning", "The algorithm that computes how much each weight contributed to the error, so gradient descent can update it.", "Errors flow backward from the output layer to the first layer."),
+ ("Bagging", "🤖 Machine learning", "Training many models on random resamples of the data and averaging them to reduce variance.", "A random forest is bagged decision trees plus random feature choice."),
+ ("Batch inference", "🚀 Deployment & MLOps", "Scoring many records at once on a schedule instead of one request at a time.", "Nightly churn scores for every customer."),
+ ("Bayes' theorem", "📊 Statistics", "A rule for updating the probability of a belief after seeing evidence.", "Updating the chance of disease after a positive test."),
+ ("Bias (statistical)", "📊 Statistics", "A systematic difference between an estimate and the true value.", "Surveying only app users overestimates tech comfort."),
+ ("Bias-variance trade-off", "🤖 Machine learning", "Simple models miss patterns (bias); complex models chase noise (variance). Good models balance both.", "A straight line underfits; a degree-20 polynomial overfits."),
+ ("Bootstrap", "📊 Statistics", "Estimating uncertainty by resampling the data with replacement many times.", "1,000 resamples give a confidence interval for the median."),
+ ("Bounding box", "👁️ Computer vision", "A rectangle that marks where an object is in an image.", "x, y, width, height around each car."),
+ ("Canary release", "🚀 Deployment & MLOps", "Sending a small share of traffic to a new version before rolling it out fully.", "5% of payments go to model v15 first."),
+ ("Categorical variable", "🧹 Data", "A variable whose values are labels, not numbers.", "Plan type: basic, plus, premium."),
+ ("Central limit theorem", "📊 Statistics", "Averages of many independent samples are approximately normal, whatever the original distribution.", "Daily average order values look bell-shaped."),
+ ("Classification", "🤖 Machine learning", "Predicting a category.", "Spam or not spam."),
+ ("Clustering", "🤖 Machine learning", "Grouping similar items without labels.", "k-means groups customers by behaviour."),
+ ("CNN", "🧠 Deep learning", "A convolutional neural network: layers of small filters that detect patterns in images.", "Early layers find edges, later layers find faces."),
+ ("Concept drift", "🚀 Deployment & MLOps", "When the relationship between inputs and the target changes over time.", "Fraudsters switch to small test payments."),
+ ("Confidence interval", "📊 Statistics", "A range that would contain the true value in a stated share (e.g. 95%) of repeated studies.", "Conversion 4.1% ± 0.3%."),
+ ("Confusion matrix", "📏 Evaluation", "A table of true positives, false positives, true negatives and false negatives.", "Shows which mistakes a classifier makes."),
+ ("Container", "🚀 Deployment & MLOps", "A packaged app with its libraries that runs the same everywhere.", "A Docker image of a FastAPI model service."),
+ ("Correlation", "📊 Statistics", "A number from -1 to 1 measuring how strongly two variables move together in a straight line.", "Height and weight: r ≈ 0.7. Correlation is not causation."),
+ ("Cross-validation", "📏 Evaluation", "Splitting data into k folds and training k times, each time testing on a different fold.", "5-fold CV gives five scores; report their mean."),
+ ("Data leakage", "🧹 Data", "When information unavailable at prediction time sneaks into training, inflating scores.", "Using 'account closed date' to predict churn."),
+ ("Data drift", "🚀 Deployment & MLOps", "When the distribution of input data changes compared with training data.", "Average payment size doubles after a new market launch."),
+ ("Data pipeline", "🧹 Data", "An automated chain of steps that moves and transforms data.", "Extract from API, clean, load to a warehouse."),
+ ("Decision tree", "🤖 Machine learning", "A model that makes predictions by asking a sequence of yes/no questions.", "Is tenure < 6 months? Is plan month-to-month?"),
+ ("Deep learning", "🧠 Deep learning", "Machine learning with neural networks that have many layers.", "Image recognition, speech, language models."),
+ ("Dimensionality reduction", "🤖 Machine learning", "Compressing many features into fewer while keeping most information.", "PCA turns 50 survey questions into 3 factors."),
+ ("Dropout", "🧠 Deep learning", "Randomly switching off neurons during training to reduce overfitting.", "Dropout rate 0.3 in a dense layer."),
+ ("Embedding", "💬 NLP & GenAI", "A list of numbers that represents a word, sentence, image or item so that similar things are close together.", "'king' and 'queen' have nearby embeddings."),
+ ("Ensemble", "🤖 Machine learning", "Combining several models to get better predictions than any single one.", "Averaging a forest, a boosted model and a linear model."),
+ ("Epoch", "🧠 Deep learning", "One full pass of the training data through the model.", "Train for 20 epochs."),
+ ("ETL / ELT", "🧹 Data", "Extract, transform, load: moving data from sources into a store. ELT loads first and transforms inside the warehouse.", "Daily sales from the shop database to BigQuery."),
+ ("Feature", "🧹 Data", "An input variable used by a model.", "Tenure, monthly charge, number of support calls."),
+ ("Feature engineering", "🧹 Data", "Creating new, more useful inputs from raw data.", "Turning timestamps into 'hour of day' and 'is weekend'."),
+ ("Feature store", "🚀 Deployment & MLOps", "A system that stores and serves features consistently for training and prediction.", "The same 'tx_last_hour' value used offline and online."),
+ ("Fine-tuning", "💬 NLP & GenAI", "Continuing to train a pre-trained model on a smaller, task-specific dataset.", "Adapting a general language model to support tickets."),
+ ("F1 score", "📏 Evaluation", "The harmonic mean of precision and recall.", "Useful when both false alarms and misses matter."),
+ ("Gradient boosting", "🤖 Machine learning", "Building trees one after another, each fixing the errors of the previous ones.", "XGBoost, LightGBM, scikit-learn HistGradientBoosting."),
+ ("Gradient descent", "🤖 Machine learning", "An optimisation method that repeatedly steps weights in the direction that reduces the loss.", "Learning rate 0.01, 1,000 steps."),
+ ("Hallucination", "💬 NLP & GenAI", "When a generative model states something fluent but false.", "Inventing a citation that does not exist."),
+ ("Hyperparameter", "🤖 Machine learning", "A setting chosen before training, not learned from data.", "Tree depth, learning rate, number of clusters."),
+ ("Hypothesis test", "📊 Statistics", "A procedure for judging whether data are consistent with a default assumption (the null hypothesis).", "Is the new page's conversion rate really higher?"),
+ ("Imbalanced data", "🧹 Data", "When one class is much rarer than the others.", "0.2% of transactions are fraud."),
+ ("Imputation", "🧹 Data", "Filling in missing values.", "Replace missing income with the median."),
+ ("Inference", "🚀 Deployment & MLOps", "Using a trained model to make predictions. (In statistics, it means drawing conclusions from data.)", "The API runs inference in 20 ms."),
+ ("IoU", "👁️ Computer vision", "Intersection over union: how much a predicted box overlaps the true box, from 0 to 1.", "IoU ≥ 0.5 often counts as a correct detection."),
+ ("k-nearest neighbours", "🤖 Machine learning", "Predicting by looking at the k most similar training examples.", "A house is priced like its 5 nearest neighbours."),
+ ("Label", "🧹 Data", "The correct answer the model learns to predict.", "'churned' = 1 or 0."),
+ ("Large language model (LLM)", "💬 NLP & GenAI", "A very large neural network trained on text to predict the next token, able to generate and reason over language.", "Chat assistants and coding assistants."),
+ ("Latency", "🚀 Deployment & MLOps", "How long one request takes.", "p95 latency of 60 ms."),
+ ("Learning rate", "🧠 Deep learning", "How big a step gradient descent takes each update.", "Too high diverges, too low crawls."),
+ ("Linear regression", "🤖 Machine learning", "Predicting a number as a weighted sum of inputs.", "Price = 50,000 + 120 × square feet."),
+ ("Logistic regression", "🤖 Machine learning", "A linear model passed through a sigmoid to predict a probability.", "Probability that a customer churns."),
+ ("Loss function", "🤖 Machine learning", "A number that measures how wrong the model is; training tries to make it small.", "Mean squared error, cross-entropy."),
+ ("MAE", "📏 Evaluation", "Mean absolute error: average size of errors in the target's units.", "Forecasts are off by 12 units on average."),
+ ("mAP", "👁️ Computer vision", "Mean average precision: the standard accuracy score for object detectors.", "COCO mAP 50:95 of 54.7."),
+ ("MLOps", "🚀 Deployment & MLOps", "Practices that automate and monitor training, testing, deployment and retraining of ML models.", "A pipeline retrains monthly and gates releases."),
+ ("Model registry", "🚀 Deployment & MLOps", "A catalogue of model versions with metrics, lineage and aliases.", "'payguard@champion' points to version 15."),
+ ("Monitoring", "🚀 Deployment & MLOps", "Watching a live system's health, data and quality over time.", "Alert when PSI > 0.2."),
+ ("Multicollinearity", "📊 Statistics", "When input variables are strongly correlated with each other, making coefficients unstable.", "House size in square feet and in square metres."),
+ ("Naive Bayes", "🤖 Machine learning", "A fast probabilistic classifier that assumes features are independent given the class.", "A classic spam filter."),
+ ("Neural network", "🧠 Deep learning", "Layers of simple units connected by weights that together learn complex functions.", "Input layer → hidden layers → output."),
+ ("Normal distribution", "📊 Statistics", "The symmetric bell curve described by a mean and standard deviation.", "About 95% of values lie within 2 standard deviations."),
+ ("Normalisation / scaling", "🧹 Data", "Rescaling features to a common range or spread.", "StandardScaler gives mean 0, standard deviation 1."),
+ ("Null hypothesis", "📊 Statistics", "The default assumption a test tries to find evidence against.", "'The new design has no effect.'"),
+ ("One-hot encoding", "🧹 Data", "Turning a category into several 0/1 columns.", "Plan → is_basic, is_plus, is_premium."),
+ ("Outlier", "🧹 Data", "A value far from most others.", "A $50,000 order in a shop where most are $40."),
+ ("Overfitting", "🤖 Machine learning", "When a model memorises training data and performs poorly on new data.", "Training accuracy 99%, test accuracy 70%."),
+ ("p-value", "📊 Statistics", "The probability of seeing results at least this extreme if the null hypothesis were true.", "p = 0.03 is unusual under 'no effect'. It is not the chance the null is true."),
+ ("PCA", "🤖 Machine learning", "Principal component analysis: finds new axes that capture the most variance.", "Plot 100 features in 2D."),
+ ("Precision", "📏 Evaluation", "Of the items flagged positive, the share that really are positive.", "Of 100 flagged payments, 80 were fraud: precision 0.8."),
+ ("Prompt", "💬 NLP & GenAI", "The input text or instructions given to a generative model.", "'Summarise this ticket in one sentence.'"),
+ ("PSI", "🚀 Deployment & MLOps", "Population stability index: a score of how much a feature's distribution has shifted.", "Above 0.2 usually needs attention."),
+ ("Random forest", "🤖 Machine learning", "Many decision trees trained on random samples and features, averaged together.", "A strong default for tabular data."),
+ ("RAG", "💬 NLP & GenAI", "Retrieval-augmented generation: fetch relevant documents, then let an LLM answer using them.", "A help bot that cites your own docs."),
+ ("Recall", "📏 Evaluation", "Of all real positives, the share the model found.", "Caught 90 of 100 frauds: recall 0.9."),
+ ("Regression", "🤖 Machine learning", "Predicting a number.", "Next week's sales."),
+ ("Regularisation", "🤖 Machine learning", "Adding a penalty for complexity to reduce overfitting.", "L2 (ridge) shrinks coefficients; L1 (lasso) can zero them."),
+ ("Reinforcement learning", "🤖 Machine learning", "Learning by trial and error to maximise a reward.", "A robot learns to walk; a model learns from human feedback."),
+ ("RMSE", "📏 Evaluation", "Root mean squared error: like MAE but punishes large errors more.", "RMSE of 15 units."),
+ ("Sampling", "📊 Statistics", "Selecting a subset of a population to study.", "Survey 1,000 of 1 million customers at random."),
+ ("Segmentation (image)", "👁️ Computer vision", "Labelling every pixel with a class or object.", "Masks for road, car, pedestrian."),
+ ("Sigmoid", "🧠 Deep learning", "An S-shaped function that squeezes any number into 0–1.", "Turns a score into a probability."),
+ ("Standard deviation", "📊 Statistics", "The typical distance of values from the mean.", "Delivery times: mean 3 days, SD 1 day."),
+ ("Stratified split", "📏 Evaluation", "A train/test split that keeps class proportions the same in each part.", "Both splits keep 15% churners."),
+ ("Supervised learning", "🤖 Machine learning", "Learning from examples that have correct answers (labels).", "Past emails labelled spam / not spam."),
+ ("Test set", "📏 Evaluation", "Data held back until the end to estimate real-world performance.", "Never tune on it."),
+ ("Time series", "🧹 Data", "Data points recorded in time order.", "Daily website visits."),
+ ("Token", "💬 NLP & GenAI", "A chunk of text (word or word piece) that a language model reads and writes.", "'unbelievable' → 'un', 'believ', 'able'."),
+ ("Train/validation/test split", "📏 Evaluation", "Separate data for learning, tuning and final evaluation.", "70% / 15% / 15%."),
+ ("Transfer learning", "🧠 Deep learning", "Reusing a model trained on one task as the starting point for another.", "ImageNet CNN fine-tuned to spot defects."),
+ ("Transformer", "💬 NLP & GenAI", "A neural architecture built on attention, the basis of modern language and vision models.", "BERT, GPT, ViT, DETR."),
+ ("Type I / Type II error", "📊 Statistics", "Type I: a false alarm (rejecting a true null). Type II: a miss (failing to reject a false null).", "Approving a useless drug vs missing a useful one."),
+ ("Underfitting", "🤖 Machine learning", "When a model is too simple to capture the pattern.", "A straight line through a curved relationship."),
+ ("Unsupervised learning", "🤖 Machine learning", "Finding structure in data without labels.", "Clustering, dimensionality reduction."),
+ ("Validation set", "📏 Evaluation", "Data used to choose hyperparameters and compare models.", "Pick the tree depth with the best validation AUC."),
+ ("Weight", "🧠 Deep learning", "A learned number that scales an input's influence on a neuron or model output.", "In y = 3x + 2, the weight is 3."),
+ ("YOLO", "👁️ Computer vision", "'You Only Look Once': a family of fast single-pass object detectors.", "Real-time detection on a phone or camera."),
+]
+import pandas as pd
+G = pd.DataFrame(T, columns=["term", "cat", "def", "ex"]).sort_values("term", key=lambda s: s.str.lower()).reset_index(drop=True)
+ojs_define(glossary=G.to_dict("records"))
+```
+
+## 🔎 Search the glossary
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+cats = ["All topics", ...Array.from(new Set(glossary.map(d => d.cat))).sort()]
+viewof q = Inputs.text({placeholder: "Type a term, e.g. drift, recall, embedding", label: "🔎 Search"})
+viewof cat = Inputs.select(cats, {label: "🏷️ Topic"})
+```
+
+```{ojs}
+//| echo: false
+hits = glossary.filter(d => (cat === "All topics" || d.cat === cat) && (q === "" || (d.term + " " + d.def + " " + d.ex).toLowerCase().includes(q.toLowerCase())))
+htl.html`<div style="font-size:.9rem;opacity:.75;margin-bottom:8px">${hits.length} of ${glossary.length} terms</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;max-height:620px;overflow:auto;padding-right:4px">
+${hits.map(d => htl.html`<div style="border:1px solid rgba(127,127,127,.25);border-radius:14px;padding:12px 14px">
+  <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b style="font-size:1.02rem">${d.term}</b><span style="font-size:.75rem;opacity:.7;white-space:nowrap">${d.cat}</span></div>
+  <div style="font-size:.92rem;margin-top:4px">${d.def}</div>
+  <div style="font-size:.85rem;margin-top:6px;opacity:.75">💡 ${d.ex}</div></div>`)}
+</div>`
+```
+
+## 🎲 Term of the day
+
+```{ojs}
+//| echo: false
+viewof roll = Inputs.button("🎲 Surprise me")
+```
+
+```{ojs}
+//| echo: false
+{
+  roll;
+  const d = glossary[Math.floor(Math.random() * glossary.length)];
+  return htl.html`<div class="ms-readout"><span>${d.cat}</span><b>${d.term}</b><span>${d.def} <br>💡 ${d.ex}</span></div>`;
+}
+```
+
+## 🏷️ Terms by topic
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 280, width: 760, marginLeft: 190,
+  x: {label: "Number of terms →", grid: true}, y: {label: null},
+  marks: [
+    Plot.barX(glossary, Plot.groupY({x: "count"}, {y: "cat", fill: ms.indigo, rx: 4, sort: {y: "-x"}})),
+    Plot.text(glossary, Plot.groupY({x: "count", text: "count"}, {y: "cat", dx: 12, fill: "currentColor"}))
+  ]
+})
+```
+
+## 🧠 How the big ideas connect
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  D["🧹 Data<br/>features, labels"] --> S["📊 Statistics<br/>sampling, inference"]
+  D --> M["🤖 Machine learning<br/>supervised, unsupervised"]
+  S --> M
+  M --> DL["🧠 Deep learning<br/>neural networks"]
+  DL --> NLP["💬 NLP & GenAI<br/>transformers, LLMs"]
+  DL --> CV["👁️ Computer vision<br/>CNNs, detectors"]
+  M --> E["📏 Evaluation<br/>metrics, validation"]
+  E --> OPS["🚀 Deployment & MLOps<br/>serving, monitoring"]
+```
+
+## 📜 Full A–Z list
+
+```{python}
+#| echo: false
+#| output: asis
+for letter, grp in G.groupby(G.term.str[0].str.upper()):
+    print(f"\n### {letter}\n")
+    for _, r in grp.iterrows():
+        print(f"**{r['term']}** · {r['cat']}  \n{r['def']} Example: {r['ex']}\n")
+```
+
+::: {.callout-note}
+## 📝 Missing a term?
+Use the [contact page](/contact.qmd) to suggest one. The glossary grows with every new article.
+:::

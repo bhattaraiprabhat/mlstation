@@ -6,3 +6,6 @@ matplotlib
 plotly
 scikit-learn
 statsmodels
+seaborn
+bokeh
+plotly

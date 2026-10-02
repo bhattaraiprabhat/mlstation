@@ -1,0 +1,233 @@
+---
+title: "Learning Paths: From Zero to Solving Real Industry Problems 🛤️"
+description: "Step-by-step paths for eight industrial use cases, from churn and fraud to predictive maintenance and visual inspection, with open datasets, metrics, an animated roadmap and a worked business example."
+author: "MLStation"
+date: 2026-10-01
+categories: [Resources, Learning Paths, Use Cases]
+draft: false
+---
+
+Most courses are organised by **tool**: a week of pandas, a week of regression. Companies hire you to solve **problems**: "Which customers will leave?", "How much stock do we need next week?", "Is this machine about to fail?". These learning paths are organised by problem. Each one tells you what to learn, in what order, on which open dataset, and how to measure success in business terms. 🏭
+
+::: {.callout-tip}
+## 🎯 What you will get
+- The shared foundation every path builds on
+- A six-stage workflow used across industry projects
+- An **animated roadmap** for eight use cases, each with an open dataset and metric
+- A skills profile per use case
+- A worked example that turns a churn model into **dollars saved**
+:::
+
+{{< include ../_series-nav.md >}}
+
+## 🧱 The shared foundation
+
+Every industrial path starts on the same base. You do not need to master it all before starting a project; learn each piece **when a project needs it**.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+{
+  const steps = [["🐍", "Python and pandas"], ["🗃️", "SQL"], ["📊", "Statistics and EDA"], ["🤖", "Core ML"], ["📏", "Evaluation"], ["🚀", "Deployment"], ["📈", "Monitoring"]];
+  const W = 780, n = steps.length, gap = (W - 120) / (n - 1);
+  return htl.svg`<svg viewBox="0 0 ${W} 150" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    <line x1="60" y1="50" x2="${W - 60}" y2="50" stroke="${ms.indigo}" stroke-opacity="0.35" stroke-width="4"/>
+    ${steps.map(([ic, t], i) => htl.svg`<g>
+      <circle cx="${60 + i * gap}" cy="50" r="26" fill="${ms.indigo}" fill-opacity="${0.35 + i * 0.09}"/>
+      <text x="${60 + i * gap}" y="59" text-anchor="middle" font-size="22">${ic}</text>
+      <foreignObject x="${60 + i * gap - 52}" y="84" width="104" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12.5px;font-weight:650;text-align:center;line-height:1.3">${i + 1}. ${t}</div></foreignObject></g>`)}
+  </svg>`;
+}
+```
+
+| Step | Learn here on MLStation | Outside reference |
+|---|---|---|
+| 📊 Statistics | [p-values](/statistics/hypothesis-testing/understanding-p-values.qmd), [normal distribution](/statistics/distributions/normal-distribution-interactive.qmd), [linear regression](/statistics/regression/linear-regression-first-principles.qmd) | [ISLP](https://www.statlearning.com/) |
+| 🤖 Core ML | [logistic regression](/ml/supervised/logistic-regression-explained.qmd), [gradient descent](/ml/algorithms/gradient-descent.qmd), [k-means](/ml/unsupervised/kmeans-cloud-server-segmentation.qmd) | [Kaggle Learn](https://www.kaggle.com/learn) |
+| 🧠 Deep learning | [ANN to DNN](/ml/deep-learning/ann-to-dnn-first-neural-network.qmd), [CNNs](/ml/deep-learning/cnn-from-pixels-to-yolo.qmd), [object detection](/ai/computer-vision/object-detection-2026.qmd) | [fast.ai](https://course.fast.ai/) |
+| 🚀 Deployment | [Deployment series](/deployment/deployment-overview.qmd) | [Docker docs](https://docs.docker.com/) |
+
+## 🔄 The six-stage industry workflow
+
+Industry projects follow a loop very close to **CRISP-DM**, the cross-industry standard process for data mining. Notice that modelling is only one of six stages.
+
+```{mermaid}
+%%| echo: false
+flowchart TB
+  A["💼 1. Business<br/>understanding"] --> B["🔍 2. Data<br/>understanding"]
+  B --> C["🧹 3. Data<br/>preparation"]
+  C --> D["🤖 4. Modelling"]
+  D --> E["✅ 5. Evaluation<br/>in business terms"]
+  E --> F["🚀 6. Deployment<br/>and monitoring"]
+  E -. not good enough .-> A
+  F -. new data, drift .-> B
+```
+
+::: {.callout-note}
+## 📝 Note
+In real projects, stages 1 to 3 often take more than half the time. A model that answers the wrong business question is worthless, however accurate it is.
+:::
+
+## 🗺️ Eight industrial paths
+
+Pick a use case. The roadmap animates through the six stages with the concrete task for each.
+
+```{ojs}
+//| echo: false
+paths = [
+  {id: "📉 Customer churn", industry: "Telecom, SaaS, banking", q: "Which customers are likely to cancel next month?", data: "Telco Customer Churn (IBM sample, on Kaggle)", url: "https://www.kaggle.com/datasets/blastchar/telco-customer-churn", metric: "Recall at top 10%, AUC", kpi: "Revenue retained per campaign dollar", weeks: 4,
+   steps: ["Define churn (30 days inactive? cancelled?)", "Profile tenure, contract, charges", "Encode plans, fix missing charges", "Logistic regression, then gradient boosting", "Profit curve: who to call, at what threshold", "Weekly batch scores to the CRM"]},
+  {id: "📦 Demand forecasting", industry: "Retail, grocery, supply chain", q: "How many units of each product will sell next week?", data: "M5 Forecasting (Walmart sales, on Kaggle)", url: "https://www.kaggle.com/competitions/m5-forecasting-accuracy", metric: "MAPE, WRMSSE, bias", kpi: "Stock-outs and waste reduced", weeks: 6,
+   steps: ["Agree on horizon, level and lead time", "Plot seasonality, holidays, promotions", "Lag and rolling features, calendar joins", "Seasonal naive baseline, then LightGBM", "Back-test on rolling windows", "Nightly batch forecasts to planners"]},
+  {id: "💳 Fraud detection", industry: "Payments, insurance, e-commerce", q: "Is this transaction fraudulent, in under 100 ms?", data: "Credit Card Fraud Detection (ULB, on Kaggle)", url: "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud", metric: "Precision-recall AUC, recall at fixed precision", kpi: "Fraud losses vs false declines", weeks: 5,
+   steps: ["Cost of a missed fraud vs a false decline", "Study extreme class imbalance (≈0.2% fraud)", "Velocity features, time-based split", "Gradient boosting with class weights", "Precision-recall curve, threshold by cost", "Real-time API with drift monitoring"]},
+  {id: "⚙️ Predictive maintenance", industry: "Manufacturing, energy, aviation", q: "How many cycles until this engine needs service?", data: "NASA Turbofan Engine Degradation (C-MAPSS)", url: "https://data.nasa.gov/", metric: "RMSE of remaining useful life, early-warning recall", kpi: "Unplanned downtime avoided", weeks: 6,
+   steps: ["Define failure and warning window", "Plot sensor trends per engine", "Rolling stats, normalise per operating mode", "Random forest, then 1D CNN or LSTM", "Penalise late predictions more than early", "Edge or streaming scoring, alert rules"]},
+  {id: "🧩 Customer segmentation", industry: "Marketing, retail, telecom", q: "Which natural groups of customers exist?", data: "Online Retail II (UCI)", url: "https://archive.ics.uci.edu/", metric: "Silhouette, segment stability", kpi: "Campaign lift per segment", weeks: 3,
+   steps: ["Decide how segments will be used", "RFM: recency, frequency, monetary value", "Scale features, remove returns and outliers", "k-means, then Gaussian mixtures", "Name segments, check stability over time", "Segment labels in the CRM, refresh monthly"]},
+  {id: "🎫 Ticket triage (NLP)", industry: "Customer support, banking, IT", q: "Which team should handle this complaint?", data: "CFPB Consumer Complaint Database", url: "https://www.consumerfinance.gov/data-research/consumer-complaints/", metric: "Macro F1, top-2 accuracy", kpi: "Time to first response", weeks: 5,
+   steps: ["Define routing labels with support leads", "Read samples, check label noise", "Clean text, remove personal data", "TF-IDF + linear model, then a fine-tuned transformer", "Confusion matrix by team, human review", "API inside the ticketing tool"]},
+  {id: "🔍 Visual inspection", industry: "Manufacturing, food, electronics", q: "Does this product photo show a defect?", data: "MVTec Anomaly Detection (MVTec AD)", url: "https://www.mvtec.com/company/research/datasets/mvtec-ad", metric: "Recall on defects, AUROC", kpi: "Escaped defects and inspection cost", weeks: 6,
+   steps: ["Define defect types and acceptable miss rate", "Check lighting, angles, class balance", "Augment, crop, normalise images", "Pre-trained CNN, then anomaly detection", "Per-defect recall, heat maps for operators", "Edge device on the line, image logging"]},
+  {id: "🛒 Recommendations", industry: "E-commerce, media, streaming", q: "Which items should we show this user?", data: "MovieLens (GroupLens)", url: "https://grouplens.org/datasets/movielens/", metric: "Recall@10, NDCG@10, coverage", kpi: "Click-through and revenue per session", weeks: 5,
+   steps: ["Choose the surface: home page, 'similar items'", "Study sparsity and popularity bias", "Implicit feedback, time-based split", "Popularity baseline, then matrix factorisation", "Offline ranking metrics, then A/B test", "Nightly candidates, real-time re-ranking"]}
+]
+viewof pick = Inputs.select(paths.map(d => d.id), {value: "📉 Customer churn", label: "Use case"})
+```
+
+```{ojs}
+//| echo: false
+P = paths.find(d => d.id === pick)
+revealed = {
+  pick;
+  for (let i = 0; i <= 6; i++) { yield i; await Promises.delay(450); }
+}
+{
+  const icons = ["💼", "🔍", "🧹", "🤖", "✅", "🚀"], names = ["Business", "Data", "Prepare", "Model", "Evaluate", "Deploy"];
+  const W = 780, colW = (W - 20) / 6;
+  return htl.html`<div>
+  <div class="ms-readout" style="margin-bottom:10px"><span>${P.industry}</span><b style="font-size:1.05rem">${P.q}</b><span>≈ ${P.weeks} weeks part-time</span></div>
+  ${htl.svg`<svg viewBox="0 0 ${W} 250" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    <line x1="${10 + colW / 2}" y1="46" x2="${10 + colW * 5.5}" y2="46" stroke="currentColor" stroke-opacity="0.15" stroke-width="4"/>
+    <line x1="${10 + colW / 2}" y1="46" x2="${10 + colW * (Math.max(1, revealed) - 0.5)}" y2="46" stroke="${ms.teal}" stroke-width="4"/>
+    ${P.steps.map((s, i) => { const x = 10 + colW * i, on = i < revealed; return htl.svg`<g opacity="${on ? 1 : 0.25}">
+      <circle cx="${x + colW / 2}" cy="46" r="24" fill="${on ? ms.indigo : "currentColor"}" fill-opacity="${on ? 0.9 : 0.1}"/>
+      <text x="${x + colW / 2}" y="54" text-anchor="middle" font-size="20">${icons[i]}</text>
+      <text x="${x + colW / 2}" y="94" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">${i + 1}. ${names[i]}</text>
+      <foreignObject x="${x + 4}" y="104" width="${colW - 8}" height="140"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:12px;line-height:1.35;text-align:center;opacity:.85">${s}</div></foreignObject></g>`; })}
+  </svg>`}
+  <table style="width:100%;font-size:.93rem;margin-top:6px"><tbody>
+    <tr><td style="width:150px"><b>🗄️ Open dataset</b></td><td><a href="${P.url}">${P.data}</a></td></tr>
+    <tr><td><b>📏 Model metric</b></td><td>${P.metric}</td></tr>
+    <tr><td><b>💰 Business KPI</b></td><td>${P.kpi}</td></tr>
+  </tbody></table></div>`;
+}
+```
+
+## 🕸️ Which skills does each path stress?
+
+Each use case leans on a different mix of skills. Use the menu to switch use cases. Scores are an editorial judgement on a 1–5 scale.
+
+```{python}
+#| label: fig-skills
+#| fig-cap: "Skill profile by use case (1 = light, 5 = heavy). Editorial estimates to help plan your learning."
+#| code-fold: true
+import plotly.graph_objects as go
+from ms_charts import COLORS, PLOTLY_CONFIG
+skills = ["SQL and data wrangling", "Statistics", "Classical ML", "Deep learning", "Time series", "Deployment", "Business framing"]
+profiles = {
+    "📉 Customer churn":        [4, 3, 4, 1, 2, 3, 5],
+    "📦 Demand forecasting":    [4, 4, 3, 2, 5, 3, 4],
+    "💳 Fraud detection":       [4, 3, 5, 2, 2, 5, 4],
+    "⚙️ Predictive maintenance": [3, 3, 4, 4, 5, 4, 3],
+    "🧩 Customer segmentation": [4, 4, 3, 1, 1, 2, 5],
+    "🎫 Ticket triage (NLP)":   [2, 2, 3, 5, 1, 4, 3],
+    "🔍 Visual inspection":     [1, 2, 2, 5, 1, 5, 3],
+    "🛒 Recommendations":       [4, 3, 4, 3, 2, 5, 4],
+}
+names = list(profiles)
+fig = go.Figure()
+for i, (n, v) in enumerate(profiles.items()):
+    fig.add_trace(go.Scatterpolar(r=v + [v[0]], theta=skills + [skills[0]], fill="toself", name=n, visible=(i == 0),
+                                  line=dict(color=COLORS["indigo"], width=2.5), fillcolor="rgba(99,102,241,0.25)"))
+fig.update_layout(
+    height=460, showlegend=False, polar=dict(radialaxis=dict(range=[0, 5], tickvals=[1, 2, 3, 4, 5])),
+    updatemenus=[dict(x=0, y=1.15, xanchor="left", buttons=[dict(label=n, method="update", args=[{"visible": [j == i for j in range(len(names))]}]) for i, n in enumerate(names)])])
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## 💰 Worked example: turning a churn model into dollars
+
+Industry cares about **value**, not AUC. Here is the key step most tutorials skip. We simulate 10,000 subscribers, train a model, and ask: "If we call the riskiest customers with a retention offer, how many should we call?"
+
+Assumptions (edit them in the code): a saved customer is worth **$300**, each call plus offer costs **$25**, and an offer saves **35%** of customers who would otherwise leave.
+
+```{python}
+#| label: fig-profit
+#| fig-cap: "Simulated profit of a retention campaign vs how many top-risk customers we contact. Calling everyone loses money; calling the right 20–30% maximises profit."
+#| code-fold: true
+import numpy as np, pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
+rng = np.random.default_rng(10)
+n = 10_000
+df = pd.DataFrame({
+    "tenure_months": rng.integers(1, 72, n),
+    "monthly_charge": rng.normal(70, 25, n).clip(15, 150),
+    "support_calls": rng.poisson(1.5, n),
+    "month_to_month": rng.binomial(1, 0.55, n),
+})
+logit = -1.2 - 0.04 * df.tenure_months + 0.012 * df.monthly_charge + 0.35 * df.support_calls + 1.1 * df.month_to_month
+df["churn"] = rng.binomial(1, 1 / (1 + np.exp(-logit)))
+X, y = df.drop(columns="churn"), df.churn
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.5, random_state=0)
+p = LogisticRegression(max_iter=1000).fit(Xtr, ytr).predict_proba(Xte)[:, 1]
+auc = roc_auc_score(yte, p)
+
+VALUE, COST, SAVE = 300, 25, 0.35
+order = np.argsort(-p)
+churners = yte.values[order]
+k = np.arange(1, len(order) + 1)
+profit = SAVE * VALUE * np.cumsum(churners) - COST * k
+best = int(np.argmax(profit))
+share = k / len(k) * 100
+
+fig = go.Figure()
+fig.add_scatter(x=share, y=profit, line=dict(color=COLORS["teal"], width=3.5), name="Profit")
+fig.add_scatter(x=[share[best]], y=[profit[best]], mode="markers+text", marker=dict(size=14, color=COLORS["amber"]),
+                text=[f"best: contact top {share[best]:.0f}%"], textposition="top right", name="Best")
+fig.add_hline(y=0, line_dash="dash", line_color=COLORS["slate"])
+fig.update_layout(height=380, xaxis_title="% of customers contacted (riskiest first)", yaxis_title="Campaign profit ($)", showlegend=False)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The model has an AUC of `{python} f"{auc:.2f}"`, but the useful answer is: **contact the riskiest `{python} f"{share[best]:.0f}"`% of customers** for a simulated profit of about **$`{python} f"{profit[best]:,.0f}"`** on this group, while contacting everyone would earn **$`{python} f"{profit[-1]:,.0f}"`**. That one chart is what a manager remembers. 💡
+
+## 📋 All eight paths at a glance
+
+| Use case | Baseline first | Then try | Watch out for |
+|---|---|---|---|
+| 📉 Churn | Logistic regression | Gradient boosting | Leakage from "cancellation" fields |
+| 📦 Forecasting | Seasonal naive (same week last year) | LightGBM with lags | Random splits on time data |
+| 💳 Fraud | Rules + logistic regression | Gradient boosting | Accuracy on 99.8% legit data |
+| ⚙️ Maintenance | Threshold on one sensor | Random forest, LSTM | Engines split across train and test |
+| 🧩 Segmentation | RFM quantile buckets | k-means, GMM | Segments nobody can act on |
+| 🎫 Ticket triage | Keyword rules | TF-IDF + linear, transformer | Personal data in text |
+| 🔍 Inspection | Pre-trained CNN features | Anomaly detection | Lighting changes on the line |
+| 🛒 Recommendations | Most popular items | Matrix factorisation | Popularity bias, cold start |
+
+: Baselines and traps {#tbl-paths}
+
+::: {.callout-important}
+## ⚠️ Always beat a simple baseline first
+If gradient boosting cannot clearly beat "same week last year" or "most popular items", the problem is in the data or the framing, not the model.
+:::
+
+## 🧩 Summary
+
+- Learn by **problem**, not by tool: pick one use case and follow its six stages.
+- Each path has an **open dataset, a model metric and a business KPI**; report all three.
+- Start with a **simple baseline**, then improve.
+- Translate model output into **money or time saved**, as in the churn profit curve.
+- Next: keep the [cheat sheets](/resources/cheat-sheets/data-science-cheat-sheets.qmd) 📝 open while you work.

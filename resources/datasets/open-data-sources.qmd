@@ -1,0 +1,337 @@
+---
+title: "20 Famous Open Data Sources for Analytics, and How to Extract Data 🗄️"
+description: "The twenty best-known free data sources, from Kaggle and UCI to FRED, the World Bank, NASA and SEC EDGAR, with a filterable catalogue, extraction code for each access method and a simulated end-to-end pipeline."
+author: "MLStation"
+date: 2026-10-01
+categories: [Resources, Datasets, Open Data, APIs]
+draft: false
+---
+
+Good practice data is the fuel of every project. The twenty sources below are free, famous and reliable. Some give you a CSV with one click; others need an API call, a Python package or a SQL query. This guide shows **what each source is good for** and **exactly how to pull data from it**. 🚀
+
+::: {.callout-tip}
+## 🎯 What you will get
+- 🗂️ A filterable catalogue of 20 open data sources
+- 🧭 A decision flow for choosing the right extraction method
+- 💻 Copy-ready extraction code for downloads, APIs, Python packages, SQL and cloud buckets
+- 🔄 An animated extract → clean → store pipeline and a worked, simulated example
+- ⚖️ Notes on licences, rate limits and good manners
+:::
+
+{{< include ../_series-nav.md >}}
+
+## 🗂️ The catalogue
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+sources = [
+  {n: 1, method: "Python package", name: "Kaggle Datasets", dom: "🧪 ML practice", what: "Hundreds of thousands of community datasets, many with notebooks", how: "Python package / CLI", key: "Free account token", fmt: "CSV, Parquet, images", url: "https://www.kaggle.com/datasets"},
+  {n: 2, method: "Python package", name: "UCI ML Repository", dom: "🧪 ML practice", what: "Classic, well-documented ML benchmark datasets", how: "Python package", key: "None", fmt: "CSV via pandas", url: "https://archive.ics.uci.edu/"},
+  {n: 3, method: "Python package", name: "OpenML", dom: "🧪 ML practice", what: "Datasets plus tasks and benchmark results", how: "Python package", key: "None", fmt: "pandas via scikit-learn", url: "https://www.openml.org/"},
+  {n: 4, method: "Python package", name: "Hugging Face Datasets", dom: "🧪 ML practice", what: "Over a million datasets: text, images, audio, tabular", how: "Python package", key: "None for public", fmt: "Parquet, Arrow, CSV, JSON", url: "https://huggingface.co/datasets"},
+  {n: 5, method: "Search", name: "Google Dataset Search", dom: "🔎 Discovery", what: "A search engine that finds datasets across the web", how: "Search, then download", key: "None", fmt: "Varies", url: "https://datasetsearch.research.google.com/"},
+  {n: 6, method: "Download", name: "Data.gov", dom: "🏛️ Government", what: "U.S. federal open-data catalogue, hundreds of thousands of datasets", how: "Download / catalogue API", key: "None", fmt: "CSV, JSON, APIs", url: "https://data.gov/"},
+  {n: 7, method: "REST API", name: "U.S. Census Bureau", dom: "🏛️ Government", what: "Population, income, housing, business statistics", how: "REST API", key: "Free key recommended", fmt: "JSON", url: "https://www.census.gov/data/developers.html"},
+  {n: 8, method: "Download", name: "FRED (St. Louis Fed)", dom: "💹 Economics", what: "Hundreds of thousands of economic time series", how: "CSV link / REST API", key: "Free key for API", fmt: "CSV, JSON", url: "https://fred.stlouisfed.org/docs/api/fred/"},
+  {n: 9, method: "REST API", name: "World Bank Open Data", dom: "💹 Economics", what: "Development indicators for every country since 1960", how: "REST API", key: "None", fmt: "JSON, XML", url: "https://datahelpdesk.worldbank.org/knowledgebase/articles/898581-api-basic-call-structures"},
+  {n: 10, method: "REST API", name: "Eurostat", dom: "💹 Economics", what: "Official statistics for the EU", how: "REST API / bulk TSV", key: "None", fmt: "JSON-stat, TSV", url: "https://ec.europa.eu/eurostat/data/database"},
+  {n: 11, method: "Download", name: "Our World in Data", dom: "🌍 Society & health", what: "Clean, documented global data behind thousands of charts", how: "CSV link", key: "None", fmt: "CSV", url: "https://ourworldindata.org/"},
+  {n: 12, method: "REST API", name: "WHO Global Health Observatory", dom: "🌍 Society & health", what: "Health indicators by country and year", how: "OData REST API", key: "None", fmt: "JSON, XML", url: "https://www.who.int/data/gho/info/gho-odata-api"},
+  {n: 13, method: "REST API", name: "NOAA Climate Data Online", dom: "🌦️ Climate & earth", what: "Historical weather and climate observations", how: "REST API", key: "Free token", fmt: "JSON, CSV", url: "https://www.ncei.noaa.gov/cdo-web/webservices/v2"},
+  {n: 14, method: "Python package", name: "NASA Earthdata", dom: "🌦️ Climate & earth", what: "Satellite and earth-science data", how: "Python package", key: "Free Earthdata login", fmt: "NetCDF, HDF, GeoTIFF", url: "https://www.earthdata.nasa.gov/"},
+  {n: 15, method: "REST API", name: "OpenStreetMap (Overpass)", dom: "🗺️ Geospatial", what: "Crowd-sourced map data: roads, shops, buildings", how: "REST API", key: "None", fmt: "JSON, XML", url: "https://wiki.openstreetmap.org/wiki/Overpass_API"},
+  {n: 16, method: "Download", name: "NYC TLC Trip Records", dom: "🚕 Mobility", what: "Billions of taxi and ride-hail trips, by month", how: "File download", key: "None", fmt: "Parquet", url: "https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page"},
+  {n: 17, method: "REST API", name: "SEC EDGAR", dom: "💹 Economics", what: "Company filings and XBRL financial data", how: "REST API", key: "None (User-Agent header required)", fmt: "JSON", url: "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"},
+  {n: 18, method: "Cloud bucket", name: "AWS Open Data Registry", dom: "☁️ Big data", what: "Large public datasets stored in S3", how: "Cloud bucket", key: "None for most", fmt: "Parquet, Zarr, CSV, imagery", url: "https://registry.opendata.aws/"},
+  {n: 19, method: "SQL", name: "Google BigQuery public datasets", dom: "☁️ Big data", what: "Public datasets you can query with SQL", how: "SQL", key: "Google Cloud project", fmt: "Tables", url: "https://cloud.google.com/bigquery/public-data"},
+  {n: 20, method: "Cloud bucket", name: "Common Crawl", dom: "☁️ Big data", what: "Petabytes of open web-crawl data for NLP", how: "Cloud bucket / HTTP", key: "None", fmt: "WARC, WAT, WET", url: "https://commoncrawl.org/get-started"}
+]
+viewof dom = Inputs.select(["All domains", ...new Set(sources.map(d => d.dom))], {label: "🏷️ Domain"})
+viewof noKey = Inputs.toggle({label: "🔓 Only sources needing no key or account", value: false})
+```
+
+```{ojs}
+//| echo: false
+shownSources = sources.filter(d => (dom === "All domains" || d.dom === dom) && (!noKey || d.key.startsWith("None")))
+htl.html`<div style="font-size:.9rem;opacity:.75;margin-bottom:8px">${shownSources.length} of 20 sources</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px">
+${shownSources.map(d => htl.html`<a href="${d.url}" style="display:block;text-decoration:none;border:1px solid rgba(127,127,127,.25);border-radius:14px;padding:12px 14px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:1.02rem">${d.n}. ${d.name}</b><span style="font-size:.75rem;opacity:.7;white-space:nowrap">${d.dom}</span></div>
+  <div style="font-size:.9rem;margin:4px 0 8px">${d.what}</div>
+  <div style="font-size:.8rem;opacity:.8">⚙️ ${d.how} · 🔑 ${d.key} · 📄 ${d.fmt}</div></a>`)}
+</div>`
+```
+
+How do you get the data out? The chart counts the main access method for each source.
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  ...msStyle, height: 260, width: 760, marginLeft: 130,
+  x: {label: "Number of sources →", grid: true}, y: {label: null},
+  marks: [
+    Plot.barX(sources, Plot.groupY({x: "count"}, {y: "method", fill: d => d.key.startsWith("None") ? "No key needed" : "Key or account", sort: {y: "-x"}, rx: 3})),
+  ],
+  color: {domain: ["No key needed", "Key or account"], range: [ms.teal, ms.amber], legend: true}
+})
+```
+
+::: {.callout-note}
+## 📝 Note
+The FRED **CSV link** works without a key, for example `fredgraph.csv?id=UNRATE` ([FRED](https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE)); the full **API** needs a free key ([FRED API docs](https://fred.stlouisfed.org/docs/api/fred/)).
+:::
+
+## 🧭 Which extraction method?
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A["❓ What does the source offer?"] --> B{"A download link?"}
+  B -- yes --> C["📥 pandas.read_csv / read_parquet<br/>straight from the URL"]
+  B -- no --> D{"A Python package?"}
+  D -- yes --> E["📦 ucimlrepo, datasets,<br/>fetch_openml, earthaccess, kaggle"]
+  D -- no --> F{"A REST API?"}
+  F -- yes --> G["🌐 requests + JSON<br/>pagination, keys, rate limits"]
+  F -- no --> H{"A SQL warehouse<br/>or cloud bucket?"}
+  H -- SQL --> I["🗃️ BigQuery client"]
+  H -- bucket --> J["☁️ S3 with --no-sign-request"]
+```
+
+## 💻 Extraction recipes
+
+Each tab is a working pattern. Replace dataset codes and keys with your own. Keys belong in environment variables, never in notebooks you share.
+
+::: {.panel-tabset}
+## 📥 Direct download
+
+```python
+import pandas as pd
+
+# Our World in Data: every chart has a CSV
+le = pd.read_csv(
+    "https://ourworldindata.org/grapher/life-expectancy.csv")
+
+# FRED: one series, no key needed
+unrate = pd.read_csv(
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE",
+    parse_dates=["observation_date"])
+
+# NYC TLC: copy a monthly Parquet link from the TLC page
+trips = pd.read_parquet("<paste-yellow-tripdata-link>.parquet")
+```
+
+## 📦 Python packages
+
+```python
+# UCI repository
+from ucimlrepo import fetch_ucirepo          # pip install ucimlrepo
+wine = fetch_ucirepo(id=109)
+X, y = wine.data.features, wine.data.targets
+
+# OpenML through scikit-learn
+from sklearn.datasets import fetch_openml
+titanic = fetch_openml("titanic", version=1, as_frame=True).frame
+
+# Hugging Face
+from datasets import load_dataset            # pip install datasets
+imdb = load_dataset("imdb", split="train").to_pandas()
+
+# Kaggle (token in ~/.kaggle/kaggle.json)
+# kaggle datasets download -d blastchar/telco-customer-churn --unzip
+```
+
+## 🌐 REST APIs
+
+```python
+import os, requests, pandas as pd
+
+# World Bank: no key; JSON when format=json
+url = ("https://api.worldbank.org/v2/country/US;IN;BR"
+       "/indicator/NY.GDP.MKTP.CD")
+page = requests.get(url, params={"format": "json",
+                                 "per_page": 500}).json()
+meta, rows = page                        # [paging info, records]
+gdp = pd.json_normalize(rows)[["country.value", "date", "value"]]
+
+# FRED API: free key in an environment variable
+obs = requests.get(
+    "https://api.stlouisfed.org/fred/series/observations",
+    params={"series_id": "CPIAUCSL", "file_type": "json",
+            "api_key": os.environ["FRED_API_KEY"]}).json()
+cpi = pd.DataFrame(obs["observations"])
+
+# SEC EDGAR: no key, but identify yourself
+hdr = {"User-Agent": "Your Name your.email@example.com"}
+apple = requests.get(
+    "https://data.sec.gov/submissions/CIK0000320193.json",
+    headers=hdr).json()
+```
+
+## 🗺️ Geospatial
+
+```python
+import requests, pandas as pd
+
+# OpenStreetMap Overpass: cafés in central Austin
+query = """
+[out:json][timeout:25];
+node["amenity"="cafe"](30.25,-97.76,30.29,-97.72);
+out;
+"""
+r = requests.post("https://overpass-api.de/api/interpreter",
+                  data={"data": query}).json()
+cafes = pd.DataFrame([{"name": e["tags"].get("name"),
+                       "lat": e["lat"], "lon": e["lon"]}
+                      for e in r["elements"]])
+```
+
+## 🗃️ SQL (BigQuery)
+
+```python
+# pip install google-cloud-bigquery ; gcloud auth application-default login
+from google.cloud import bigquery
+client = bigquery.Client(project="your-project-id")
+sql = """
+SELECT name, SUM(number) AS babies
+FROM `bigquery-public-data.usa_names.usa_1910_current`
+WHERE year >= 2000
+GROUP BY name ORDER BY babies DESC LIMIT 10
+"""
+top_names = client.query(sql).to_dataframe()
+```
+
+## ☁️ Cloud buckets
+
+```bash
+# AWS Open Data and Common Crawl allow anonymous access
+aws s3 ls s3://commoncrawl/crawl-data/ --no-sign-request
+
+# copy one file to your machine
+aws s3 cp s3://<bucket>/<path>/file.parquet . --no-sign-request
+```
+:::
+
+BigQuery gives every project the **first 1 TB of queries per month free**, and Google pays to store the public datasets ([Google Cloud](https://cloud.google.com/bigquery/public-data)). NOAA's API needs a token in the request header and allows **5 requests per second and 10,000 per day** ([NOAA](https://www.ncei.noaa.gov/cdo-web/webservices/v2)).
+
+## 🔄 The extraction pipeline, animated
+
+Real projects wrap extraction in a small pipeline so it can be re-run safely. Press play and follow a batch of records.
+
+```{ojs}
+//| echo: false
+viewof playPipe = Inputs.toggle({label: "▶ Play animation", value: true})
+```
+
+```{ojs}
+//| echo: false
+pipeState = ({t: 0})
+pipeTick = {
+  while (true) { yield pipeState.t; if (!playPipe) return; pipeState.t = (pipeState.t + 1) % 300; await Promises.delay(40); }
+}
+{
+  const stages = [["🌐", "Extract", "API, file, SQL"], ["✅", "Validate", "schema, nulls, ranges"], ["🧹", "Clean", "types, units, duplicates"], ["💾", "Store", "Parquet, database"], ["📊", "Analyse", "charts, models"]];
+  const W = 780, H = 190, xs = stages.map((_, i) => 70 + i * (W - 140) / 4);
+  const dots = d3.range(6).map(k => { const p = ((pipeTick + k * 50) % 300) / 300 * 4; const s = Math.floor(p), f = p - s; return {x: xs[s] + (xs[Math.min(4, s + 1)] - xs[s]) * f, bad: k === 2 && p > 1 && p < 1.15}; });
+  const active = Math.floor((pipeTick % 300) / 300 * 5);
+  return htl.svg`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    <line x1="${xs[0]}" y1="70" x2="${xs[4]}" y2="70" stroke="currentColor" stroke-opacity="0.2" stroke-width="4"/>
+    ${stages.map(([ic, nm, sub], i) => htl.svg`<g>
+      <circle cx="${xs[i]}" cy="70" r="34" fill="${i === active ? ms.indigo : "currentColor"}" fill-opacity="${i === active ? 0.85 : 0.08}"/>
+      <text x="${xs[i]}" y="80" text-anchor="middle" font-size="26">${ic}</text>
+      <text x="${xs[i]}" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">${nm}</text>
+      <text x="${xs[i]}" y="150" text-anchor="middle" font-size="11.5" fill="currentColor" opacity="0.7">${sub}</text></g>`)}
+    ${dots.map(d => htl.svg`<circle cx="${d.x}" cy="${d.bad ? 22 : 30}" r="7" fill="${d.bad ? ms.rose : ms.teal}"/>`)}
+    <text x="${W / 2}" y="182" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.7">Green: good records · Red: a record rejected at validation</text>
+  </svg>`;
+}
+```
+
+## 🧪 Worked example: cleaning API data (simulated)
+
+APIs rarely return a tidy table. Below we **simulate** a World Bank-style JSON response for five fictional countries, with typical problems: nested fields, values as strings, missing years and one unit error. Then we clean it in a few lines.
+
+```{python}
+#| code-fold: false
+import numpy as np, pandas as pd, plotly.express as px
+from ms_charts import COLORS, PLOTLY_CONFIG
+rng = np.random.default_rng(4)
+
+# --- simulate a nested API response (fictional countries) ---
+countries = [("Aurelia", 120), ("Borealis", 80), ("Caldera", 45),
+             ("Deltora", 30), ("Equinox", 15)]
+records = []
+for c, start in countries:
+    level = start
+    for year in range(2005, 2026):
+        level *= 1 + rng.normal(0.035, 0.025)
+        # values arrive as strings, about 6% are missing
+        v = None if rng.random() < 0.06 else str(round(level * 1e9))
+        records.append({"country": {"id": c[:2].upper(), "value": c},
+                        "date": str(year), "value": v})
+# one record has a unit error (1000x too big)
+if records[30]["value"] is None:
+    records[30]["value"] = "1e9"
+records[30]["value"] = str(float(records[30]["value"]) * 1000)
+
+# --- clean ---
+df = pd.json_normalize(records)                  # flatten nested JSON
+df = df.rename(columns={"country.value": "country"})
+df["year"] = df["date"].astype(int)
+df["gdp_bn"] = pd.to_numeric(df["value"]) / 1e9  # strings → numbers
+med = df.groupby("country").gdp_bn.transform("median")
+df.loc[df.gdp_bn > 20 * med, "gdp_bn"] = np.nan  # drop the unit error
+df["gdp_bn"] = df.groupby("country").gdp_bn.transform(
+    lambda s: s.interpolate(limit_direction="both"))  # fill gaps
+print(f"{df.value.isna().sum()} missing values filled, 1 unit error fixed")
+```
+
+```{python}
+#| label: fig-gdp
+#| fig-cap: "Cleaned, simulated GDP series for five fictional countries."
+#| code-fold: true
+fig = px.line(df, x="year", y="gdp_bn", color="country", markers=True,
+              color_discrete_sequence=[COLORS["indigo"], COLORS["teal"], COLORS["amber"], COLORS["rose"], COLORS["violet"]])
+fig.update_layout(height=380, yaxis_title="GDP (billions, simulated)", xaxis_title=None, legend_title=None)
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## 🛡️ Be a good data citizen
+
+| Rule | Why | How |
+|---|---|---|
+| 📜 Read the licence | Some data cannot be used commercially or needs attribution | Check the source's terms page; cite it in your charts |
+| ⏱️ Respect rate limits | Too many calls get you blocked | Sleep between calls, use bulk downloads when offered |
+| 💾 Cache what you fetch | Re-downloading wastes time and quota | Save raw responses to Parquet or JSON with a date |
+| 🔑 Hide your keys | Leaked keys get abused | Environment variables, `.env` files in `.gitignore` |
+| 🧾 Record provenance | You must be able to reproduce results | Log URL, parameters and download date |
+| 🔐 Protect people | Even open data can identify individuals | Aggregate, drop identifiers, follow privacy rules |
+
+A small helper that caches and retries covers most needs:
+
+```{.python filename="fetch.py"}
+import time, json, pathlib, hashlib, requests
+
+def fetch_json(url, params=None, cache="raw", retries=3):
+    h = hashlib.sha1(f"{url}{params}".encode()).hexdigest()[:16]
+    key = pathlib.Path(cache) / f"{h}.json"
+    if key.exists():
+        return json.loads(key.read_text())          # cached copy
+    for attempt in range(retries):
+        r = requests.get(url, params=params, timeout=30)
+        if r.status_code == 429:                    # rate limited
+            time.sleep(2 ** attempt); continue
+        r.raise_for_status()
+        key.parent.mkdir(exist_ok=True)
+        key.write_text(r.text)
+        return r.json()
+    raise RuntimeError("Gave up after retries")
+```
+
+## 🧩 Summary
+
+- Start with **Kaggle, UCI, OpenML and Hugging Face** for ML practice; use **FRED, World Bank, Eurostat, Census and OWID** for economics and society; **NOAA, NASA and OSM** for climate and maps; **BigQuery, AWS and Common Crawl** for big data.
+- Pick the extraction method from what the source offers: **download → package → API → SQL or bucket**.
+- Flatten, convert, validate and **cache** what you fetch.
+- Follow **licences, rate limits and privacy** rules.
+- Put the data to work with a [learning path](/resources/learning-paths/industrial-use-case-paths.qmd) 🛤️.

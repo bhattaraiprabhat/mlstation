@@ -1,0 +1,607 @@
+---
+title: "Model Evaluation: How Do We Know the Model Is Actually Good?"
+description: "A rigorous but intuitive guide to validation design, regression and classification metrics, thresholds, calibration, cross-validation, uncertainty, leakage and business-aware model evaluation."
+author: "MLStation"
+date: 2026-10-01
+categories: [ML, Evaluation, Data Science]
+draft: false
+---
+
+
+<style>
+.ml-hero{padding:1.25rem 1.4rem;border-radius:18px;background:linear-gradient(135deg,#eef2ff,#ecfdf5,#fff7ed);border:1px solid #dbeafe;margin:1rem 0 1.4rem}
+.ml-hero .big{font-size:1.25rem;font-weight:760;margin-bottom:.35rem}
+.ml-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:.8rem;margin:1rem 0}
+.ml-card{border:1px solid #e5e7eb;border-radius:14px;padding:.9rem 1rem;background:#fff}
+.ml-card h4{margin-top:0}
+.ml-flow{padding:.9rem 1rem;border-radius:14px;background:#111827;color:#f8fafc;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto}
+.ml-blue{border-left:5px solid #2563eb;background:#eff6ff;padding:.85rem 1rem;border-radius:10px}
+.ml-green{border-left:5px solid #059669;background:#ecfdf5;padding:.85rem 1rem;border-radius:10px}
+.ml-amber{border-left:5px solid #d97706;background:#fffbeb;padding:.85rem 1rem;border-radius:10px}
+.ml-red{border-left:5px solid #e11d48;background:#fff1f2;padding:.85rem 1rem;border-radius:10px}
+</style>
+
+
+<div class="ml-hero">
+<div class="big">🧪 Training asks: “Can the model learn?” Evaluation asks: “Can I trust what it learned?”</div>
+
+A model can achieve 99% accuracy and be useless. It can have excellent ROC-AUC and produce poor probabilities. It can dominate random cross-validation and fail next month. Evaluation is therefore a **design problem**, not merely a metric calculation.
+</div>
+
+# 1. The Fundamental Rule: Evaluate Unseen Data
+
+If model parameters are learned from $\mathcal D_{\text{train}}$, performance must be estimated on data not used to fit those parameters.
+
+```text
+ALL DATA
+   │
+   ├── TRAIN ── learn parameters
+   │
+   ├── VALIDATION ── choose/tune
+   │
+   └── TEST ── final unbiased-ish assessment
+```
+
+::: {.callout-warning}
+## The test set is not a development dashboard
+If you repeatedly inspect test performance and change the model, the test set becomes part of model development.
+:::
+
+# 2. Simulate a Realistic Binary Classification Problem
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show simulated churn-data code"
+import numpy as np, pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+
+X,y=make_classification(
+    n_samples=6000,n_features=12,n_informative=6,
+    n_redundant=2,weights=[.86,.14],
+    class_sep=1.0,flip_y=.025,random_state=42
+)
+
+X_train,X_test,y_train,y_test=train_test_split(
+    X,y,test_size=.25,stratify=y,random_state=42
+)
+```
+
+# 3. Always Build a Baseline
+
+For imbalanced classification, predicting the majority class may yield high accuracy.
+
+```{python}
+#| code-fold: true
+from sklearn.dummy import DummyClassifier
+
+dummy=DummyClassifier(strategy="prior")
+dummy.fit(X_train,y_train)
+print("Dummy accuracy:",dummy.score(X_test,y_test))
+```
+
+Your model should beat a meaningful baseline—not merely produce a large-looking number.
+
+# 4. The Confusion Matrix
+
+For binary classification:
+
+| | Predicted − | Predicted + |
+|---|---:|---:|
+| Actual − | TN | FP |
+| Actual + | FN | TP |
+
+From these four counts, many recurring metrics emerge.
+
+# 5. Accuracy
+
+$$
+\text{Accuracy}=\frac{TP+TN}{TP+TN+FP+FN}.
+$$
+
+Useful when classes and error costs are reasonably balanced.
+
+Dangerous when the positive class is rare or errors have asymmetric cost.
+
+# 6. Precision and Recall
+
+$$
+\text{Precision}=\frac{TP}{TP+FP}
+$$
+
+asks:
+
+> Of the cases we flagged, how many were truly positive?
+
+$$
+\text{Recall}=\frac{TP}{TP+FN}
+$$
+
+asks:
+
+> Of all true positives, how many did we catch?
+
+### Use-case intuition
+
+**Fraud investigation with limited analysts:** precision matters.
+
+**Cancer screening where missing a case is costly:** recall can matter strongly.
+
+Neither metric should be selected without the decision context.
+
+# 7. F1 Score
+
+$$
+F_1=
+2\frac{\text{Precision}\cdot\text{Recall}}
+{\text{Precision}+\text{Recall}}.
+$$
+
+F1 is a harmonic mean and is useful when you want one number balancing precision and recall.
+
+But one number hides the tradeoff.
+
+# 8. Thresholds Turn Scores into Decisions
+
+A classifier may produce a probability-like score $p$.
+
+Decision:
+
+$$
+\hat y=
+\begin{cases}
+1,&p\ge t\\
+0,&p<t.
+\end{cases}
+$$
+
+The threshold $t=0.5$ is **not a law of nature**.
+
+```{python}
+#| code-fold: true
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+clf=LogisticRegression(max_iter=1000).fit(X_train,y_train)
+prob=clf.predict_proba(X_test)[:,1]
+
+rows=[]
+for t in np.linspace(.05,.95,19):
+    pred=(prob>=t).astype(int)
+    rows.append({
+        "threshold":t,
+        "precision":precision_score(y_test,pred,zero_division=0),
+        "recall":recall_score(y_test,pred,zero_division=0),
+        "f1":f1_score(y_test,pred,zero_division=0)
+    })
+threshold_df=pd.DataFrame(rows)
+```
+
+```{python}
+#| code-fold: true
+import plotly.express as px
+long=threshold_df.melt("threshold",var_name="metric",value_name="score")
+fig=px.line(long,x="threshold",y="score",color="metric",
+            markers=True,title="Threshold changes the operating point")
+fig.show()
+```
+
+<div class="ml-green">
+
+### Model selection and decision selection are different
+First learn a scoring/ranking model. Then choose an operating threshold based on costs, capacity, risk and product objectives.
+</div>
+
+# 9. ROC Curve and ROC-AUC
+
+ROC plots
+
+$$
+TPR \quad \text{vs.}\quad FPR
+$$
+
+over thresholds.
+
+AUC measures ranking discrimination: how well positives tend to receive higher scores than negatives.
+
+```{python}
+#| code-fold: true
+from sklearn.metrics import roc_curve,roc_auc_score
+
+fpr,tpr,_=roc_curve(y_test,prob)
+auc=roc_auc_score(y_test,prob)
+
+fig,ax=plt.subplots(figsize=(5,5))
+ax.plot(fpr,tpr,label=f"AUC={auc:.3f}")
+ax.plot([0,1],[0,1],linestyle="--")
+ax.set(xlabel="False Positive Rate",ylabel="True Positive Rate",
+       title="ROC curve")
+ax.legend()
+plt.show()
+```
+
+# 10. Precision–Recall Curve
+
+For rare positive classes, PR curves often expose the useful operating region more directly.
+
+```{python}
+#| code-fold: true
+from sklearn.metrics import precision_recall_curve,average_precision_score
+
+precision,recall,_=precision_recall_curve(y_test,prob)
+ap=average_precision_score(y_test,prob)
+
+fig,ax=plt.subplots(figsize=(5,5))
+ax.plot(recall,precision,label=f"AP={ap:.3f}")
+ax.set(xlabel="Recall",ylabel="Precision",title="Precision–Recall curve")
+ax.legend()
+plt.show()
+```
+
+# 11. Log Loss — Reward Honest Probabilities
+
+For binary classification:
+
+$$
+-\frac1n\sum_i
+[y_i\log p_i+(1-y_i)\log(1-p_i)].
+$$
+
+Confident wrong predictions are punished strongly.
+
+Use when probability quality matters, not merely hard labels.
+
+# 12. Calibration — Does 0.8 Mean About 80%?
+
+A calibrated model satisfies approximately:
+
+$$
+P(Y=1\mid \hat p\approx0.8)\approx0.8.
+$$
+
+```{python}
+#| code-fold: true
+from sklearn.calibration import calibration_curve
+
+obs,pred=calibration_curve(y_test,prob,n_bins=10)
+
+fig,ax=plt.subplots(figsize=(5,5))
+ax.plot(pred,obs,marker="o")
+ax.plot([0,1],[0,1],linestyle="--")
+ax.set(xlabel="Predicted probability",ylabel="Observed rate",
+       title="Calibration")
+plt.show()
+```
+
+Ranking and calibration are separate properties.
+
+# 13. Regression Metrics
+
+Suppose residuals are
+
+$$
+e_i=y_i-\hat y_i.
+$$
+
+## MAE
+
+$$
+MAE=\frac1n\sum|e_i|.
+$$
+
+Easy to interpret in target units and less dominated by large errors than MSE.
+
+## MSE
+
+$$
+MSE=\frac1n\sum e_i^2.
+$$
+
+Large errors receive quadratic penalty.
+
+## RMSE
+
+$$
+RMSE=\sqrt{MSE}.
+$$
+
+Returns the error to target units.
+
+## $R^2$
+
+$$
+R^2=1-\frac{\sum(y_i-\hat y_i)^2}
+{\sum(y_i-\bar y)^2}.
+$$
+
+Measures improvement relative to predicting the mean under the usual definition.
+
+# 14. Simulate Why MAE and RMSE Tell Different Stories
+
+```{python}
+#| code-fold: true
+rng=np.random.default_rng(8)
+errors=rng.normal(0,10,500)
+errors[:5]=[60,-75,90,-110,130]
+
+mae=np.mean(np.abs(errors))
+rmse=np.sqrt(np.mean(errors**2))
+
+print("MAE :",round(mae,2))
+print("RMSE:",round(rmse,2))
+```
+
+RMSE reacts much more strongly to rare large misses.
+
+That can be desirable if large misses are disproportionately costly.
+
+# 15. Residual Diagnostics
+
+A single regression metric cannot tell you *how* a model is wrong.
+
+Plot residuals against:
+
+- predictions,
+- important features,
+- time,
+- customer segments.
+
+Look for:
+
+- bias,
+- nonlinear pattern,
+- changing variance,
+- segment-specific failure,
+- temporal drift.
+
+# 16. Cross-Validation
+
+A single split can be lucky or unlucky.
+
+$K$-fold CV:
+
+```text
+Fold 1: VALID | train train train train
+Fold 2: train | VALID | train train train
+Fold 3: train train | VALID | train train
+...
+```
+
+```{python}
+#| code-fold: true
+from sklearn.model_selection import cross_validate
+
+scores=cross_validate(
+    LogisticRegression(max_iter=1000),
+    X,y,
+    cv=5,
+    scoring=["roc_auc","average_precision","neg_log_loss"]
+)
+
+pd.DataFrame(scores).filter(like="test_").describe()
+```
+
+Report variation, not only the mean.
+
+# 17. Choose the Split That Matches Reality
+
+## IID rows
+Random K-fold may be appropriate.
+
+## Imbalanced classification
+Use stratification.
+
+## Multiple rows per person/device/account
+Use grouped splitting to prevent entity leakage.
+
+## Future prediction
+Use time-ordered validation.
+
+<div class="ml-red">
+
+### The split is part of the model
+A sophisticated metric on an unrealistic split produces a sophisticated-looking wrong answer.
+</div>
+
+# 18. Interactive Cross-Validation Variability
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show repeated split simulation"
+from sklearn.model_selection import StratifiedKFold,cross_val_score
+
+vals=[]
+for seed in range(15):
+    cv=StratifiedKFold(n_splits=5,shuffle=True,random_state=seed)
+    s=cross_val_score(
+        LogisticRegression(max_iter=1000),
+        X,y,cv=cv,scoring="roc_auc"
+    )
+    vals += [{"seed":seed,"fold":i+1,"auc":v} for i,v in enumerate(s)]
+
+cv_df=pd.DataFrame(vals)
+```
+
+```{python}
+#| code-fold: true
+fig=px.scatter(cv_df,x="seed",y="auc",color="fold",
+               title="Performance varies across validation samples")
+fig.show()
+```
+
+# 19. Hyperparameter Tuning Without Cheating
+
+Hyperparameters are selected using training/validation information.
+
+Examples:
+
+- regularization strength,
+- tree depth,
+- number of trees,
+- learning rate,
+- neighborhood size.
+
+Tools include:
+
+- grid search,
+- randomized search,
+- successive halving,
+- Bayesian/optimization frameworks such as Optuna.
+
+Never tune repeatedly on the final test set.
+
+# 20. Learning Curves — More Data or Better Model?
+
+Plot training and validation performance against training-set size.
+
+Interpretation:
+
+```text
+train high, validation low
+→ overfitting / variance problem
+
+both low
+→ underfitting / bias or weak features
+
+validation still improving with n
+→ more data may help
+```
+
+# 21. Validation Curves — What Does Complexity Do?
+
+Vary one hyperparameter and compare train vs validation scores.
+
+Example: tree depth.
+
+```text
+depth too small → underfit
+depth moderate  → useful region
+depth huge      → training perfect, validation deteriorates
+```
+
+# 22. Confidence Intervals and Bootstrap
+
+A metric is an estimate from a finite sample.
+
+Bootstrap evaluation:
+
+```text
+test rows
+  ↓ sample with replacement
+metric₁
+
+repeat B times
+  ↓
+distribution of metric
+  ↓
+uncertainty interval
+```
+
+```{python}
+#| code-fold: true
+rng=np.random.default_rng(99)
+boots=[]
+idx=np.arange(len(y_test))
+
+for _ in range(1000):
+    b=rng.choice(idx,size=len(idx),replace=True)
+    if len(np.unique(y_test[b]))==2:
+        boots.append(roc_auc_score(y_test[b],prob[b]))
+
+print(np.quantile(boots,[.025,.5,.975]))
+```
+
+# 23. Segment Evaluation
+
+Overall performance can hide failures.
+
+Evaluate by:
+
+- region,
+- device,
+- customer tier,
+- acquisition channel,
+- time period,
+- operationally meaningful cohorts.
+
+A model can have excellent aggregate AUC while performing poorly on a strategically important subgroup.
+
+# 24. Business Evaluation
+
+Suppose:
+
+- TP saves $120,
+- FP costs $15,
+- FN loses $200.
+
+Then a threshold can be evaluated by expected value, not only F1.
+
+$$
+V(t)=120TP(t)-15FP(t)-200FN(t).
+$$
+
+<div class="ml-blue">
+
+### Metrics are proxies for decisions
+The best statistical metric is not automatically the best business operating point.
+</div>
+
+# 25. Offline vs Online Evaluation
+
+Offline:
+
+- historical holdout,
+- CV,
+- metrics,
+- calibration,
+- slices.
+
+Online:
+
+- A/B experiment,
+- latency,
+- engagement,
+- revenue,
+- guardrails,
+- operational load.
+
+A model that wins offline still needs evidence that it improves the real system.
+
+# 26. Monitoring After Deployment
+
+Evaluation does not end at launch.
+
+Monitor:
+
+- input drift,
+- prediction distribution,
+- missingness,
+- calibration,
+- delayed ground-truth performance,
+- latency/errors,
+- business KPI,
+- subgroup behavior.
+
+# 27. The Evaluation Ladder
+
+<div class="ml-flow">
+BASELINE → SPLIT → METRICS → THRESHOLD → DIAGNOSTICS
+         → CROSS-VALIDATE → UNCERTAINTY → SEGMENTS
+         → BUSINESS VALUE → ONLINE TEST → MONITOR
+</div>
+
+# Summary
+
+A trustworthy evaluation answers more than “What is the score?”
+
+Ask:
+
+1. **Compared with what baseline?**
+2. **On what unseen population?**
+3. **Using which metric and why?**
+4. **At which threshold?**
+5. **How uncertain is the estimate?**
+6. **Does it hold across folds, time and segments?**
+7. **Does it improve the real decision?**
+8. **Will we know when performance changes?**

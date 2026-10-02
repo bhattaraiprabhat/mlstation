@@ -1,0 +1,298 @@
+---
+title: "Data Science Cheat Sheets: Code, Formulas and Commands 📝"
+description: "One-page references for pandas, NumPy, SQL, statistics, ML metrics, scikit-learn, Git and Docker, plus an interactive metrics calculator, a distribution explorer, a test chooser and the best external cheat sheets."
+author: "MLStation"
+date: 2026-10-01
+categories: [Resources, Cheat Sheets, Reference]
+draft: false
+---
+
+Keep this page open in a tab while you work. Every block has a **copy button** 📋, formulas are written out in full, and the interactive tools answer the questions people search for most: *"Which metric?"*, *"Which distribution?"*, *"Which test?"*.
+
+::: {.callout-tip}
+## 🎯 What is inside
+- 🐍 Code cheat sheets: pandas, NumPy, SQL, scikit-learn, plotting, Git, Docker
+- 🧮 Formula sheets: statistics and ML metrics
+- 🎛️ Three interactive tools: metrics calculator, distribution explorer, test chooser
+- 🔗 The best free external cheat sheets, with what each is good for
+:::
+
+{{< include ../_series-nav.md >}}
+
+## 🐍 Code cheat sheets
+
+::: {.panel-tabset}
+## pandas
+
+```python
+import pandas as pd
+df = pd.read_csv("sales.csv", parse_dates=["date"])
+
+df.head(); df.info(); df.describe()       # first look
+df["region"].value_counts()               # category counts
+df.isna().mean()                          # share missing per column
+
+df[df.amount > 100]                       # filter rows
+df.query("amount > 100 and region == 'TX'")
+df.loc[:, ["date", "amount"]]             # select columns
+
+df["month"] = df.date.dt.to_period("M")   # new column
+df.groupby("region").amount.agg(["sum", "mean", "count"])
+df.pivot_table(index="month", columns="region",
+               values="amount", aggfunc="sum")
+
+df.merge(customers, on="customer_id", how="left")
+df.sort_values("amount", ascending=False)
+df.fillna({"amount": 0}).drop_duplicates()
+df.to_parquet("sales.parquet")            # fast, typed storage
+```
+
+## NumPy
+
+```python
+import numpy as np
+a = np.array([[1, 2], [3, 4]])
+a.shape, a.dtype, a.T                      # shape, type, transpose
+np.zeros((3, 4)); np.ones(5); np.arange(0, 10, 2)
+np.linspace(0, 1, 5)                       # 5 evenly spaced values
+
+a.sum(axis=0); a.mean(axis=1); a.max()     # reductions
+a @ a                                      # matrix multiply
+np.where(a > 2, 1, 0)                      # vectorised if-else
+a[a > 2]                                   # boolean mask
+
+rng = np.random.default_rng(42)            # reproducible random
+rng.normal(0, 1, 1000); rng.integers(0, 10, 5)
+np.percentile(x, [5, 50, 95])
+```
+
+## SQL
+
+```sql
+-- top 5 regions by revenue in 2026
+SELECT region,
+       SUM(amount)        AS revenue,
+       COUNT(*)           AS orders,
+       AVG(amount)        AS avg_order
+FROM   sales
+WHERE  order_date >= '2026-01-01'
+GROUP  BY region
+HAVING COUNT(*) > 100
+ORDER  BY revenue DESC
+LIMIT  5;
+
+-- join + window function: each order's share of its region
+SELECT s.order_id, c.segment, s.amount,
+       s.amount / SUM(s.amount) OVER (PARTITION BY s.region)
+         AS share_of_region
+FROM   sales s
+LEFT   JOIN customers c ON c.id = s.customer_id;
+```
+
+## scikit-learn
+
+```python
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.compose import make_column_transformer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+prep = make_column_transformer(
+    (StandardScaler(), ["age", "income"]),
+    (OneHotEncoder(handle_unknown="ignore"), ["plan"]))
+model = make_pipeline(prep, HistGradientBoostingClassifier())
+
+Xtr, Xte, ytr, yte = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=0)
+cross_val_score(model, Xtr, ytr, cv=5, scoring="roc_auc")
+model.fit(Xtr, ytr)
+proba = model.predict_proba(Xte)[:, 1]
+```
+
+## Plotting
+
+```python
+import plotly.express as px
+px.histogram(df, x="amount", nbins=50)
+px.scatter(df, x="income", y="spend", color="segment",
+           trendline="ols")
+px.line(daily, x="date", y="revenue", color="region")
+px.box(df, x="region", y="amount")
+
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(figsize=(8, 4))
+ax.plot(daily.date, daily.revenue, lw=2)
+ax.set(title="Daily revenue", xlabel="", ylabel="$")
+fig.tight_layout(); fig.savefig("revenue.png", dpi=200)
+```
+
+## Git
+
+```bash
+git clone <url>                 # copy a repository
+git status                      # what changed?
+git switch -c feature/churn     # new branch
+git add notebook.ipynb src/     # stage changes
+git commit -m "Add churn baseline"
+git pull --rebase               # get others' work
+git push -u origin feature/churn
+git log --oneline --graph -10   # recent history
+git restore file.py             # discard local edits
+```
+
+## Docker
+
+```bash
+docker build -t myapi:1.0 .            # build image
+docker run -d -p 8000:8000 myapi:1.0   # run container
+docker ps                              # running containers
+docker logs -f <id>                    # follow logs
+docker exec -it <id> sh                # shell inside
+docker compose up -d                   # multi-container app
+docker system prune                    # free disk space
+```
+:::
+
+## 🧮 Statistics formula sheet
+
+| Concept | Formula | Plain words |
+|---|---|---|
+| Mean | $\bar x = \frac{1}{n}\sum_{i=1}^n x_i$ | The balance point |
+| Sample variance | $s^2 = \frac{1}{n-1}\sum (x_i - \bar x)^2$ | Average squared distance from the mean |
+| Standard error | $\text{SE} = s/\sqrt{n}$ | How much the mean wobbles between samples |
+| z-score | $z = (x - \mu)/\sigma$ | How many standard deviations from the mean |
+| 95% CI for a mean | $\bar x \pm 1.96\,\text{SE}$ | Plausible range for the true mean |
+| Correlation | $r = \frac{\text{cov}(x,y)}{s_x s_y}$ | Strength of a straight-line relationship |
+| Bayes' rule | $P(A\mid B) = \frac{P(B\mid A)P(A)}{P(B)}$ | Update a belief with evidence |
+| Linear regression | $\hat\beta = (X^\top X)^{-1}X^\top y$ | Best-fit coefficients |
+
+: Statistics formulas {#tbl-stats}
+
+## 📏 ML metrics formula sheet
+
+| Metric | Formula | Use when |
+|---|---|---|
+| Accuracy | $\frac{TP+TN}{TP+TN+FP+FN}$ | Classes are balanced |
+| Precision | $\frac{TP}{TP+FP}$ | False alarms are costly |
+| Recall | $\frac{TP}{TP+FN}$ | Misses are costly |
+| F1 | $2\cdot\frac{P\cdot R}{P+R}$ | You need one balanced number |
+| MAE | $\frac{1}{n}\sum\lvert y-\hat y\rvert$ | Errors in the target's units |
+| RMSE | $\sqrt{\frac{1}{n}\sum (y-\hat y)^2}$ | Large errors matter more |
+| MAPE | $\frac{100}{n}\sum\left\lvert\frac{y-\hat y}{y}\right\rvert$ | Percent error (avoid when $y \approx 0$) |
+| $R^2$ | $1 - \frac{\sum (y-\hat y)^2}{\sum (y-\bar y)^2}$ | Share of variance explained |
+| Log loss | $-\frac{1}{n}\sum [y\ln p + (1-y)\ln(1-p)]$ | Probabilities must be well calibrated |
+
+: ML metrics {#tbl-metrics}
+
+## 🎛️ Tool 1: metrics calculator
+
+A model scores 1,000 simulated cases, 15% of which are positive. Move the **threshold** and watch the confusion matrix and every metric update.
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof thr = Inputs.range([0.05, 0.95], {value: 0.5, step: 0.01, label: "Decision threshold"})
+viewof sep = Inputs.range([0.5, 3], {value: 1.6, step: 0.1, label: "Model quality (class separation)"})
+```
+
+```{ojs}
+//| echo: false
+cases = {
+  const r = d3.randomNormal.source(d3.randomLcg(3)), out = [];
+  const pos = r(sep, 1), neg = r(0, 1);
+  for (let i = 0; i < 1000; i++) { const y = i < 150 ? 1 : 0; const z = y ? pos() : neg(); out.push({y, p: 1 / (1 + Math.exp(-(z - sep / 2) * 1.6))}); }
+  return out;
+}
+{
+  const TP = cases.filter(d => d.y && d.p >= thr).length, FN = 150 - TP;
+  const FP = cases.filter(d => !d.y && d.p >= thr).length, TN = 850 - FP;
+  const P = TP / Math.max(1, TP + FP), R = TP / 150, F1 = 2 * P * R / Math.max(1e-9, P + R), A = (TP + TN) / 1000;
+  const cell = (v, label, c) => htl.html`<div style="background:${c};color:white;border-radius:12px;padding:14px;text-align:center"><div style="font-size:1.6rem;font-weight:700">${v}</div><div style="font-size:.85rem">${label}</div></div>`;
+  return htl.html`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+    <div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${cell(TP, "✅ True positive", ms.teal)}${cell(FN, "❌ False negative (missed)", ms.rose)}
+      ${cell(FP, "⚠️ False positive (false alarm)", ms.amber)}${cell(TN, "✅ True negative", ms.slate)}</div>
+      <div style="font-size:.8rem;opacity:.7;margin-top:6px">Rows: actual positive / actual negative</div></div>
+    ${Plot.plot({...msStyle, height: 200, width: 330, marginLeft: 80, x: {domain: [0, 1], label: null, grid: true}, y: {label: null},
+      marks: [Plot.barX([{m: "Accuracy", v: A}, {m: "Precision", v: P}, {m: "Recall", v: R}, {m: "F1", v: F1}], {y: "m", x: "v", fill: ms.indigo, rx: 4}),
+              Plot.text([{m: "Accuracy", v: A}, {m: "Precision", v: P}, {m: "Recall", v: R}, {m: "F1", v: F1}], {y: "m", x: "v", text: d => d.v.toFixed(2), dx: 16, fill: "currentColor"})]})}
+  </div>`;
+}
+```
+
+Notice that **accuracy stays high even at bad thresholds**, because 85% of cases are negative. That is why precision and recall exist.
+
+## 🎛️ Tool 2: distribution explorer
+
+```{ojs}
+//| echo: false
+viewof dist = Inputs.radio(["Normal", "Binomial", "Poisson", "Exponential"], {value: "Normal", label: "Distribution"})
+viewof p1 = Inputs.range([0.5, 20], {value: 5, step: 0.5, label: dist === "Normal" ? "Mean μ" : dist === "Binomial" ? "Trials n" : dist === "Poisson" ? "Rate λ" : "Rate λ (× 0.1)"})
+viewof p2 = Inputs.range([0.05, 5], {value: 1.5, step: 0.05, label: dist === "Normal" ? "Std dev σ" : dist === "Binomial" ? "p (× 0.2)" : "unused"})
+```
+
+```{ojs}
+//| echo: false
+{
+  const fact = k => k <= 1 ? 1 : k * fact(k - 1);
+  let pts, discrete = false, note;
+  if (dist === "Normal") { pts = d3.range(-5, 25.01, 0.1).map(x => ({x, y: Math.exp(-((x - p1) ** 2) / (2 * p2 * p2)) / (p2 * Math.sqrt(2 * Math.PI))})); note = "Heights, measurement errors, sums of many small effects"; }
+  else if (dist === "Binomial") { const n = Math.round(p1), p = Math.min(0.99, p2 * 0.2); discrete = true; pts = d3.range(0, n + 1).map(k => ({x: k, y: fact(n) / (fact(k) * fact(n - k)) * p ** k * (1 - p) ** (n - k)})); note = `Successes in ${n} tries with p = ${p.toFixed(2)}: conversions, defects`; }
+  else if (dist === "Poisson") { discrete = true; pts = d3.range(0, 41).map(k => ({x: k, y: Math.exp(-p1) * p1 ** k / fact(k)})); note = "Counts per interval: calls per hour, website errors per day"; }
+  else { const l = p1 * 0.1; pts = d3.range(0, 25.01, 0.1).map(x => ({x, y: l * Math.exp(-l * x)})); note = "Waiting time between events: time to next customer"; }
+  return htl.html`<div>${Plot.plot({...msStyle, height: 280, width: 760, marginLeft: 50, x: {label: "x →"}, y: {label: "↑ probability", grid: true},
+    marks: [discrete ? Plot.barY(pts, {x: "x", y: "y", fill: ms.violet, rx: 2}) : Plot.areaY(pts, {x: "x", y: "y", fill: ms.violet, fillOpacity: 0.3}),
+            discrete ? null : Plot.line(pts, {x: "x", y: "y", stroke: ms.violet, strokeWidth: 2.5})]})}
+    <div class="ms-readout"><span>${dist}</span><b style="font-size:1rem">${note}</b></div></div>`;
+}
+```
+
+## 🎛️ Tool 3: which statistical test?
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A["❓ What are you comparing?"] --> B["Means of a numeric variable"]
+  A --> C["Proportions or counts"]
+  A --> D["Relationship between two numeric variables"]
+  B --> B1{"How many groups?"}
+  B1 -- "2" --> B2{"Same subjects twice?"}
+  B2 -- yes --> T1["Paired t-test<br/>or Wilcoxon signed-rank"]
+  B2 -- no --> T2["Welch t-test<br/>or Mann-Whitney U"]
+  B1 -- "3+" --> T3["ANOVA<br/>or Kruskal-Wallis"]
+  C --> C1{"Table size"}
+  C1 -- "2 groups, yes/no" --> T4["Two-proportion z-test<br/>or Fisher exact"]
+  C1 -- "larger table" --> T5["Chi-square test"]
+  D --> T6["Pearson r, or Spearman<br/>if not linear"]
+```
+
+The second option in each box is the **non-parametric** version, safer when data are skewed or small. See our [p-value explainer](/statistics/hypothesis-testing/understanding-p-values.qmd) for what the result means.
+
+## 🔗 The best external cheat sheets
+
+| Cheat sheet | Covers | Why it is useful |
+|---|---|---|
+| [pandas official cheat sheet (PDF)](https://pandas.pydata.org/Pandas_Cheat_Sheet.pdf) | Reshaping, subsetting, grouping, merging | Visual diagrams of how tables change shape |
+| [Stanford CS229 cheat sheets](https://stanford.edu/~shervine/teaching/cs-229/) ([GitHub](https://github.com/afshinea/stanford-cs-229-machine-learning)) | Supervised, unsupervised, deep learning, probability, linear algebra | Dense, beautifully illustrated theory refreshers |
+| [scikit-learn "choosing the right estimator"](https://scikit-learn.org/stable/machine_learning_map.html) | Which algorithm to try for your data | Interactive flowchart, downloadable as SVG |
+| [Matplotlib cheat sheets and handouts](https://matplotlib.org/cheatsheets/) | Plot types, colours, layout tips | Beginner, intermediate and tips handouts |
+| [Posit cheat sheets](https://posit.co/resources/cheatsheets/) | R, tidyverse, Shiny, Quarto, some Python | The classic two-page cheat sheet format |
+| [DataCamp cheat sheets](https://www.datacamp.com/cheat-sheet) | Python, SQL, Power BI, ML, AI tools | Broad directory across data topics |
+| [GitHub Git cheat sheet (PDF)](https://education.github.com/git-cheat-sheet-education.pdf) | Everyday Git commands | One page, printable |
+| [Docker CLI cheat sheet (PDF)](https://docs.docker.com/get-started/docker_cheatsheet.pdf) | Images, containers, registries | Official commands reference |
+
+: External cheat sheets {#tbl-external}
+
+::: {.callout-note}
+## 📝 Note
+Cheat sheets are for **recall**, not learning. If a line on a sheet makes no sense, read the matching section of the docs or our articles first, then come back.
+:::
+
+## 🧩 Summary
+
+- Bookmark this page: 🐍 code, 🧮 formulas and 🎛️ interactive tools in one place.
+- Use the **metrics calculator** to see why accuracy misleads on imbalanced data.
+- Use the **test chooser** before running any hypothesis test.
+- For depth, the **CS229**, **pandas** and **scikit-learn** sheets are the best free companions.
+- Next: look up any unfamiliar word in the [glossary](/resources/glossary/data-science-glossary.qmd) 📖.
