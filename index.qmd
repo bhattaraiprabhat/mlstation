@@ -1,176 +1,190 @@
 ---
 title: "MLStation · Machine Learning, AI & Statistics"
-pagetitle: "MLStation · Machine Learning, AI & Statistics, explained clearly"
-description: "Clear, practical articles on Machine Learning, AI, Statistics, Software and Deployment, with the math, the code and the intuition."
+pagetitle: "MLStation · End-to-end Machine Learning, AI & Statistics, explained clearly"
+description: "End-to-end Machine Learning, AI, Statistics and Deployment: from the first equation to a monitored model in production, with the math, the code and live interactive charts."
 page-layout: full
 toc: false
 title-block-style: none
+css: assets/css/home.css
 listing:
-  id: latest
+  id: home-recent
+  template: _templates/home-recent.ejs
   contents:
     - "ml/**/*.qmd"
     - "ai/**/*.qmd"
     - "statistics/**/*.qmd"
     - "software/**/*.qmd"
     - "deployment/**/*.qmd"
+    - "resources/**/*.qmd"
     - "!**/index.qmd"
-  type: grid
-  grid-columns: 3
   sort: "date desc"
   max-items: 6
-  fields: [title, description, categories, reading-time, date]
-  categories: false
-  filter-ui: false
-  sort-ui: false
+  date-format: "YYYY-MM-DD"
+  fields: [title, description, date, reading-time, categories]
 ---
 
 ```{=html}
-<div class="ms-wrap">
+<div class="ms-home">
 
-<!-- ================= HERO ================= -->
-<section class="hero">
-  <div>
-    <p class="eyebrow">Machine Learning · AI · Statistics · Deployment</p>
-    <h1 class="hero-title">Learn the math.<br>Write the code.<br><span class="grad">Ship the model.</span></h1>
-    <p class="hero-lead">MLStation is a calm, focused place to understand how modern machine learning really works: clear intuition, rigorous equations, copy-ready code and the practical steps to take models into production.</p>
-    <div class="hero-actions">
-      <a class="btn-ms" href="resources/learning-paths/index.html">Start a learning path <i class="bi bi-arrow-right"></i></a>
-      <a class="btn-ms-ghost" href="#pillars">Browse topics</a>
+<!-- ================= HERO: Midnight Lab layout, Aurora colours ================= -->
+<section class="mh-hero">
+  <div class="mh-wrap mh-hero-inner">
+    <div class="mh-audience">
+      <span class="mh-chip">🌱 Beginner-friendly</span>
+      <span class="mh-chip">🧠 Rigorous for pros</span>
+      <span class="mh-chip">⚡ Interactive</span>
     </div>
-    <div class="hero-stats">
-      <div><b>6</b><span>Knowledge areas</span></div>
-      <div><b>45+</b><span>Focused topics</span></div>
-      <div><b>100%</b><span>Free to read</span></div>
+    <p class="mh-eyebrow">End to end · Math → Code → Production</p>
+    <h1 class="mh-title">Machine learning, <span class="mh-grad">end to end.</span></h1>
+    <p class="mh-lead">From the first equation to a monitored model in production. Read the math, copy the code, and <strong>watch it learn</strong> right in your browser.</p>
+    <div class="mh-actions">
+      <a class="mh-btn mh-btn-primary" href="#mh-paths">Start learning free <i class="bi bi-arrow-right"></i></a>
+      <a class="mh-btn mh-btn-ghost" href="#mh-explore">Explore topics</a>
+    </div>
+    <div class="mh-trust">
+      <div><b data-count-all>25+</b><span>in-depth articles</span></div>
+      <div><b>6</b><span>knowledge areas</span></div>
+      <div><b>100%</b><span>free, no sign-up</span></div>
+    </div>
+
+    <div class="mh-lab" aria-label="Math, code and a live chart of gradient descent">
+      <div class="mh-step">
+        <div class="mh-step-label"><em class="s1">1</em>The math</div>
+        <div class="mh-math"><span class="math display">\begin{aligned}\mathcal{L}(w,b)&=\tfrac{1}{n}\textstyle\sum_{i}\big(w x_i + b-y_i\big)^2\\ w&\leftarrow w-\eta\,\partial \mathcal{L}/\partial w\end{aligned}</span></div>
+        <p class="mh-hint">Mean squared error, and one gradient step that moves the line downhill.</p>
+        <a class="mh-mini-link" href="ml/algorithms/gradient-descent.html">Read: Gradient Descent, Visually Explained <i class="bi bi-arrow-right"></i></a>
+        <span class="mh-arrow">→</span>
+      </div>
+      <div class="mh-step">
+        <div class="mh-step-label"><em class="s2">2</em>The code</div>
+<pre class="mh-code"><span class="k">import</span> numpy <span class="k">as</span> np
+
+w, b, lr = <span class="n">0.0</span>, <span class="n">0.0</span>, <span class="n">0.05</span>
+<span class="k">for</span> epoch <span class="k">in</span> <span class="f">range</span>(<span class="n">200</span>):
+    err = (w * x + b) - y   <span class="c"># error</span>
+    w -= lr * <span class="n">2</span> * np.<span class="f">mean</span>(err * x)
+    b -= lr * <span class="n">2</span> * np.<span class="f">mean</span>(err)
+<span class="c"># → w ≈ 1.53, b ≈ 0.77</span></pre>
+        <span class="mh-arrow">→</span>
+      </div>
+      <div class="mh-step">
+        <div class="mh-step-label"><em class="s3">3</em>The output, live <span class="mh-live">Live</span></div>
+        <div data-mh-lab></div>
+      </div>
     </div>
   </div>
+</section>
 
-  <div class="hero-card" aria-label="Example of an MLStation article: equation and code">
-    <div class="hero-card-bar"><i></i><i></i><i></i><span>gradient_descent.py</span></div>
-    <div class="hero-card-math">
-      <div class="label">The idea</div>
-      <span class="math display">\theta_{t+1} \;=\; \theta_t \;-\; \eta \,\nabla_{\theta}\, \mathcal{L}(\theta_t)</span>
+<div class="mh-wrap">
+
+<!-- ================= TWO PATHS ================= -->
+<section class="mh-block" id="mh-paths">
+  <div class="mh-head"><div><p class="mh-eyebrow">Choose your path</p><h2>Wherever you start, there is a next step.</h2></div></div>
+  <div class="mh-paths">
+    <div class="mh-path" style="--tint: var(--mh-st)">
+      <span class="mh-tag">🌱 New to ML</span>
+      <h3>Build strong foundations</h3>
+      <p>No jargon walls. Intuition first, then the math, then your first model.</p>
+      <ol>
+        <li><span>1</span><a href="statistics/distributions/normal-distribution-interactive.html">The normal distribution, interactively</a></li>
+        <li><span>2</span><a href="statistics/hypothesis-testing/understanding-p-values.html">Understanding p-values</a></li>
+        <li><span>3</span><a href="statistics/regression/linear-regression-first-principles.html">Linear regression from first principles</a></li>
+        <li><span>4</span><a href="ml/supervised/logistic-regression-explained.html">Logistic regression explained</a></li>
+        <li><span>5</span><a href="ml/algorithms/gradient-descent.html">Gradient descent, visually</a></li>
+        <li><span>6</span><a href="ml/deep-learning/ann-to-dnn-first-neural-network.html">Your first neural network</a></li>
+      </ol>
+      <a class="mh-go" href="resources/learning-paths/industrial-use-case-paths.html">Open the learning paths <i class="bi bi-arrow-right"></i></a>
     </div>
-    <div class="hero-card-code">
-      <div class="label">The code</div>
-<pre><span class="k">def</span> <span class="f">gradient_descent</span>(grad, theta, lr=<span class="n">0.1</span>, steps=<span class="n">100</span>):
-    <span class="k">for</span> _ <span class="k">in</span> <span class="f">range</span>(steps):
-        theta = theta - lr * <span class="f">grad</span>(theta)
-    <span class="k">return</span> theta
-
-<span class="c"># minimise f(x) = (x - 3)^2</span>
-<span class="f">gradient_descent</span>(<span class="k">lambda</span> x: <span class="n">2</span> * (x - <span class="n">3</span>), theta=<span class="n">0.0</span>)
-<span class="c"># → 3.0</span></pre>
+    <div class="mh-path" style="--tint: var(--mh-dp)">
+      <span class="mh-tag">🚀 Professional</span>
+      <h3>Ship and run models end to end</h3>
+      <p>Production patterns: serving, MLOps, containers, scaling, monitoring and safe rollouts.</p>
+      <ol>
+        <li><span>1</span><a href="deployment/deployment-overview.html">From notebook to production</a></li>
+        <li><span>2</span><a href="deployment/tools/ml-serving-tools.html">The ML serving toolkit</a></li>
+        <li><span>3</span><a href="deployment/containers/docker-for-ml.html">Docker for machine learning</a></li>
+        <li><span>4</span><a href="deployment/scale/scaling-ml-inference.html">Scaling inference under load</a></li>
+        <li><span>5</span><a href="deployment/monitoring/model-monitoring-drift.html">Monitoring and drift</a></li>
+        <li><span>6</span><a href="deployment/update/model-versioning-rollouts.html">Versioning and safe rollouts</a></li>
+      </ol>
+      <a class="mh-go" href="deployment/index.html">Open the deployment series <i class="bi bi-arrow-right"></i></a>
     </div>
   </div>
 </section>
 
-<!-- ================= PILLARS ================= -->
-<section class="ms-section" id="pillars">
-  <div class="ms-section-head">
-    <p class="eyebrow">Explore</p>
-    <h2>Six areas, one connected station</h2>
-    <p>Every topic links theory to practice, so you always know why a method works and how to use it.</p>
-  </div>
-  <div class="pillar-grid">
-    <a class="pillar-card sec-ml" href="ml/index.html">
-      <span class="pillar-icon"><i class="bi bi-cpu"></i></span>
-      <h3>Machine Learning</h3>
-      <p>Supervised and unsupervised learning, deep learning and the algorithms behind them.</p>
-      <div class="chips"><span>Supervised</span><span>Deep Learning</span><span>Evaluation</span></div>
-      <span class="go">Explore ML <i class="bi bi-arrow-right"></i></span>
-    </a>
-    <a class="pillar-card sec-ai" href="ai/index.html">
-      <span class="pillar-icon"><i class="bi bi-stars"></i></span>
-      <h3>Artificial Intelligence</h3>
-      <p>LLMs, retrieval-augmented generation, agentic systems and tool use with MCP.</p>
-      <div class="chips"><span>LLMs</span><span>RAG</span><span>Agentic AI</span></div>
-      <span class="go">Explore AI <i class="bi bi-arrow-right"></i></span>
-    </a>
-    <a class="pillar-card sec-stats" href="statistics/index.html">
-      <span class="pillar-icon"><i class="bi bi-bar-chart-line"></i></span>
-      <h3>Statistics</h3>
-      <p>Probability, inference, regression, Bayesian thinking and experimentation.</p>
-      <div class="chips"><span>Inference</span><span>Regression</span><span>A/B Testing</span></div>
-      <span class="go">Explore Statistics <i class="bi bi-arrow-right"></i></span>
-    </a>
-    <a class="pillar-card sec-soft" href="software/index.html">
-      <span class="pillar-icon"><i class="bi bi-code-slash"></i></span>
-      <h3>Software</h3>
-      <p>Python, SQL, R, Git and the command line: the daily tools of data work.</p>
-      <div class="chips"><span>Python</span><span>SQL</span><span>Git</span></div>
-      <span class="go">Explore Software <i class="bi bi-arrow-right"></i></span>
-    </a>
-    <a class="pillar-card sec-deploy" href="deployment/index.html">
-      <span class="pillar-icon"><i class="bi bi-rocket-takeoff"></i></span>
-      <h3>Deployment</h3>
-      <p>Serving, scaling, monitoring, maintaining and safely updating models in production.</p>
-      <div class="chips"><span>MLOps</span><span>Scale</span><span>Monitoring</span></div>
-      <span class="go">Explore Deployment <i class="bi bi-arrow-right"></i></span>
-    </a>
-    <a class="pillar-card sec-res" href="resources/index.html">
-      <span class="pillar-icon"><i class="bi bi-journal-bookmark"></i></span>
-      <h3>Resources</h3>
-      <p>Learning paths, cheat sheets, a plain-language glossary, paper notes and datasets.</p>
-      <div class="chips"><span>Cheat Sheets</span><span>Glossary</span><span>Papers</span></div>
-      <span class="go">Explore Resources <i class="bi bi-arrow-right"></i></span>
-    </a>
+<!-- ================= END TO END ================= -->
+<section class="mh-block">
+  <div class="mh-head"><div><p class="mh-eyebrow">End to end</p><h2>One site, the whole ML lifecycle.</h2><p>Every stage has its own articles, so you can learn in order or jump to the step you need today.</p></div></div>
+  <div class="mh-e2e">
+    <a href="statistics/index.html" style="--tint: var(--mh-st)"><span class="mh-bar" style="animation-delay:0s"></span><span class="mh-num">01</span><h4>Math &amp; stats</h4><p>Probability, inference, regression</p></a>
+    <a href="resources/datasets/index.html" style="--tint: var(--mh-rs)"><span class="mh-bar" style="animation-delay:.5s"></span><span class="mh-num">02</span><h4>Data</h4><p>Open sources and extraction</p></a>
+    <a href="ml/index.html" style="--tint: var(--mh-ml)"><span class="mh-bar" style="animation-delay:1s"></span><span class="mh-num">03</span><h4>Models</h4><p>Classic ML to deep learning</p></a>
+    <a href="ai/index.html" style="--tint: var(--mh-ai)"><span class="mh-bar" style="animation-delay:1.5s"></span><span class="mh-num">04</span><h4>AI systems</h4><p>Vision, LLMs, agents, RAG</p></a>
+    <a href="software/index.html" style="--tint: var(--mh-sw)"><span class="mh-bar" style="animation-delay:2s"></span><span class="mh-num">05</span><h4>Code</h4><p>Python, SQL, Git, CLI</p></a>
+    <a href="deployment/index.html" style="--tint: var(--mh-dp)"><span class="mh-bar" style="animation-delay:2.5s"></span><span class="mh-num">06</span><h4>Production</h4><p>Deploy, scale, monitor</p></a>
   </div>
 </section>
 
-<!-- ================= FEATURES ================= -->
-<section class="ms-section">
-  <div class="ms-section-head">
-    <p class="eyebrow">How we teach</p>
-    <h2>Built for deep, comfortable reading</h2>
-  </div>
-  <div class="feature-grid">
-    <div class="feature"><i class="bi bi-lightbulb"></i><h4>Intuition first</h4><p>Every concept starts with a plain-language picture before any symbol appears.</p></div>
-    <div class="feature"><i class="bi bi-infinity"></i><h4>Rigorous math</h4><p>Clean LaTeX equations, derived step by step so nothing feels like magic.</p></div>
-    <div class="feature"><i class="bi bi-clipboard-check"></i><h4>Copy-ready code</h4><p>Tested Python and SQL snippets with one-click copy, ready for your notebook.</p></div>
-    <div class="feature"><i class="bi bi-graph-up"></i><h4>Interactive visuals</h4><p>Charts you can move and adjust to see how each parameter changes the result.</p></div>
+<!-- ================= EXPLORE ================= -->
+<section class="mh-block" id="mh-explore">
+  <div class="mh-head"><div><p class="mh-eyebrow">Explore</p><h2>Pick a world and start exploring.</h2></div></div>
+  <div class="mh-explore">
+    <div class="mh-ex" style="--tint: var(--mh-ml)">
+      <a class="mh-ex-main" href="ml/index.html"><span class="mh-ico"><i class="bi bi-cpu"></i></span><h3>Machine Learning</h3><p>Regression, clustering, neural networks and CNNs, derived and coded.</p></a>
+      <div class="mh-topics"><a href="ml/supervised/index.html">Supervised</a><a href="ml/unsupervised/index.html">Unsupervised</a><a href="ml/deep-learning/index.html">Deep learning</a></div>
+      <a class="mh-meta" href="ml/index.html"><span data-count="ml">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="mh-ex" style="--tint: var(--mh-ai)">
+      <a class="mh-ex-main" href="ai/index.html"><span class="mh-ico"><i class="bi bi-stars"></i></span><h3>Artificial Intelligence</h3><p>Computer vision, LLMs, RAG and agents: the systems behind modern AI.</p></a>
+      <div class="mh-topics"><a href="ai/computer-vision/index.html">Computer vision</a><a href="ai/agentic-ai/index.html">Agentic AI</a><a href="ai/rag/index.html">RAG</a></div>
+      <a class="mh-meta" href="ai/index.html"><span data-count="ai">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="mh-ex" style="--tint: var(--mh-st)">
+      <a class="mh-ex-main" href="statistics/index.html"><span class="mh-ico"><i class="bi bi-bar-chart-line"></i></span><h3>Statistics</h3><p>Distributions, p-values and regression you can play with.</p></a>
+      <div class="mh-topics"><a href="statistics/distributions/index.html">Distributions</a><a href="statistics/hypothesis-testing/index.html">Testing</a><a href="statistics/regression/index.html">Regression</a></div>
+      <a class="mh-meta" href="statistics/index.html"><span data-count="statistics">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="mh-ex" style="--tint: var(--mh-dp)">
+      <a class="mh-ex-main" href="deployment/index.html"><span class="mh-ico"><i class="bi bi-rocket-takeoff"></i></span><h3>Deployment</h3><p>A complete series from notebook to monitored, versioned production.</p></a>
+      <div class="mh-topics"><a href="deployment/containers/index.html">Docker</a><a href="deployment/mlops/index.html">MLOps</a><a href="deployment/monitoring/index.html">Monitoring</a></div>
+      <a class="mh-meta" href="deployment/index.html"><span data-count="deployment">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="mh-ex" style="--tint: var(--mh-rs)">
+      <a class="mh-ex-main" href="resources/index.html"><span class="mh-ico"><i class="bi bi-journal-bookmark"></i></span><h3>Resources</h3><p>Learning paths, cheat sheets, a glossary and 20 open data sources.</p></a>
+      <div class="mh-topics"><a href="resources/cheat-sheets/index.html">Cheat sheets</a><a href="resources/glossary/index.html">Glossary</a><a href="resources/datasets/index.html">Datasets</a></div>
+      <a class="mh-meta" href="resources/index.html"><span data-count="resources">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="mh-ex" style="--tint: var(--mh-sw)">
+      <a class="mh-ex-main" href="software/index.html"><span class="mh-ico"><i class="bi bi-code-slash"></i></span><h3>Software</h3><p>Python, SQL, Git and the command line every practitioner needs.</p></a>
+      <div class="mh-topics"><a href="software/python/index.html">Python</a><a href="software/sql/index.html">SQL</a><a href="software/git/index.html">Git</a></div>
+      <a class="mh-meta" href="software/index.html"><span data-count="software">Articles</span><i class="bi bi-arrow-right"></i></a>
+    </div>
   </div>
 </section>
 
-<!-- ================= LEARNING PATH ================= -->
-<section class="ms-section">
-  <div class="ms-section-head">
-    <p class="eyebrow">Learning path</p>
-    <h2>From first principles to production</h2>
-    <p>Not sure where to begin? Follow the path that matches where you are today.</p>
-  </div>
-  <div class="path">
-    <div class="path-step"><h4>Foundations</h4><p>Build the core toolkit every practitioner relies on.</p>
-      <ul><li>Probability &amp; distributions</li><li>Python &amp; SQL essentials</li><li>Linear regression</li></ul></div>
-    <div class="path-step"><h4>Modeling</h4><p>Learn how models learn, and how to judge them honestly.</p>
-      <ul><li>Gradient descent</li><li>Trees, ensembles &amp; neural nets</li><li>Evaluation &amp; validation</li></ul></div>
-    <div class="path-step"><h4>Production</h4><p>Ship reliable ML and AI systems that keep working.</p>
-      <ul><li>RAG &amp; agentic AI</li><li>Docker, APIs &amp; MLOps</li><li>Monitoring &amp; updates</li></ul></div>
-  </div>
+<!-- ================= RECENT ================= -->
+<section class="mh-block" id="mh-recent">
+  <div class="mh-head"><div><p class="mh-eyebrow">Fresh from the station</p><h2>Recently published</h2></div></div>
+  <div class="mh-ticker"><span class="mh-pulse"></span><span data-mh-updated>New end-to-end articles every week</span></div>
 </section>
-
-<!-- ================= LATEST ================= -->
-<section class="ms-section">
-  <div class="ms-section-head">
-    <p class="eyebrow">Fresh from the station</p>
-    <h2>Latest articles</h2>
-  </div>
-</section>
+</div>
 </div>
 ```
 
-::: {#latest .ms-wrap}
+::: {#home-recent .mh-wrap}
 :::
 
 ```{=html}
-<div class="ms-wrap">
+<div class="ms-home"><div class="mh-wrap">
   <div class="ms-ad-slot" data-placement="home"></div>
   <div class="ms-ad-slot" data-placement="partners"></div>
-  <section class="cta-band">
-    <div>
-      <h3>Learn one idea deeply, every week.</h3>
-      <p>New articles on ML, AI and Statistics, written for clarity, not clicks.</p>
+  <section class="mh-cta">
+    <div><h2>Learn something real in the next 10 minutes.</h2><p>Free, end-to-end articles with math, code and interactive charts. New content every week.</p></div>
+    <div class="mh-actions">
+      <a class="mh-btn mh-btn-primary" href="#mh-paths">Start learning <i class="bi bi-arrow-right"></i></a>
+      <a class="mh-btn mh-btn-ghost" href="about.html">About MLStation</a>
     </div>
-    <a class="btn-ms" href="about.html">About MLStation <i class="bi bi-arrow-right"></i></a>
   </section>
-</div>
+</div></div>
+<script src="assets/js/home-lab.js" defer></script>
 ```

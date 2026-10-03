@@ -1,0 +1,21 @@
+```{=html}
+<% const first = items[0]; const rest = items.slice(1); %>
+<div class="ms-home"><div class="mh-recent">
+<% if (first) { %>
+<a class="mh-feature" href="<%- first.outputHref || first.path %>" data-date="<%- first.date %>">
+<span class="mh-badge">★ Latest</span>
+<h3><%= first.title %></h3>
+<% if (first.description) { %><p><%= first.description %></p><% } %>
+<span class="mh-m"><span data-sec></span> · <span data-ago><%= first.date %></span><% if (first['reading-time']) { %> · <%= first['reading-time'] %> read<% } %></span>
+</a>
+<% } %>
+<div class="mh-list">
+<% for (const item of rest) { %>
+<a class="mh-item" href="<%- item.outputHref || item.path %>" data-date="<%- item.date %>">
+<span class="mh-dot"></span>
+<span><h4><%= item.title %></h4><span class="mh-m"><span class="mh-new" hidden>NEW</span><span data-sec></span> · <span data-ago><%= item.date %></span></span></span>
+</a>
+<% } %>
+</div>
+</div></div>
+```

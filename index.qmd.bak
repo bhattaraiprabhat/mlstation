@@ -1,0 +1,176 @@
+---
+title: "MLStation · Machine Learning, AI & Statistics"
+pagetitle: "MLStation · Machine Learning, AI & Statistics, explained clearly"
+description: "Clear, practical articles on Machine Learning, AI, Statistics, Software and Deployment, with the math, the code and the intuition."
+page-layout: full
+toc: false
+title-block-style: none
+listing:
+  id: latest
+  contents:
+    - "ml/**/*.qmd"
+    - "ai/**/*.qmd"
+    - "statistics/**/*.qmd"
+    - "software/**/*.qmd"
+    - "deployment/**/*.qmd"
+    - "!**/index.qmd"
+  type: grid
+  grid-columns: 3
+  sort: "date desc"
+  max-items: 6
+  fields: [title, description, categories, reading-time, date]
+  categories: false
+  filter-ui: false
+  sort-ui: false
+---
+
+```{=html}
+<div class="ms-wrap">
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div>
+    <p class="eyebrow">Machine Learning · AI · Statistics · Deployment</p>
+    <h1 class="hero-title">Learn the math.<br>Write the code.<br><span class="grad">Ship the model.</span></h1>
+    <p class="hero-lead">MLStation is a calm, focused place to understand how modern machine learning really works: clear intuition, rigorous equations, copy-ready code and the practical steps to take models into production.</p>
+    <div class="hero-actions">
+      <a class="btn-ms" href="resources/learning-paths/index.html">Start a learning path <i class="bi bi-arrow-right"></i></a>
+      <a class="btn-ms-ghost" href="#pillars">Browse topics</a>
+    </div>
+    <div class="hero-stats">
+      <div><b>6</b><span>Knowledge areas</span></div>
+      <div><b>45+</b><span>Focused topics</span></div>
+      <div><b>100%</b><span>Free to read</span></div>
+    </div>
+  </div>
+
+  <div class="hero-card" aria-label="Example of an MLStation article: equation and code">
+    <div class="hero-card-bar"><i></i><i></i><i></i><span>gradient_descent.py</span></div>
+    <div class="hero-card-math">
+      <div class="label">The idea</div>
+      <span class="math display">\theta_{t+1} \;=\; \theta_t \;-\; \eta \,\nabla_{\theta}\, \mathcal{L}(\theta_t)</span>
+    </div>
+    <div class="hero-card-code">
+      <div class="label">The code</div>
+<pre><span class="k">def</span> <span class="f">gradient_descent</span>(grad, theta, lr=<span class="n">0.1</span>, steps=<span class="n">100</span>):
+    <span class="k">for</span> _ <span class="k">in</span> <span class="f">range</span>(steps):
+        theta = theta - lr * <span class="f">grad</span>(theta)
+    <span class="k">return</span> theta
+
+<span class="c"># minimise f(x) = (x - 3)^2</span>
+<span class="f">gradient_descent</span>(<span class="k">lambda</span> x: <span class="n">2</span> * (x - <span class="n">3</span>), theta=<span class="n">0.0</span>)
+<span class="c"># → 3.0</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PILLARS ================= -->
+<section class="ms-section" id="pillars">
+  <div class="ms-section-head">
+    <p class="eyebrow">Explore</p>
+    <h2>Six areas, one connected station</h2>
+    <p>Every topic links theory to practice, so you always know why a method works and how to use it.</p>
+  </div>
+  <div class="pillar-grid">
+    <a class="pillar-card sec-ml" href="ml/index.html">
+      <span class="pillar-icon"><i class="bi bi-cpu"></i></span>
+      <h3>Machine Learning</h3>
+      <p>Supervised and unsupervised learning, deep learning and the algorithms behind them.</p>
+      <div class="chips"><span>Supervised</span><span>Deep Learning</span><span>Evaluation</span></div>
+      <span class="go">Explore ML <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="pillar-card sec-ai" href="ai/index.html">
+      <span class="pillar-icon"><i class="bi bi-stars"></i></span>
+      <h3>Artificial Intelligence</h3>
+      <p>LLMs, retrieval-augmented generation, agentic systems and tool use with MCP.</p>
+      <div class="chips"><span>LLMs</span><span>RAG</span><span>Agentic AI</span></div>
+      <span class="go">Explore AI <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="pillar-card sec-stats" href="statistics/index.html">
+      <span class="pillar-icon"><i class="bi bi-bar-chart-line"></i></span>
+      <h3>Statistics</h3>
+      <p>Probability, inference, regression, Bayesian thinking and experimentation.</p>
+      <div class="chips"><span>Inference</span><span>Regression</span><span>A/B Testing</span></div>
+      <span class="go">Explore Statistics <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="pillar-card sec-soft" href="software/index.html">
+      <span class="pillar-icon"><i class="bi bi-code-slash"></i></span>
+      <h3>Software</h3>
+      <p>Python, SQL, R, Git and the command line: the daily tools of data work.</p>
+      <div class="chips"><span>Python</span><span>SQL</span><span>Git</span></div>
+      <span class="go">Explore Software <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="pillar-card sec-deploy" href="deployment/index.html">
+      <span class="pillar-icon"><i class="bi bi-rocket-takeoff"></i></span>
+      <h3>Deployment</h3>
+      <p>Serving, scaling, monitoring, maintaining and safely updating models in production.</p>
+      <div class="chips"><span>MLOps</span><span>Scale</span><span>Monitoring</span></div>
+      <span class="go">Explore Deployment <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="pillar-card sec-res" href="resources/index.html">
+      <span class="pillar-icon"><i class="bi bi-journal-bookmark"></i></span>
+      <h3>Resources</h3>
+      <p>Learning paths, cheat sheets, a plain-language glossary, paper notes and datasets.</p>
+      <div class="chips"><span>Cheat Sheets</span><span>Glossary</span><span>Papers</span></div>
+      <span class="go">Explore Resources <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+</section>
+
+<!-- ================= FEATURES ================= -->
+<section class="ms-section">
+  <div class="ms-section-head">
+    <p class="eyebrow">How we teach</p>
+    <h2>Built for deep, comfortable reading</h2>
+  </div>
+  <div class="feature-grid">
+    <div class="feature"><i class="bi bi-lightbulb"></i><h4>Intuition first</h4><p>Every concept starts with a plain-language picture before any symbol appears.</p></div>
+    <div class="feature"><i class="bi bi-infinity"></i><h4>Rigorous math</h4><p>Clean LaTeX equations, derived step by step so nothing feels like magic.</p></div>
+    <div class="feature"><i class="bi bi-clipboard-check"></i><h4>Copy-ready code</h4><p>Tested Python and SQL snippets with one-click copy, ready for your notebook.</p></div>
+    <div class="feature"><i class="bi bi-graph-up"></i><h4>Interactive visuals</h4><p>Charts you can move and adjust to see how each parameter changes the result.</p></div>
+  </div>
+</section>
+
+<!-- ================= LEARNING PATH ================= -->
+<section class="ms-section">
+  <div class="ms-section-head">
+    <p class="eyebrow">Learning path</p>
+    <h2>From first principles to production</h2>
+    <p>Not sure where to begin? Follow the path that matches where you are today.</p>
+  </div>
+  <div class="path">
+    <div class="path-step"><h4>Foundations</h4><p>Build the core toolkit every practitioner relies on.</p>
+      <ul><li>Probability &amp; distributions</li><li>Python &amp; SQL essentials</li><li>Linear regression</li></ul></div>
+    <div class="path-step"><h4>Modeling</h4><p>Learn how models learn, and how to judge them honestly.</p>
+      <ul><li>Gradient descent</li><li>Trees, ensembles &amp; neural nets</li><li>Evaluation &amp; validation</li></ul></div>
+    <div class="path-step"><h4>Production</h4><p>Ship reliable ML and AI systems that keep working.</p>
+      <ul><li>RAG &amp; agentic AI</li><li>Docker, APIs &amp; MLOps</li><li>Monitoring &amp; updates</li></ul></div>
+  </div>
+</section>
+
+<!-- ================= LATEST ================= -->
+<section class="ms-section">
+  <div class="ms-section-head">
+    <p class="eyebrow">Fresh from the station</p>
+    <h2>Latest articles</h2>
+  </div>
+</section>
+</div>
+```
+
+::: {#latest .ms-wrap}
+:::
+
+```{=html}
+<div class="ms-wrap">
+  <div class="ms-ad-slot" data-placement="home"></div>
+  <div class="ms-ad-slot" data-placement="partners"></div>
+  <section class="cta-band">
+    <div>
+      <h3>Learn one idea deeply, every week.</h3>
+      <p>New articles on ML, AI and Statistics, written for clarity, not clicks.</p>
+    </div>
+    <a class="btn-ms" href="about.html">About MLStation <i class="bi bi-arrow-right"></i></a>
+  </section>
+</div>
+```
