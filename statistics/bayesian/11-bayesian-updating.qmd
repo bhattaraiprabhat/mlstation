@@ -171,6 +171,115 @@ $$
 
 The last quantity is the **false-positive rate**.
 
+Before using these numbers, connect the medical terminology to the classification language used elsewhere in machine learning.
+
+## 2.1 Sensitivity, specificity, recall and precision
+
+A screening test produces four possible outcomes:
+
+| | Cancer present | Cancer absent |
+|---|---:|---:|
+| **Test positive** | True Positive (TP) | False Positive (FP) |
+| **Test negative** | False Negative (FN) | True Negative (TN) |
+
+**Sensitivity** asks:
+
+> Among people who actually have cancer, how many does the test correctly detect?
+
+$$
+\boxed{
+\text{Sensitivity}
+=
+\frac{TP}{TP+FN}
+=
+P(+\mid C)
+}
+$$
+
+In machine-learning terminology, **sensitivity is the same quantity as recall** (and the true-positive rate).
+
+Thus, 95% sensitivity means that among 100 people who truly have cancer, we expect about 95 positive tests and about 5 missed cases.
+
+**Specificity** looks at the opposite population:
+
+> Among people who do **not** have cancer, how many does the test correctly identify as negative?
+
+$$
+\boxed{
+\text{Specificity}
+=
+\frac{TN}{TN+FP}
+=
+P(-\mid \neg C)
+}
+$$
+
+Therefore a specificity of 90% implies a 10% false-positive rate:
+
+$$
+\boxed{
+\text{FPR}
+=
+\frac{FP}{FP+TN}
+=
+1-\text{Specificity}
+=
+P(+\mid \neg C)
+}
+$$
+
+Now compare sensitivity with **precision**, also called **positive predictive value (PPV)** in diagnostic testing:
+
+$$
+\boxed{
+\text{Precision}
+=
+\frac{TP}{TP+FP}
+=
+P(C\mid +)
+}
+$$
+
+Precision asks:
+
+> Among people whose test is positive, how many actually have cancer?
+
+This is exactly the probability the patient wants.
+
+<div class="bayes-equation">
+<strong>Sensitivity / Recall:</strong> P(+ | Cancer)<br>
+<strong>Precision / PPV:</strong> P(Cancer | +)<br><br>
+<strong>They reverse the conditioning, so they are not the same probability.</strong>
+</div>
+
+This distinction is the reason prevalence matters. Sensitivity and specificity describe how the **test behaves within the disease and non-disease groups**. To interpret what a positive result means for a particular screened population, we must also account for the **base rate (prevalence)**.
+
+In this example:
+
+$$
+\text{Sensitivity}=95\%,
+\qquad
+\text{Specificity}=90\%.
+$$
+
+But we have not yet shown that
+
+$$
+P(C\mid +)=95\%.
+$$
+
+In fact, it will be much smaller because cancer prevalence is only 1%.
+
+::: {.callout-tip}
+## A useful bridge from ML classification to Bayes
+
+- **Recall / sensitivity** conditions on the *actual positive class*.
+- **Specificity** conditions on the *actual negative class*.
+- **Precision / PPV** conditions on the *predicted or observed positive result*.
+
+Bayes' theorem is what lets us move from quantities such as sensitivity and specificity, together with prevalence, to the positive predictive probability $P(C\mid +)$.
+:::
+
 We want:
 
 $$
