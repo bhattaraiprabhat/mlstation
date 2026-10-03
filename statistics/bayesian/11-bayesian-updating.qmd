@@ -51,6 +51,28 @@ draft: false
   background:linear-gradient(180deg,#ffffff,#faf5ff);
   border:1px solid #e9d5ff;box-shadow:0 8px 26px rgba(88,28,135,.08)
 }
+
+.mls-code-fold{
+  margin:.55rem 0 .85rem;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  background:#fafafa;
+}
+.mls-code-fold > summary{
+  cursor:pointer;
+  padding:.48rem .72rem;
+  font-size:.86rem;
+  font-weight:700;
+  color:#52525b;
+  user-select:none;
+}
+.mls-code-fold[open] > summary{
+  border-bottom:1px solid #e5e7eb;
+}
+.mls-code-fold pre{
+  margin:.5rem .7rem .75rem;
+}
+
 </style>
 
 <div class="bayes-hero">
@@ -314,10 +336,10 @@ $$
 
 Change prevalence, sensitivity and specificity. Watch the same positive test mean something very different in different populations.
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Interactive Code"
+<details class="mls-code-fold">
+<summary>＋ View Interactive Code</summary>
 
+```javascript
 viewof prevalence = Inputs.range([0.001,.20], {
   value:.01,
   step:.001,
@@ -360,10 +382,87 @@ Prior prevalence: ${(100*prevalence).toFixed(1)}%
 </div>`
 ```
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Dynamic Population Plot Code"
+</details>
 
+```{ojs}
+//| echo: false
+viewof prevalence = Inputs.range([0.001,.20], {
+  value:.01,
+  step:.001,
+  label:"Cancer prevalence"
+})
+
+viewof sensitivity = Inputs.range([.50,1], {
+  value:.95,
+  step:.01,
+  label:"Sensitivity"
+})
+
+viewof specificity = Inputs.range([.50,1], {
+  value:.90,
+  step:.01,
+  label:"Specificity"
+})
+
+falsePositiveRate = 1-specificity
+
+posteriorPositive =
+  (sensitivity*prevalence) /
+  (
+    sensitivity*prevalence
+    + falsePositiveRate*(1-prevalence)
+  )
+
+html`<div style="
+padding:1rem 1.1rem;border-radius:16px;
+background:#312e81;color:white">
+<div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;opacity:.8">
+Posterior after a positive test
+</div>
+<div style="font-size:2rem;font-weight:800">
+${(100*posteriorPositive).toFixed(1)}%
+</div>
+<div>
+Prior prevalence: ${(100*prevalence).toFixed(1)}%
+</div>
+</div>`
+```
+
+<details class="mls-code-fold">
+<summary>＋ View Dynamic Population Plot Code</summary>
+
+```javascript
+Nscreen = 10000
+cancerN = Nscreen*prevalence
+healthyN = Nscreen-cancerN
+truePos = cancerN*sensitivity
+falsePos = healthyN*(1-specificity)
+
+screenBars = [
+  {kind:"True positives",count:truePos},
+  {kind:"False positives",count:falsePos}
+]
+
+Plot.plot({
+  height:300,
+  marginLeft:110,
+  x:{label:"Positive tests among 10,000 screened"},
+  y:{label:null},
+  marks:[
+    Plot.barX(screenBars,{
+      x:"count",
+      y:"kind",
+      fill:d=>d.kind==="True positives" ? "#7c3aed" : "#0891b2",
+      tip:true
+    })
+  ]
+})
+```
+
+</details>
+
+```{ojs}
+//| echo: false
 Nscreen = 10000
 cancerN = Nscreen*prevalence
 healthyN = Nscreen-cancerN
@@ -648,11 +747,46 @@ This is called **conjugacy**: prior and posterior belong to the same distributio
 
 ### Data Simulator
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Data Simulator"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Data Simulator</summary>
 
+```python
+import numpy as np
+import pandas as pd
+from scipy.stats import beta
+
+rng = np.random.default_rng(6)
+
+true_rate = .30
+observations = rng.binomial(1,true_rate,400)
+
+rows = []
+
+for n in [0,5,20,50,100,400]:
+    successes = observations[:n].sum()
+
+    alpha_post = 2 + successes
+    beta_post = 2 + n-successes
+
+    for theta in np.linspace(.001,.999,350):
+        rows.append({
+            "observations":n,
+            "theta":theta,
+            "density":beta.pdf(
+                theta,
+                alpha_post,
+                beta_post
+            )
+        })
+
+posterior_animation = pd.DataFrame(rows)
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import numpy as np
 import pandas as pd
 from scipy.stats import beta
@@ -686,11 +820,41 @@ posterior_animation = pd.DataFrame(rows)
 
 ### Plot Code
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Plot Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Plot Code</summary>
 
+```python
+import plotly.express as px
+
+fig = px.line(
+    posterior_animation,
+    x="theta",
+    y="density",
+    animation_frame="observations",
+    range_x=[0,1],
+    range_y=[0,15],
+    title="Bayesian Learning: Posterior Uncertainty Contracts as Data Arrive"
+)
+
+fig.add_vline(
+    x=true_rate,
+    line_dash="dash",
+    annotation_text="Simulated true rate"
+)
+
+fig.update_layout(
+    xaxis_title="Unknown probability θ",
+    yaxis_title="Posterior density",
+    height=440
+)
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import plotly.express as px
 
 fig = px.line(
@@ -735,10 +899,10 @@ A responsible Bayesian workflow includes **prior predictive thinking and sensiti
 
 ## 14.1 Interactive prior sensitivity
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Interactive Prior Code"
+<details class="mls-code-fold">
+<summary>＋ View Interactive Prior Code</summary>
 
+```javascript
 viewof priorMean = Inputs.range([.02,.98], {
   value:.20, step:.01, label:"Prior mean"
 })
@@ -778,10 +942,102 @@ display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
 </div>`
 ```
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Dynamic Posterior Plot Code"
+</details>
 
+```{ojs}
+//| echo: false
+viewof priorMean = Inputs.range([.02,.98], {
+  value:.20, step:.01, label:"Prior mean"
+})
+
+viewof priorStrength = Inputs.range([2,100], {
+  value:10, step:1, label:"Prior strength α + β"
+})
+
+viewof observedSuccesses = Inputs.range([0,80], {
+  value:18, step:1, label:"Observed successes"
+})
+
+viewof observedTrials = Inputs.range([1,100], {
+  value:50, step:1, label:"Observed trials"
+})
+
+safeSuccess = Math.min(observedSuccesses,observedTrials)
+
+a0 = priorMean*priorStrength
+b0 = (1-priorMean)*priorStrength
+
+aPost = a0+safeSuccess
+bPost = b0+observedTrials-safeSuccess
+
+posteriorMean = aPost/(aPost+bPost)
+
+html`<div style="
+display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+<div style="padding:.8rem;border-radius:14px;background:#ecfeff">
+<div>Prior mean</div>
+<b style="font-size:1.5rem">${priorMean.toFixed(3)}</b>
+</div>
+<div style="padding:.8rem;border-radius:14px;background:#f5f3ff">
+<div>Posterior mean</div>
+<b style="font-size:1.5rem">${posteriorMean.toFixed(3)}</b>
+</div>
+</div>`
+```
+
+<details class="mls-code-fold">
+<summary>＋ View Dynamic Posterior Plot Code</summary>
+
+```javascript
+betaShape = (x,a,b) => x**(a-1)*(1-x)**(b-1)
+
+thetaGrid = d3.range(.002,.999,.003)
+
+priorCurve = thetaGrid.map(x => ({
+  theta:x,
+  density:betaShape(x,a0,b0),
+  distribution:"Prior"
+}))
+
+postCurve = thetaGrid.map(x => ({
+  theta:x,
+  density:betaShape(x,aPost,bPost),
+  distribution:"Posterior"
+}))
+
+maxPrior = d3.max(priorCurve,d=>d.density)
+maxPost = d3.max(postCurve,d=>d.density)
+
+displayCurves = [
+  ...priorCurve.map(d=>({...d,density:d.density/maxPrior})),
+  ...postCurve.map(d=>({...d,density:d.density/maxPost}))
+]
+
+Plot.plot({
+  height:340,
+  x:{domain:[0,1],label:"θ"},
+  y:{axis:null},
+  color:{
+    domain:["Prior","Posterior"],
+    range:["#0891b2","#7c3aed"],
+    legend:true
+  },
+  marks:[
+    Plot.line(displayCurves,{
+      x:"theta",
+      y:"density",
+      stroke:"distribution",
+      strokeWidth:3,
+      tip:true
+    })
+  ]
+})
+```
+
+</details>
+
+```{ojs}
+//| echo: false
 betaShape = (x,a,b) => x**(a-1)*(1-x)**(b-1)
 
 thetaGrid = d3.range(.002,.999,.003)
@@ -1024,11 +1280,49 @@ The target is whether a patient should be escalated for follow-up based on three
 
 ### Data Simulator
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Data Simulator"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Data Simulator</summary>
 
+```python
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(44)
+n = 1800
+
+risk = rng.binomial(1,.18,n)
+
+marker_a = rng.normal(
+    1.2 + 1.8*risk,
+    .85,
+    n
+)
+
+marker_b = rng.normal(
+    4.5 + 1.2*risk,
+    1.0,
+    n
+)
+
+age_scaled = rng.normal(
+    0.0 + .65*risk,
+    .9,
+    n
+)
+
+clinical = pd.DataFrame({
+    "marker_a":marker_a,
+    "marker_b":marker_b,
+    "age_scaled":age_scaled,
+    "followup_needed":risk
+})
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import numpy as np
 import pandas as pd
 
@@ -1065,11 +1359,46 @@ clinical = pd.DataFrame({
 
 ### Plot Code
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Plot Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Plot Code</summary>
 
+```python
+import plotly.express as px
+
+plot_clinical = clinical.sample(
+    900,
+    random_state=4
+).copy()
+
+plot_clinical["class"] = plot_clinical[
+    "followup_needed"
+].map({
+    0:"Routine",
+    1:"Follow-up"
+})
+
+fig = px.scatter(
+    plot_clinical,
+    x="marker_a",
+    y="marker_b",
+    color="class",
+    hover_data=["age_scaled"],
+    title="A Bayesian Classification Problem"
+)
+
+fig.update_layout(
+    xaxis_title="Marker A",
+    yaxis_title="Marker B",
+    height=470
+)
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import plotly.express as px
 
 plot_clinical = clinical.sample(
@@ -1103,11 +1432,46 @@ fig.show()
 
 # 21. Fit Gaussian Naive Bayes
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Model-Fitting Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Model-Fitting Code</summary>
 
+```python
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+
+nb_features = [
+    "marker_a",
+    "marker_b",
+    "age_scaled"
+]
+
+X_nb = clinical[nb_features]
+y_nb = clinical["followup_needed"]
+
+X_train_nb, X_test_nb, y_train_nb, y_test_nb = train_test_split(
+    X_nb,
+    y_nb,
+    test_size=.25,
+    stratify=y_nb,
+    random_state=42
+)
+
+bayes_classifier = GaussianNB()
+bayes_classifier.fit(
+    X_train_nb,
+    y_train_nb
+)
+
+nb_probability = bayes_classifier.predict_proba(
+    X_test_nb
+)[:,1]
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
 
@@ -1169,11 +1533,34 @@ The fitted means and variances are model parameters learned from the training da
 
 ### Data Simulator
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Inference Preparation Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Inference Preparation Code</summary>
 
+```python
+import pandas as pd
+
+learned_means = pd.DataFrame(
+    bayes_classifier.theta_,
+    columns=nb_features
+)
+
+learned_means["class"] = [
+    "Routine",
+    "Follow-up"
+]
+
+learned_means_long = learned_means.melt(
+    id_vars="class",
+    var_name="feature",
+    value_name="learned_mean"
+)
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import pandas as pd
 
 learned_means = pd.DataFrame(
@@ -1195,11 +1582,34 @@ learned_means_long = learned_means.melt(
 
 ### Plot Code
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Plot Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Plot Code</summary>
 
+```python
+import plotly.express as px
+
+fig = px.bar(
+    learned_means_long,
+    x="feature",
+    y="learned_mean",
+    color="class",
+    barmode="group",
+    title="What the Bayesian Classifier Learned About Each Class"
+)
+
+fig.update_layout(
+    xaxis_title="Feature",
+    yaxis_title="Estimated class-conditional mean",
+    height=430
+)
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import plotly.express as px
 
 fig = px.bar(
@@ -1227,11 +1637,38 @@ We still validate predictive behavior.
 
 ### Data Simulator
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Validation Preparation Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Validation Preparation Code</summary>
 
+```python
+import pandas as pd
+from sklearn.metrics import (
+    precision_recall_curve,
+    roc_auc_score
+)
+
+precision_nb, recall_nb, threshold_nb = precision_recall_curve(
+    y_test_nb,
+    nb_probability
+)
+
+pr_nb = pd.DataFrame({
+    "precision":precision_nb[:-1],
+    "recall":recall_nb[:-1],
+    "threshold":threshold_nb
+})
+
+auc_nb = roc_auc_score(
+    y_test_nb,
+    nb_probability
+)
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import pandas as pd
 from sklearn.metrics import (
     precision_recall_curve,
@@ -1257,11 +1694,33 @@ auc_nb = roc_auc_score(
 
 ### Plot Code
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Plot Code"
-#| warning: false
+<details class="mls-code-fold">
+<summary>＋ View Plot Code</summary>
 
+```python
+import plotly.express as px
+
+fig = px.line(
+    pr_nb,
+    x="recall",
+    y="precision",
+    hover_data={"threshold":":.3f"},
+    title=f"Naive Bayes Validation — Precision/Recall (ROC AUC={auc_nb:.3f})"
+)
+
+fig.update_layout(
+    xaxis_range=[0,1],
+    yaxis_range=[0,1],
+    height=450
+)
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
 import plotly.express as px
 
 fig = px.line(
@@ -1292,12 +1751,10 @@ Bayesian modeling does not remove ordinary data-science responsibilities:
 
 After validation, serialize the fitted model and its feature contract.
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Model-Saving Code"
-#| warning: false
-#| eval: false
+<details class="mls-code-fold">
+<summary>＋ View Model-Saving Code</summary>
 
+```python
 import joblib
 
 bayes_artifact = {
@@ -1312,14 +1769,16 @@ joblib.dump(
 )
 ```
 
+</details>
+
+
+
 Someone else can load it later:
 
-```{python}
-#| code-fold: true
-#| code-summary: "View Model-Loading Code"
-#| warning: false
-#| eval: false
+<details class="mls-code-fold">
+<summary>＋ View Model-Loading Code</summary>
 
+```python
 import joblib
 
 artifact = joblib.load(
@@ -1329,6 +1788,10 @@ artifact = joblib.load(
 loaded_bayes_model = artifact["model"]
 loaded_features = artifact["features"]
 ```
+
+</details>
+
+
 
 The prediction system should reproduce the same feature definitions used during training.
 
@@ -1342,10 +1805,10 @@ It uses fixed class priors, means and standard deviations to show how new eviden
 
 ### 🔬 Follow-up Risk Desk
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Prediction Desk Code"
+<details class="mls-code-fold">
+<summary>＋ View Prediction Desk Code</summary>
 
+```javascript
 viewof inputA = Inputs.range([-1,5], {
   value:2.2, step:.1, label:"Marker A"
 })
@@ -1396,10 +1859,89 @@ Prior class probability: ${(100*priorFollow).toFixed(0)}%
 </div>`
 ```
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Dynamic Evidence Plot Code"
+</details>
 
+```{ojs}
+//| echo: false
+viewof inputA = Inputs.range([-1,5], {
+  value:2.2, step:.1, label:"Marker A"
+})
+
+viewof inputB = Inputs.range([1,8], {
+  value:5.2, step:.1, label:"Marker B"
+})
+
+viewof inputAge = Inputs.range([-2,3], {
+  value:.4, step:.1, label:"Age feature (scaled)"
+})
+
+gaussian = (x,mu,sd) =>
+  Math.exp(-.5*((x-mu)/sd)**2)/(sd*Math.sqrt(2*Math.PI))
+
+priorRoutine = .82
+priorFollow = .18
+
+likeRoutine =
+  gaussian(inputA,1.2,.85) *
+  gaussian(inputB,4.5,1.0) *
+  gaussian(inputAge,0,.9)
+
+likeFollow =
+  gaussian(inputA,3.0,.85) *
+  gaussian(inputB,5.7,1.0) *
+  gaussian(inputAge,.65,.9)
+
+scoreRoutine = priorRoutine*likeRoutine
+scoreFollow = priorFollow*likeFollow
+
+posteriorFollow =
+  scoreFollow/(scoreRoutine+scoreFollow)
+
+html`<div style="
+padding:1rem 1.1rem;border-radius:16px;
+background:linear-gradient(135deg,#4c1d95,#7c3aed);
+color:white">
+<div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;opacity:.8">
+Posterior probability of follow-up class
+</div>
+<div style="font-size:2rem;font-weight:800">
+${(100*posteriorFollow).toFixed(1)}%
+</div>
+<div style="opacity:.85">
+Prior class probability: ${(100*priorFollow).toFixed(0)}%
+</div>
+</div>`
+```
+
+<details class="mls-code-fold">
+<summary>＋ View Dynamic Evidence Plot Code</summary>
+
+```javascript
+predictionBars = [
+  {class:"Routine",probability:1-posteriorFollow},
+  {class:"Follow-up",probability:posteriorFollow}
+]
+
+Plot.plot({
+  height:280,
+  y:{domain:[0,1],label:"Posterior probability"},
+  x:{label:null},
+  marks:[
+    Plot.barY(predictionBars,{
+      x:"class",
+      y:"probability",
+      fill:d=>d.class==="Follow-up" ? "#7c3aed" : "#0891b2",
+      tip:true
+    }),
+    Plot.ruleY([.5],{strokeDasharray:"4,4"})
+  ]
+})
+```
+
+</details>
+
+```{ojs}
+//| echo: false
 predictionBars = [
   {class:"Routine",probability:1-posteriorFollow},
   {class:"Follow-up",probability:posteriorFollow}
