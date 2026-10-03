@@ -19,17 +19,20 @@
       '<div class="mh-out-top"><button type="button" class="mh-btn mh-btn-primary mh-sm" data-run>▶ Train</button>' +
       '<button type="button" class="mh-btn mh-btn-ghost mh-sm" data-reset>Reset</button>' +
       '<label>Learning rate η <input type="range" min="0.005" max="0.5" step="0.005" value="0.05" data-lr><b data-lrv>0.05</b></label></div>' +
-      '<div class="mh-plots"><canvas data-fit height="170"></canvas><canvas data-loss height="170"></canvas></div>' +
+      '<div class="mh-plots"><div class="mh-cv"><canvas data-fit></canvas></div><div class="mh-cv"><canvas data-loss></canvas></div></div>' +
       '<div class="mh-readout"><span>epoch <b data-ep>0</b></span><span>loss <b data-ls>–</b></span><span>w <b data-w>0.00</b></span><span>b <b data-b>0.00</b></span></div>' +
-      '<p class="mh-hint">Try η = 0.45 to watch it overshoot, or η = 0.01 to see slow learning.</p>';
+      '<p class="mh-hint">Try η = 0.45 (overshoots) or 0.01 (slow).</p>';
     const q = sel => root.querySelector(sel);
     const fit = q("[data-fit]"), loss = q("[data-loss]");
     let w = 0, b = 0, ep = 0, hist = [], timer = null, lr = 0.05;
     const L = () => xs.reduce((a, x, i) => a + ((w * x + b) - ys[i]) ** 2, 0) / xs.length;
+    // Size every canvas from its fixed-height wrapper, never from its own attributes,
+    // so high-DPI (Retina) screens cannot make it grow.
     const size = c => {
-      const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1, h = +c.getAttribute("height");
-      c.width = Math.max(1, r.width * d); c.height = h * d; c.style.height = h + "px";
-      const g = c.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); return [g, r.width, h];
+      const box = c.parentElement, d = window.devicePixelRatio || 1;
+      const W = Math.max(1, box.clientWidth), H = Math.max(1, box.clientHeight);
+      c.width = Math.round(W * d); c.height = Math.round(H * d);
+      const g = c.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); return [g, W, H];
     };
     function draw() {
       let [g, W, H] = size(fit);
@@ -68,7 +71,7 @@
     function reset() { stop(); w = 0; b = 0; ep = 0; hist = []; draw(); }
     q("[data-run]").onclick = run; q("[data-reset]").onclick = reset;
     q("[data-lr]").oninput = e => { lr = +e.target.value; q("[data-lrv]").textContent = String(+lr.toFixed(3)); };
-    new ResizeObserver(draw).observe(fit);
+    new ResizeObserver(draw).observe(fit.parentElement);
     new MutationObserver(draw).observe(document.body, { attributes: true, attributeFilter: ["class"] });
     draw();
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

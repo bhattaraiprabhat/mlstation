@@ -186,5 +186,6 @@ w, b, lr = <span class="n">0.0</span>, <span class="n">0.0</span>, <span class="
     </div>
   </section>
 </div></div>
-<script src="assets/js/home-lab.js" defer></script>
+<style>.mh-cv{position:relative;height:150px;overflow:hidden}.mh-cv canvas{position:absolute;inset:0;width:100%!important;height:100%!important}</style>
+<script src="assets/js/home-lab.js?v=3" defer></script>
 ```
