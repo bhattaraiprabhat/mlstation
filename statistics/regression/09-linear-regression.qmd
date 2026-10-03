@@ -40,6 +40,28 @@ draft: false
   box-shadow:0 8px 24px rgba(41,37,36,.06);
 }
 .price-lab h3{margin-top:0}
+
+.code-fold{
+  margin:.55rem 0 .85rem;
+  border:1px solid #e7e5e4;
+  border-radius:10px;
+  background:#fafaf9;
+}
+.code-fold > summary{
+  cursor:pointer;
+  padding:.48rem .72rem;
+  font-size:.86rem;
+  font-weight:700;
+  color:#57534e;
+  user-select:none;
+}
+.code-fold[open] > summary{
+  border-bottom:1px solid #e7e5e4;
+}
+.code-fold pre{
+  margin:.5rem .7rem .75rem;
+}
+
 </style>
 
 <div class="price-hero">
@@ -248,10 +270,11 @@ Instead of immediately letting software optimize, try being the optimizer.
 
 Move the intercept and slope. Watch the line and **sum of squared errors (SSE)** respond.
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Interactive Code"
+<details class="code-fold">
+<summary>＋ View Interactive Code</summary>
 
+```{ojs}
+//| echo: false
 viewof houseIntercept = Inputs.range([0, 350], {
   value:100,
   step:5,
@@ -292,10 +315,13 @@ Try to make this as small as possible.
 </div>`
 ```
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Interactive Plot Code"
+</details>
 
+<details class="code-fold">
+<summary>＋ View Interactive Plot Code</summary>
+
+```{ojs}
+//| echo: false
 Plot.plot({
   height:390,
   x:{label:"Living area (sq ft)"},
@@ -318,6 +344,8 @@ Plot.plot({
   ]
 })
 ```
+
+</details>
 
 You are doing manually what an optimization algorithm does systematically.
 
@@ -1252,10 +1280,11 @@ It uses a fixed set of coefficients representing the deployed linear model so th
 
 Change the listing characteristics and watch the estimated price update.
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Dashboard Code"
+<details class="code-fold">
+<summary>＋ View Dashboard Code</summary>
 
+```{ojs}
+//| echo: false
 viewof uiSqft = Inputs.range([700,5000], {
   value:2150, step:50, label:"Living area (sq ft)"
 })
@@ -1308,10 +1337,13 @@ html`<div style="
 </div>`
 ```
 
-```{ojs}
-//| code-fold: true
-//| code-summary: "View Dynamic Comparison Plot Code"
+</details>
 
+<details class="code-fold">
+<summary>＋ View Dynamic Comparison Plot Code</summary>
+
+```{ojs}
+//| echo: false
 comparison = [
   {label:"Model estimate", price:uiPrediction},
   {label:"$450k reference", price:450000},
@@ -1341,6 +1373,8 @@ Plot.plot({
   ]
 })
 ```
+
+</details>
 
 </div>
 

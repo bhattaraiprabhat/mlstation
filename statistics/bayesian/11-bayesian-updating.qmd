@@ -1,151 +1,1617 @@
 ---
-title: "Bayesian Statistics: Learning by Updating"
-description: "Turn prior knowledge and observed data into posterior uncertainty, then connect Bayesian reasoning to modern probabilistic ML."
+title: "Bayesian Statistics: Evidence, Belief & Learning by Updating"
+description: "An end-to-end Bayesian case study: cancer screening, priors, likelihoods, posteriors, Bayesian vs frequentist inference, Naive Bayes classification, Bayesian regression, model persistence and interactive prediction."
 author: "MLStation"
-date: 2026-10-01
+date: 2026-10-03
 categories: [Statistics, Bayesian, Probability, Machine Learning]
 draft: false
 ---
 
+<style>
+.bayes-hero{
+  padding:1.45rem 1.55rem;border-radius:22px;
+  background:radial-gradient(circle at top right,#ede9fe 0,#f5f3ff 28%,#f8fafc 70%);
+  border:1px solid #ddd6fe;margin:1rem 0 1.4rem;
+}
+.bayes-hero .kicker{font-size:.78rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#6d28d9}
+.bayes-hero .big{font-size:1.38rem;font-weight:800;margin:.3rem 0;color:#312e81}
+.bayes-equation{
+  padding:1rem 1.1rem;border-radius:16px;background:#1e1b4b;color:#f5f3ff;
+  text-align:center;margin:1rem 0
+}
+.bayes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem;margin:1rem 0}
+.bayes-card{padding:.9rem 1rem;border:1px solid #e5e7eb;border-radius:15px;background:white}
+.bayes-card b{color:#5b21b6}
+.paper-note{
+  max-width:900px;margin:1.4rem auto;padding:1.35rem 1.55rem;
+  background:#f3e7c9;
+  background-image:
+    linear-gradient(rgba(120,90,45,.07) 1px,transparent 1px);
+  background-size:100% 28px;
+  color:#44351f;border:1px solid #d8c49b;border-radius:5px;
+  box-shadow:5px 7px 0 rgba(92,70,35,.12);
+  transform:rotate(-.35deg);
+  font-family:"Bradley Hand","Comic Sans MS","Segoe Print",cursive;
+  font-size:1.04rem;line-height:1.72;
+}
+.paper-note .pin{font-family:system-ui,sans-serif;font-size:.76rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8b5e34}
+.parallel{
+  display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0
+}
+.parallel > div{padding:1rem;border-radius:16px}
+.freq{background:#ecfeff;border:1px solid #a5f3fc}
+.bayes{background:#f5f3ff;border:1px solid #ddd6fe}
+@media(max-width:760px){.parallel{grid-template-columns:1fr}}
+.bayes-flow{
+  padding:.9rem 1rem;border-radius:14px;background:#312e81;color:#f5f3ff;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto
+}
+.lab-shell{
+  padding:1.05rem 1.15rem;border-radius:18px;
+  background:linear-gradient(180deg,#ffffff,#faf5ff);
+  border:1px solid #e9d5ff;box-shadow:0 8px 26px rgba(88,28,135,.08)
+}
+</style>
 
-Bayesian statistics treats uncertainty about unknown quantities probabilistically.
+<div class="bayes-hero">
+<div class="kicker">Evidence changes what we should believe</div>
+<div class="big">🧠 A positive cancer screening result arrives. How worried should the patient actually be?</div>
 
-The central operation is simple:
+The laboratory says the test is highly accurate.
 
-```text
-Prior belief + Data → Posterior belief
-```
+The result is **positive**.
 
-::: {.callout-tip}
-## What you will learn
-- Prior, likelihood and posterior
-- Bayes' rule
-- Beta–binomial updating
-- Credible intervals
-- How Bayesian thinking connects to probabilistic ML
+A natural reaction is:
+
+> “If the test is 95% accurate, there must be about a 95% chance of cancer.”
+
+That conclusion can be dramatically wrong.
+
+The missing ingredient is what we believed **before seeing the test**—in this case, how common the disease is in the relevant population.
+
+Bayesian statistics gives us a coherent language for combining those two pieces:
+
+**what was plausible before the evidence + how compatible the evidence is with each hypothesis → what is plausible after the evidence.**
+</div>
+
+This updating pattern has an appealing resemblance to ordinary reasoning. We carry expectations, encounter evidence, and revise them. Human cognition is not literally a perfect Bayesian calculator, and real people show many biases, but Bayesian inference provides a mathematically explicit ideal for **belief revision under uncertainty**.
+
+::: {.callout-note}
+## A philosophical thread worth continuing
+
+This chapter focuses on using Bayesian inference correctly. The deeper questions—why probability can represent uncertainty, how Bayesian and frequentist philosophies differ, and in what sense Bayesian updating resembles rational cognition—deserve their own treatment.
+
+**Continue to the next Bayesian/philosophy article for that deeper discussion.**
 :::
 
-## Bayes' rule
+# 1. The Clinical Question Is Not the Test's Sensitivity
 
-For parameter $\theta$ and data $D$,
+Let
 
 $$
+C=\text{patient has cancer}
+$$
+
+and
+
+$$
++=\text{screening test is positive}.
+$$
+
+The patient wants:
+
+$$
+\boxed{P(C\mid +)}
+$$
+
+the probability of cancer **given a positive test**.
+
+But medical studies often report quantities such as:
+
+$$
+P(+\mid C),
+$$
+
+the probability of a positive result **given cancer**.
+
+These are not the same conditional probability.
+
+<div class="bayes-equation">
+<strong>What the test study often gives:</strong> P(+ | Cancer)<br>
+<strong>What the patient wants:</strong> P(Cancer | +)
+</div>
+
+Bayes' theorem connects them.
+
+# 2. A Concrete Screening Example
+
+Assume, for teaching purposes:
+
+- cancer prevalence in the screened population: **1%**;
+- sensitivity: **95%**;
+- specificity: **90%**.
+
+So:
+
+$$
+P(C)=0.01
+$$
+
+$$
+P(+\mid C)=0.95
+$$
+
+and because specificity is $P(-\mid \neg C)=0.90$,
+
+$$
+P(+\mid \neg C)=0.10.
+$$
+
+The last quantity is the **false-positive rate**.
+
+We want:
+
+$$
+P(C\mid +).
+$$
+
+# 3. Solve It First with 10,000 People
+
+Before the formula, imagine 10,000 similar screened people.
+
+## Cancer group
+
+1% have cancer:
+
+$$
+10{,}000(0.01)=100.
+$$
+
+95% of those test positive:
+
+$$
+100(0.95)=95.
+$$
+
+## No-cancer group
+
+9,900 do not have cancer.
+
+10% nevertheless test positive:
+
+$$
+9{,}900(0.10)=990.
+$$
+
+Therefore total positive tests:
+
+$$
+95+990=1{,}085.
+$$
+
+Only 95 of those positives are cancer cases:
+
+$$
+P(C\mid +)
+=
+\frac{95}{1085}
+\approx0.0876.
+$$
+
+So the posterior probability is about:
+
+$$
+\boxed{8.8\%}.
+$$
+
+Not 95%.
+
+<div class="paper-note">
+<div class="pin">✎ Margin note — why this surprises people</div>
+
+A positive result feels like strong evidence—and it is.
+
+But evidence does not arrive in a vacuum.
+
+Cancer was uncommon before the test: only about 100 of 10,000 people had it. Even a fairly good test can create many false positives when applied to a much larger non-cancer population.
+
+The posterior asks us to respect <b>both</b> facts at once:
+
+<strong>rare disease + positive evidence.</strong>
+</div>
+
+# 4. Now Derive the Same Result with Bayes' Theorem
+
+Bayes' theorem is
+
+$$
+\boxed{
+P(C\mid +)
+=
+\frac{P(+\mid C)P(C)}
+{P(+)}
+}
+$$
+
+The denominator is the total probability of testing positive:
+
+$$
+P(+)
+=
+P(+\mid C)P(C)
++
+P(+\mid \neg C)P(\neg C).
+$$
+
+Therefore
+
+$$
+P(C\mid +)
+=
+\frac{
+P(+\mid C)P(C)
+}{
+P(+\mid C)P(C)
++
+P(+\mid \neg C)P(\neg C)
+}.
+$$
+
+Insert the numbers:
+
+$$
+P(C\mid +)
+=
+\frac{(0.95)(0.01)}
+{(0.95)(0.01)+(0.10)(0.99)}.
+$$
+
+$$
+=
+\frac{0.0095}{0.1085}
+\approx0.0876.
+$$
+
+Again:
+
+$$
+\boxed{P(C\mid +)\approx8.8\%}.
+$$
+
+# 5. Prior, Likelihood, Evidence and Posterior
+
+Bayesian vocabulary becomes easier when attached to the clinical story.
+
+<div class="bayes-grid">
+<div class="bayes-card"><b>Prior</b><br>$P(C)=0.01$<br>What was plausible before seeing this test?</div>
+<div class="bayes-card"><b>Likelihood</b><br>$P(+\mid C)=0.95$<br>How compatible is the observed positive test with cancer?</div>
+<div class="bayes-card"><b>Evidence</b><br>$P(+)$<br>How common is a positive result overall under the competing possibilities?</div>
+<div class="bayes-card"><b>Posterior</b><br>$P(C\mid +)=0.0876$<br>What should we believe after incorporating the test?</div>
+</div>
+
+In parameter inference we often write:
+
+$$
+\boxed{
 p(\theta\mid D)
 =
 \frac{p(D\mid\theta)p(\theta)}
-{p(D)}.
+{p(D)}
+}
 $$
 
-Often we write:
+or more compactly:
 
 $$
+\boxed{
 \text{posterior}
 \propto
 \text{likelihood}\times\text{prior}.
+}
 $$
 
-## Interactive: update a conversion-rate belief
+# 6. Interactive Screening Lab
 
-For a Bernoulli conversion probability $p$, choose a Beta prior:
-
-$$
-p\sim\operatorname{Beta}(\alpha,\beta).
-$$
-
-After $s$ successes and $f$ failures,
-
-$$
-p\mid D\sim\operatorname{Beta}(\alpha+s,\beta+f).
-$$
+Change prevalence, sensitivity and specificity. Watch the same positive test mean something very different in different populations.
 
 ```{ojs}
-//| echo: false
-viewof priorStrength = Inputs.range([2,100], {value:10, step:1, label:"Prior strength α+β"})
-viewof successes = Inputs.range([0,100], {value:18, step:1, label:"Observed successes"})
-viewof trialsBayes = Inputs.range([1,100], {value:50, step:1, label:"Observed trials"})
-sBayes=Math.min(successes,trialsBayes)
-a0=priorStrength*.1; b0=priorStrength*.9
-a1=a0+sBayes; b1=b0+trialsBayes-sBayes
-meanPrior=a0/(a0+b0); meanPost=a1/(a1+b1)
-html`<div class="ms-readout"><span>Prior mean</span><b>${meanPrior.toFixed(3)}</b>
-<span>Posterior mean</span><b>${meanPost.toFixed(3)}</b></div>`
+//| code-fold: true
+//| code-summary: "View Interactive Code"
+
+viewof prevalence = Inputs.range([0.001,.20], {
+  value:.01,
+  step:.001,
+  label:"Cancer prevalence"
+})
+
+viewof sensitivity = Inputs.range([.50,1], {
+  value:.95,
+  step:.01,
+  label:"Sensitivity"
+})
+
+viewof specificity = Inputs.range([.50,1], {
+  value:.90,
+  step:.01,
+  label:"Specificity"
+})
+
+falsePositiveRate = 1-specificity
+
+posteriorPositive =
+  (sensitivity*prevalence) /
+  (
+    sensitivity*prevalence
+    + falsePositiveRate*(1-prevalence)
+  )
+
+html`<div style="
+padding:1rem 1.1rem;border-radius:16px;
+background:#312e81;color:white">
+<div style="font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;opacity:.8">
+Posterior after a positive test
+</div>
+<div style="font-size:2rem;font-weight:800">
+${(100*posteriorPositive).toFixed(1)}%
+</div>
+<div>
+Prior prevalence: ${(100*prevalence).toFixed(1)}%
+</div>
+</div>`
 ```
 
 ```{ojs}
-//| echo: false
-// Shape visualization via unnormalized beta density
-betaShape=(x,a,b)=>x**(a-1)*(1-x)**(b-1)
-gridB=d3.range(.001,.999,.002)
-pr=gridB.map(x=>({x,y:betaShape(x,a0,b0)})); po=gridB.map(x=>({x,y:betaShape(x,a1,b1)}))
-m1=d3.max(pr,d=>d.y); m2=d3.max(po,d=>d.y)
+//| code-fold: true
+//| code-summary: "View Dynamic Population Plot Code"
+
+Nscreen = 10000
+cancerN = Nscreen*prevalence
+healthyN = Nscreen-cancerN
+truePos = cancerN*sensitivity
+falsePos = healthyN*(1-specificity)
+
+screenBars = [
+  {kind:"True positives",count:truePos},
+  {kind:"False positives",count:falsePos}
+]
+
 Plot.plot({
- height:330,x:{domain:[0,1],label:"Conversion probability p"},y:{axis:null},
- marks:[
-  Plot.line(pr,{x:"x",y:d=>d.y/m1,stroke:"#94A3B8",strokeWidth:2}),
-  Plot.line(po,{x:"x",y:d=>d.y/m2,stroke:"#4F46E5",strokeWidth:3})
- ]
+  height:300,
+  marginLeft:110,
+  x:{label:"Positive tests among 10,000 screened"},
+  y:{label:null},
+  marks:[
+    Plot.barX(screenBars,{
+      x:"count",
+      y:"kind",
+      fill:d=>d.kind==="True positives" ? "#7c3aed" : "#0891b2",
+      tip:true
+    })
+  ]
 })
 ```
 
-Move prior strength. Strong priors require more data to move substantially.
+The test characteristics did not change when you moved only prevalence.
 
-## Frequentist CI vs Bayesian credible interval
+Yet the posterior changed.
 
-A Bayesian 95% credible interval is a probability statement about the parameter **under the specified model and prior**:
+That is the **base-rate effect** made explicit.
 
-> Given the model, prior and observed data, 95% of posterior probability lies in this interval.
+# 7. Bayesian Updating in Odds Form
 
-That differs from the repeated-sampling interpretation of a frequentist confidence interval.
+Bayes' theorem becomes especially intuitive in odds form:
 
-## Simulation: posterior contracts as data arrive
+$$
+\boxed{
+\text{Posterior odds}
+=
+\text{Prior odds}
+\times
+\text{Likelihood ratio}
+}
+$$
+
+For a positive test:
+
+$$
+LR^+
+=
+\frac{P(+\mid C)}
+{P(+\mid \neg C)}.
+$$
+
+In our example:
+
+$$
+LR^+
+=
+\frac{0.95}{0.10}
+=
+9.5.
+$$
+
+Prior odds of cancer are:
+
+$$
+\frac{0.01}{0.99}
+\approx0.0101.
+$$
+
+Posterior odds:
+
+$$
+0.0101\times9.5
+\approx0.096.
+$$
+
+Convert odds to probability:
+
+$$
+p=\frac{o}{1+o}
+$$
+
+giving about 8.8%.
+
+<div class="paper-note">
+<div class="pin">✎ A useful Bayesian mental model</div>
+
+<strong>Prior odds × strength of evidence = posterior odds.</strong>
+
+Evidence can move belief strongly without erasing the starting information.
+
+When evidence is repeated and conditionally appropriate, the posterior from one stage can become the prior for the next.
+</div>
+
+# 8. A Second Positive Test: Sequential Updating
+
+Suppose a second independent test of the same quality is performed, conditional on disease status.
+
+After the first positive:
+
+$$
+P(C\mid +_1)\approx0.0876.
+$$
+
+Use that posterior as the new prior.
+
+In odds:
+
+$$
+\text{odds after first}
+\approx0.096.
+$$
+
+Apply another $LR^+=9.5$:
+
+$$
+\text{odds after second}
+=
+0.096(9.5)
+\approx0.912.
+$$
+
+Convert back:
+
+$$
+P(C\mid +_1,+_2)
+=
+\frac{0.912}{1+0.912}
+\approx0.477.
+$$
+
+About 47.7%.
+
+This illustrates sequential Bayesian learning.
+
+::: {.callout-warning}
+## Independence matters
+
+The multiplication above assumes the two test results provide conditionally independent evidence given disease status.
+
+Two tests using the same biological mechanism or sharing the same source of error may be correlated. Treating dependent evidence as independent can make the posterior far too confident.
+:::
+
+# 9. Bayesian and Frequentist Questions Are Different
+
+The two traditions often use the same probability theory but ask probability questions differently.
+
+<div class="parallel">
+<div class="freq">
+
+### Frequentist lens
+
+Parameters are treated as fixed but unknown.
+
+Probability describes repeated-sampling behavior of data or procedures.
+
+A typical question:
+
+> If we repeatedly sampled under a specified null model, how unusual would data at least this extreme be?
+
+Confidence intervals are calibrated by repeated sampling.
+
+</div>
+<div class="bayes">
+
+### Bayesian lens
+
+Unknown parameters are represented with probability distributions.
+
+Probability quantifies uncertainty conditional on the model and information.
+
+A typical question:
+
+> Given the prior, model and observed data, what is the posterior distribution of the unknown quantity?
+
+Credible intervals describe posterior probability.
+
+</div>
+</div>
+
+These are not simply two formulas for the same statement.
+
+# 10. Cancer Screening: Where the Contrast Matters
+
+A common inferential mistake is to confuse
+
+$$
+P(+\mid C)
+$$
+
+with
+
+$$
+P(C\mid +).
+$$
+
+That mistake is not “the frequentist method.” It is a conditional-probability error.
+
+Both frequentist and Bayesian statisticians understand sensitivity, specificity and prevalence.
+
+The specifically Bayesian move is to make the prior/base-rate information explicit and update it with the likelihood to obtain a posterior probability for the hypothesis under the assumed model.
+
+<div class="parallel">
+<div class="freq">
+
+### A frequentist analysis might emphasize
+
+- estimated sensitivity and specificity from repeated samples;
+- confidence intervals for those rates;
+- false-positive/false-negative operating characteristics;
+- hypothesis tests or likelihood-based estimates;
+- long-run calibration of the screening procedure.
+
+</div>
+<div class="bayes">
+
+### A Bayesian analysis might emphasize
+
+- prior disease probability for this population or patient context;
+- likelihood of the observed test;
+- posterior probability of disease;
+- posterior uncertainty in prevalence/test parameters;
+- sequential updating as new evidence arrives.
+
+</div>
+</div>
+
+# 11. Confidence Interval vs Credible Interval
+
+Suppose $\theta$ is an unknown rate.
+
+A 95% Bayesian credible interval means:
+
+> Under the specified model and prior, 95% of the posterior probability for $\theta$ lies in this interval.
+
+A 95% frequentist confidence procedure means:
+
+> Over repeated samples generated under the model, 95% of intervals constructed by this procedure contain the fixed true parameter.
+
+After observing one frequentist interval, the parameter is not treated as random within that framework.
+
+This difference in interpretation is one reason many learners find Bayesian intervals intuitive.
+
+# 12. Updating an Unknown Rate: Beta–Binomial Model
+
+Suppose we do not know a cancer-screening center's true positive follow-up rate, $\theta$.
+
+For binary outcomes:
+
+$$
+Y_i\sim\operatorname{Bernoulli}(\theta).
+$$
+
+Choose a Beta prior:
+
+$$
+\theta\sim\operatorname{Beta}(\alpha,\beta).
+$$
+
+If we observe:
+
+- $s$ successes;
+- $f$ failures,
+
+then
+
+$$
+\boxed{
+\theta\mid D
+\sim
+\operatorname{Beta}(\alpha+s,\beta+f)
+}.
+$$
+
+This is called **conjugacy**: prior and posterior belong to the same distribution family.
+
+# 13. Watch the Posterior Learn
+
+### Data Simulator
 
 ```{python}
 #| code-fold: true
-import numpy as np, pandas as pd
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
 from scipy.stats import beta
+
+rng = np.random.default_rng(6)
+
+true_rate = .30
+observations = rng.binomial(1,true_rate,400)
+
+rows = []
+
+for n in [0,5,20,50,100,400]:
+    successes = observations[:n].sum()
+
+    alpha_post = 2 + successes
+    beta_post = 2 + n-successes
+
+    for theta in np.linspace(.001,.999,350):
+        rows.append({
+            "observations":n,
+            "theta":theta,
+            "density":beta.pdf(
+                theta,
+                alpha_post,
+                beta_post
+            )
+        })
+
+posterior_animation = pd.DataFrame(rows)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
 import plotly.express as px
 
-true_p=.3
-rng=np.random.default_rng(6)
-data=rng.binomial(1,true_p,400)
-rows=[]
-for n in [0,5,20,50,100,400]:
-    s=data[:n].sum()
-    a,b=2+s,2+n-s
-    for x in np.linspace(.001,.999,300):
-        rows.append({"n":n,"p":x,"density":beta.pdf(x,a,b)})
-df=pd.DataFrame(rows)
-fig=px.line(df,x="p",y="density",animation_frame="n",range_x=[0,1],
-            range_y=[0,12])
-fig.add_vline(x=true_p,line_dash="dash")
-fig.update_layout(height=380)
+fig = px.line(
+    posterior_animation,
+    x="theta",
+    y="density",
+    animation_frame="observations",
+    range_x=[0,1],
+    range_y=[0,15],
+    title="Bayesian Learning: Posterior Uncertainty Contracts as Data Arrive"
+)
+
+fig.add_vline(
+    x=true_rate,
+    line_dash="dash",
+    annotation_text="Simulated true rate"
+)
+
+fig.update_layout(
+    xaxis_title="Unknown probability θ",
+    yaxis_title="Posterior density",
+    height=440
+)
 fig.show()
 ```
 
-## DS/ML Bridge
+The prior matters most when data are scarce.
 
-Bayesian ideas appear in:
+As informative data accumulate, the likelihood typically contributes more and the posterior contracts.
 
-- probabilistic programming,
-- Bayesian optimization,
-- uncertainty estimation,
-- hierarchical models,
-- Thompson sampling,
-- latent-variable models,
-- sequential decision systems.
+# 14. Prior Strength Is Information—and an Assumption
 
-The broader lesson is to represent uncertainty about unknown quantities rather than returning only point estimates.
+Two analysts may choose different priors.
 
-::: {.callout-warning}
-## Priors are assumptions, not decoration
-A prior can stabilize sparse-data problems, but it also influences the posterior. Inspect sensitivity when conclusions depend strongly on prior choices.
-:::
+That is not automatically a defect. It makes assumptions visible.
 
-## Summary
-- Bayes' rule updates prior uncertainty with evidence.
-- The likelihood connects the parameter to observed data.
-- Posterior uncertainty contracts as informative data accumulate.
-- Bayesian intervals have a direct posterior-probability interpretation under the model.
-- Priors should be explicit and examined.
+But priors can be poorly chosen.
 
-**Next:** *Time Series — Dependence, Trend, Seasonality & Forecasting*
+A responsible Bayesian workflow includes **prior predictive thinking and sensitivity analysis**:
+
+> Would reasonable alternative priors materially change the conclusion?
+
+## 14.1 Interactive prior sensitivity
+
+```{ojs}
+//| code-fold: true
+//| code-summary: "View Interactive Prior Code"
+
+viewof priorMean = Inputs.range([.02,.98], {
+  value:.20, step:.01, label:"Prior mean"
+})
+
+viewof priorStrength = Inputs.range([2,100], {
+  value:10, step:1, label:"Prior strength α + β"
+})
+
+viewof observedSuccesses = Inputs.range([0,80], {
+  value:18, step:1, label:"Observed successes"
+})
+
+viewof observedTrials = Inputs.range([1,100], {
+  value:50, step:1, label:"Observed trials"
+})
+
+safeSuccess = Math.min(observedSuccesses,observedTrials)
+
+a0 = priorMean*priorStrength
+b0 = (1-priorMean)*priorStrength
+
+aPost = a0+safeSuccess
+bPost = b0+observedTrials-safeSuccess
+
+posteriorMean = aPost/(aPost+bPost)
+
+html`<div style="
+display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+<div style="padding:.8rem;border-radius:14px;background:#ecfeff">
+<div>Prior mean</div>
+<b style="font-size:1.5rem">${priorMean.toFixed(3)}</b>
+</div>
+<div style="padding:.8rem;border-radius:14px;background:#f5f3ff">
+<div>Posterior mean</div>
+<b style="font-size:1.5rem">${posteriorMean.toFixed(3)}</b>
+</div>
+</div>`
+```
+
+```{ojs}
+//| code-fold: true
+//| code-summary: "View Dynamic Posterior Plot Code"
+
+betaShape = (x,a,b) => x**(a-1)*(1-x)**(b-1)
+
+thetaGrid = d3.range(.002,.999,.003)
+
+priorCurve = thetaGrid.map(x => ({
+  theta:x,
+  density:betaShape(x,a0,b0),
+  distribution:"Prior"
+}))
+
+postCurve = thetaGrid.map(x => ({
+  theta:x,
+  density:betaShape(x,aPost,bPost),
+  distribution:"Posterior"
+}))
+
+maxPrior = d3.max(priorCurve,d=>d.density)
+maxPost = d3.max(postCurve,d=>d.density)
+
+displayCurves = [
+  ...priorCurve.map(d=>({...d,density:d.density/maxPrior})),
+  ...postCurve.map(d=>({...d,density:d.density/maxPost}))
+]
+
+Plot.plot({
+  height:340,
+  x:{domain:[0,1],label:"θ"},
+  y:{axis:null},
+  color:{
+    domain:["Prior","Posterior"],
+    range:["#0891b2","#7c3aed"],
+    legend:true
+  },
+  marks:[
+    Plot.line(displayCurves,{
+      x:"theta",
+      y:"density",
+      stroke:"distribution",
+      strokeWidth:3,
+      tip:true
+    })
+  ]
+})
+```
+
+Move the prior strength upward. The same data now move the posterior less.
+
+That is not hidden: it is exactly what “stronger prior information” means.
+
+# 15. Bayesian Models for Prediction
+
+Bayesian inference is not limited to diagnostic tests or estimating one probability.
+
+A general Bayesian model specifies:
+
+1. a probability model for the data;
+2. unknown parameters;
+3. prior distributions for those parameters;
+4. a posterior distribution after observing data;
+5. a posterior predictive distribution for new observations.
+
+<div class="bayes-flow">
+PRIORS + LIKELIHOOD → POSTERIOR PARAMETERS → POSTERIOR PREDICTIVE → DECISION
+</div>
+
+# 16. Bayesian Regression
+
+For linear regression:
+
+$$
+y_i
+=
+\beta_0+\beta_1x_{i1}+\cdots+\beta_px_{ip}
++\epsilon_i
+$$
+
+with
+
+$$
+\epsilon_i\sim N(0,\sigma^2).
+$$
+
+A Bayesian model also places priors on unknown parameters, for example:
+
+$$
+\beta_j\sim N(0,\tau^2)
+$$
+
+and a suitable positive prior on $\sigma$.
+
+Then:
+
+$$
+p(\boldsymbol\beta,\sigma\mid D)
+\propto
+p(D\mid\boldsymbol\beta,\sigma)
+p(\boldsymbol\beta,\sigma).
+$$
+
+Instead of only one coefficient vector, inference gives a **posterior distribution** over plausible coefficients.
+
+For a new $x_*$:
+
+$$
+p(y_*\mid x_*,D)
+=
+\int
+p(y_*\mid x_*,\theta)
+p(\theta\mid D)
+\,d\theta.
+$$
+
+That integral is the posterior predictive distribution.
+
+# 17. Frequentist vs Bayesian Regression
+
+<div class="parallel">
+<div class="freq">
+
+### Frequentist linear regression
+
+Typical output:
+
+$$
+\hat\beta
+$$
+
+plus standard errors, confidence intervals and sampling-based tests.
+
+Uncertainty is described through the behavior of estimators/procedures across hypothetical repeated samples.
+
+</div>
+<div class="bayes">
+
+### Bayesian linear regression
+
+Typical output:
+
+$$
+p(\beta\mid D)
+$$
+
+and
+
+$$
+p(y_*\mid x_*,D).
+$$
+
+Uncertainty about parameters and predictions is represented directly by posterior distributions conditional on the model and prior.
+
+</div>
+</div>
+
+Neither removes the need to check model assumptions.
+
+# 18. Bayesian Classification: Bayes' Rule as a Classifier
+
+Suppose the class is
+
+$$
+Y\in\{0,1\}
+$$
+
+and features are
+
+$$
+X=(x_1,\ldots,x_p).
+$$
+
+Bayes' theorem gives:
+
+$$
+P(Y=k\mid X)
+=
+\frac{
+P(X\mid Y=k)P(Y=k)
+}{
+P(X)
+}.
+$$
+
+For choosing the most probable class, the denominator is common across classes:
+
+$$
+\hat y
+=
+\arg\max_k
+P(X\mid Y=k)P(Y=k).
+$$
+
+This is the core of **Naive Bayes**.
+
+# 19. Why “Naive”?
+
+Naive Bayes assumes features are conditionally independent given the class:
+
+$$
+P(x_1,\ldots,x_p\mid Y=k)
+=
+\prod_{j=1}^{p}
+P(x_j\mid Y=k).
+$$
+
+Then:
+
+$$
+P(Y=k\mid X)
+\propto
+P(Y=k)
+\prod_{j=1}^{p}
+P(x_j\mid Y=k).
+$$
+
+That assumption can be unrealistic.
+
+Yet Naive Bayes is often a strong, fast baseline when:
+
+- the feature representation is high dimensional;
+- data are limited;
+- conditional independence is a useful approximation;
+- fast training and prediction matter.
+
+Text classification is a classic example.
+
+<div class="paper-note">
+<div class="pin">✎ Modeler's note</div>
+
+“Naive” does not mean useless.
+
+It means the factorization assumption is intentionally strong.
+
+A simple model with an explicit assumption can be a better baseline than a complicated model whose behavior is poorly understood.
+</div>
+
+# 20. End-to-End Bayesian Classification Example
+
+We will build a small Gaussian Naive Bayes classifier for a synthetic clinical follow-up problem.
+
+The target is whether a patient should be escalated for follow-up based on three continuous measurements.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(44)
+n = 1800
+
+risk = rng.binomial(1,.18,n)
+
+marker_a = rng.normal(
+    1.2 + 1.8*risk,
+    .85,
+    n
+)
+
+marker_b = rng.normal(
+    4.5 + 1.2*risk,
+    1.0,
+    n
+)
+
+age_scaled = rng.normal(
+    0.0 + .65*risk,
+    .9,
+    n
+)
+
+clinical = pd.DataFrame({
+    "marker_a":marker_a,
+    "marker_b":marker_b,
+    "age_scaled":age_scaled,
+    "followup_needed":risk
+})
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+plot_clinical = clinical.sample(
+    900,
+    random_state=4
+).copy()
+
+plot_clinical["class"] = plot_clinical[
+    "followup_needed"
+].map({
+    0:"Routine",
+    1:"Follow-up"
+})
+
+fig = px.scatter(
+    plot_clinical,
+    x="marker_a",
+    y="marker_b",
+    color="class",
+    hover_data=["age_scaled"],
+    title="A Bayesian Classification Problem"
+)
+
+fig.update_layout(
+    xaxis_title="Marker A",
+    yaxis_title="Marker B",
+    height=470
+)
+fig.show()
+```
+
+# 21. Fit Gaussian Naive Bayes
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Model-Fitting Code"
+#| warning: false
+
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+
+nb_features = [
+    "marker_a",
+    "marker_b",
+    "age_scaled"
+]
+
+X_nb = clinical[nb_features]
+y_nb = clinical["followup_needed"]
+
+X_train_nb, X_test_nb, y_train_nb, y_test_nb = train_test_split(
+    X_nb,
+    y_nb,
+    test_size=.25,
+    stratify=y_nb,
+    random_state=42
+)
+
+bayes_classifier = GaussianNB()
+bayes_classifier.fit(
+    X_train_nb,
+    y_train_nb
+)
+
+nb_probability = bayes_classifier.predict_proba(
+    X_test_nb
+)[:,1]
+```
+
+Gaussian Naive Bayes estimates:
+
+- class prior probabilities;
+- a Gaussian feature distribution within each class;
+- posterior class probabilities using Bayes' rule.
+
+# 22. Inference: What Did the Model Learn?
+
+For class $k$, Gaussian Naive Bayes models each feature as:
+
+$$
+x_j\mid Y=k
+\sim
+N(\mu_{jk},\sigma_{jk}^2).
+$$
+
+Then:
+
+$$
+P(Y=k\mid X)
+\propto
+P(Y=k)
+\prod_j
+N(x_j;\mu_{jk},\sigma_{jk}^2).
+$$
+
+The fitted means and variances are model parameters learned from the training data.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Inference Preparation Code"
+#| warning: false
+
+import pandas as pd
+
+learned_means = pd.DataFrame(
+    bayes_classifier.theta_,
+    columns=nb_features
+)
+
+learned_means["class"] = [
+    "Routine",
+    "Follow-up"
+]
+
+learned_means_long = learned_means.melt(
+    id_vars="class",
+    var_name="feature",
+    value_name="learned_mean"
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.bar(
+    learned_means_long,
+    x="feature",
+    y="learned_mean",
+    color="class",
+    barmode="group",
+    title="What the Bayesian Classifier Learned About Each Class"
+)
+
+fig.update_layout(
+    xaxis_title="Feature",
+    yaxis_title="Estimated class-conditional mean",
+    height=430
+)
+fig.show()
+```
+
+# 23. Validate the Classifier
+
+A Bayesian classifier is not automatically correct because it uses Bayes' theorem.
+
+We still validate predictive behavior.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Validation Preparation Code"
+#| warning: false
+
+import pandas as pd
+from sklearn.metrics import (
+    precision_recall_curve,
+    roc_auc_score
+)
+
+precision_nb, recall_nb, threshold_nb = precision_recall_curve(
+    y_test_nb,
+    nb_probability
+)
+
+pr_nb = pd.DataFrame({
+    "precision":precision_nb[:-1],
+    "recall":recall_nb[:-1],
+    "threshold":threshold_nb
+})
+
+auc_nb = roc_auc_score(
+    y_test_nb,
+    nb_probability
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    pr_nb,
+    x="recall",
+    y="precision",
+    hover_data={"threshold":":.3f"},
+    title=f"Naive Bayes Validation — Precision/Recall (ROC AUC={auc_nb:.3f})"
+)
+
+fig.update_layout(
+    xaxis_range=[0,1],
+    yaxis_range=[0,1],
+    height=450
+)
+fig.show()
+```
+
+Bayesian modeling does not remove ordinary data-science responsibilities:
+
+- validation;
+- calibration;
+- drift monitoring;
+- checking assumptions;
+- testing sensitivity.
+
+# 24. Save the Bayesian Model
+
+After validation, serialize the fitted model and its feature contract.
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Model-Saving Code"
+#| warning: false
+#| eval: false
+
+import joblib
+
+bayes_artifact = {
+    "model":bayes_classifier,
+    "features":nb_features,
+    "positive_class":"followup_needed"
+}
+
+joblib.dump(
+    bayes_artifact,
+    "bayesian_followup_model.joblib"
+)
+```
+
+Someone else can load it later:
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Model-Loading Code"
+#| warning: false
+#| eval: false
+
+import joblib
+
+artifact = joblib.load(
+    "bayesian_followup_model.joblib"
+)
+
+loaded_bayes_model = artifact["model"]
+loaded_features = artifact["features"]
+```
+
+The prediction system should reproduce the same feature definitions used during training.
+
+# 25. Mimic the Loaded Model: Interactive Bayesian Prediction Desk
+
+The following browser-side demonstration mimics the fitted Gaussian Naive Bayes calculation.
+
+It uses fixed class priors, means and standard deviations to show how new evidence changes posterior class probability.
+
+<div class="lab-shell">
+
+### 🔬 Follow-up Risk Desk
+
+```{ojs}
+//| code-fold: true
+//| code-summary: "View Prediction Desk Code"
+
+viewof inputA = Inputs.range([-1,5], {
+  value:2.2, step:.1, label:"Marker A"
+})
+
+viewof inputB = Inputs.range([1,8], {
+  value:5.2, step:.1, label:"Marker B"
+})
+
+viewof inputAge = Inputs.range([-2,3], {
+  value:.4, step:.1, label:"Age feature (scaled)"
+})
+
+gaussian = (x,mu,sd) =>
+  Math.exp(-.5*((x-mu)/sd)**2)/(sd*Math.sqrt(2*Math.PI))
+
+priorRoutine = .82
+priorFollow = .18
+
+likeRoutine =
+  gaussian(inputA,1.2,.85) *
+  gaussian(inputB,4.5,1.0) *
+  gaussian(inputAge,0,.9)
+
+likeFollow =
+  gaussian(inputA,3.0,.85) *
+  gaussian(inputB,5.7,1.0) *
+  gaussian(inputAge,.65,.9)
+
+scoreRoutine = priorRoutine*likeRoutine
+scoreFollow = priorFollow*likeFollow
+
+posteriorFollow =
+  scoreFollow/(scoreRoutine+scoreFollow)
+
+html`<div style="
+padding:1rem 1.1rem;border-radius:16px;
+background:linear-gradient(135deg,#4c1d95,#7c3aed);
+color:white">
+<div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;opacity:.8">
+Posterior probability of follow-up class
+</div>
+<div style="font-size:2rem;font-weight:800">
+${(100*posteriorFollow).toFixed(1)}%
+</div>
+<div style="opacity:.85">
+Prior class probability: ${(100*priorFollow).toFixed(0)}%
+</div>
+</div>`
+```
+
+```{ojs}
+//| code-fold: true
+//| code-summary: "View Dynamic Evidence Plot Code"
+
+predictionBars = [
+  {class:"Routine",probability:1-posteriorFollow},
+  {class:"Follow-up",probability:posteriorFollow}
+]
+
+Plot.plot({
+  height:280,
+  y:{domain:[0,1],label:"Posterior probability"},
+  x:{label:null},
+  marks:[
+    Plot.barY(predictionBars,{
+      x:"class",
+      y:"probability",
+      fill:d=>d.class==="Follow-up" ? "#7c3aed" : "#0891b2",
+      tip:true
+    }),
+    Plot.ruleY([.5],{strokeDasharray:"4,4"})
+  ]
+})
+```
+
+</div>
+
+Change one measurement at a time.
+
+The prior says follow-up cases are relatively uncommon. Strong feature evidence can overcome that prior and move the posterior upward.
+
+# 26. Where Bayesian Modeling Is Especially Valuable
+
+Bayesian methods are attractive when we care about:
+
+- explicit uncertainty;
+- sequential learning;
+- small-data stabilization;
+- incorporating defensible prior knowledge;
+- hierarchical/grouped data;
+- posterior probability statements;
+- probabilistic predictions;
+- decision making under uncertainty.
+
+Examples include:
+
+- clinical trials;
+- reliability;
+- A/B testing;
+- forecasting;
+- fraud/risk systems;
+- recommender exploration;
+- scientific inference;
+- hierarchical business metrics.
+
+# 27. Limitations and Failure Modes
+
+Bayesian methods are coherent **conditional on the model**, not magically assumption-free.
+
+## 27.1 Bad likelihood, bad posterior
+
+If the data model is badly misspecified, the posterior can be confidently wrong.
+
+## 27.2 Priors can dominate sparse data
+
+This can be a feature when the prior is informative and defensible—or a serious problem when it is not.
+
+Use sensitivity analysis.
+
+## 27.3 Computation can be expensive
+
+Complex posteriors may require:
+
+- MCMC;
+- variational inference;
+- Laplace approximations;
+- specialized probabilistic programming.
+
+## 27.4 Independence assumptions can be unrealistic
+
+Naive Bayes can double-count correlated evidence.
+
+## 27.5 Bayesian does not automatically mean calibrated
+
+Validate posterior predictive behavior.
+
+## 27.6 Subjectivity does not disappear
+
+Model structure, priors, feature choices and loss/utility functions are modeling decisions.
+
+The advantage is often that these assumptions can be made explicit and interrogated.
+
+# 28. Bayesian vs Frequentist: A Practical Parallel
+
+| Question | Frequentist emphasis | Bayesian emphasis |
+|---|---|---|
+| Unknown parameter | fixed, unknown | probability distribution represents uncertainty |
+| Data | random under repeated sampling | observed evidence conditioned upon |
+| Prior information | usually not encoded as a prior distribution | explicitly modeled |
+| Main inferential object | estimator + sampling distribution | posterior distribution |
+| Interval | confidence interval | credible interval |
+| Sequential updating | requires care to preserve procedure/error guarantees | posterior naturally becomes next prior under the model |
+| Prediction | plug-in/sampling-based predictive methods | posterior predictive distribution |
+| Assumptions | essential | essential |
+| Validation | essential | essential |
+
+<div class="paper-note">
+<div class="pin">✎ Keep this distinction</div>
+
+Bayesian statistics is not “data plus opinion.”
+
+Frequentist statistics is not “objective statistics without assumptions.”
+
+Both require models and assumptions.
+
+The Bayesian signature is that uncertainty about unknown quantities is represented probabilistically and updated coherently through Bayes' rule.
+</div>
+
+# 29. The End-to-End Bayesian Workflow
+
+<div class="bayes-flow">
+QUESTION
+  ↓
+DEFINE HYPOTHESES / PARAMETERS
+  ↓
+PRIOR
+  ↓
+LIKELIHOOD
+  ↓
+OBSERVE DATA
+  ↓
+POSTERIOR
+  ↓
+POSTERIOR PREDICTIVE
+  ↓
+VALIDATE / SENSITIVITY CHECK
+  ↓
+DECISION
+  ↓
+SAVE / SERVE / MONITOR
+</div>
+
+This is the Bayesian analogue of an end-to-end modeling pipeline.
+
+# 30. Return to the Patient
+
+We began with a positive cancer screening result.
+
+The critical lesson was not merely the formula.
+
+It was the question:
+
+> **What probability are we actually trying to compute?**
+
+The test's sensitivity answered:
+
+$$
+P(+\mid C).
+$$
+
+The patient needed:
+
+$$
+P(C\mid +).
+$$
+
+Bayes' theorem combined:
+
+- prior prevalence;
+- test sensitivity;
+- false-positive behavior;
+
+and produced the posterior.
+
+With the teaching assumptions in this chapter:
+
+$$
+P(C\mid +)\approx8.8\%.
+$$
+
+The positive test increased cancer probability substantially—from 1% to about 8.8%—but did not make cancer 95% probable.
+
+That is Bayesian updating in its simplest useful form:
+
+<div class="bayes-hero">
+<div class="kicker">The Bayesian habit</div>
+<div class="big">Do not ask only, “How strong is the evidence?” Ask, “How should this evidence change what was plausible before?”</div>
+</div>
+
+# Summary
+
+Bayes' theorem is
+
+$$
+\boxed{
+p(\theta\mid D)
+=
+\frac{p(D\mid\theta)p(\theta)}
+{p(D)}
+}.
+$$
+
+The chapter's central ideas are:
+
+- **prior**: uncertainty before current evidence;
+- **likelihood**: how the observed data behave under candidate parameter/hypothesis values;
+- **posterior**: updated uncertainty after combining prior and likelihood;
+- **posterior predictive**: uncertainty about future or unseen outcomes after integrating parameter uncertainty;
+- prevalence/base rates can radically change the interpretation of a diagnostic result;
+- posterior odds equal prior odds times the likelihood ratio;
+- sequential evidence can be incorporated by using one posterior as the next prior when the model assumptions justify it;
+- Bayesian and frequentist inference make different probability statements;
+- Bayesian regression represents uncertainty over coefficients and predictions;
+- Naive Bayes turns Bayes' rule into a practical classifier using a conditional-independence approximation;
+- Bayesian models must still be validated, stress-tested and monitored;
+- priors and likelihoods are assumptions that should be explicit and examined;
+- a fitted Bayesian model can be serialized, reloaded and used in an interactive prediction system just like other ML models.
+
+**Next:** *Bayesian Thinking, Statistical Philosophy & Rational Updating*
