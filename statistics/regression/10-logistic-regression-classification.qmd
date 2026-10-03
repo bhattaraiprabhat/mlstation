@@ -1,131 +1,2005 @@
 ---
 title: "Logistic Regression: Probability, Odds & Classification"
-description: "Understand logistic regression as a probabilistic classifier and connect log-odds, thresholds, calibration and classification metrics."
+description: "Learn logistic regression through a bank-fraud problem: probability, odds, log-odds, sigmoid curves, classification thresholds, precision, recall, F1 and business decisions."
 author: "MLStation"
-date: 2026-10-01
+date: 2026-10-03
 categories: [Statistics, Regression, Classification, Machine Learning]
 draft: false
 ---
 
+<style>
+.lr-hero{padding:1.3rem 1.45rem;border-radius:18px;background:linear-gradient(135deg,#eff6ff,#f5f3ff,#ecfdf5);border:1px solid #dbeafe;margin:1rem 0 1.4rem}
+.lr-hero .big{font-size:1.28rem;font-weight:760;margin-bottom:.35rem}
+.lr-flow{padding:.9rem 1rem;border-radius:14px;background:#111827;color:#f9fafb;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto}
+.lr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem;margin:1rem 0}
+.lr-card{border:1px solid #e5e7eb;border-radius:14px;padding:.9rem 1rem;background:#fff}
+.lr-card h4{margin-top:0}
+.lr-blue{border-left:5px solid #2563eb;background:#eff6ff;padding:.85rem 1rem;border-radius:10px}
+.lr-green{border-left:5px solid #059669;background:#ecfdf5;padding:.85rem 1rem;border-radius:10px}
+.lr-amber{border-left:5px solid #d97706;background:#fffbeb;padding:.85rem 1rem;border-radius:10px}
+.lr-red{border-left:5px solid #e11d48;background:#fff1f2;padding:.85rem 1rem;border-radius:10px}
+</style>
 
-Linear regression predicts on the whole real line.
+<div class="lr-hero">
+<div class="big">🏦 A $2,400 card transaction arrives at 2:13 AM. Is it fraud?</div>
 
-But a probability must stay between 0 and 1.
+A bank does not need a prediction such as **0.73 dollars of fraud**. It needs an estimate such as:
 
-Logistic regression solves this by modeling **log-odds**.
+> **“Given what we know about this transaction, the estimated probability of fraud is 73%.”**
+
+Then the bank must make a second decision:
+
+> **“Is 73% high enough to block the transaction, request verification, or allow it?”**
+
+Those are two different problems. **Logistic regression estimates probability. A threshold converts probability into an action.**
+</div>
 
 ::: {.callout-tip}
-## What you will learn
-- Probability, odds and log-odds
-- The logistic function
-- Coefficient interpretation
-- Thresholds and confusion matrices
-- Calibration versus discrimination
+## What you will be able to do
+
+By the end of this lesson you should be able to:
+
+- recognize when a problem is **classification**, not ordinary regression;
+- explain why a straight-line probability model is problematic;
+- move between **probability → odds → log-odds**;
+- interpret logistic-regression coefficients and **odds ratios**;
+- explain why the sigmoid/logistic curve is needed;
+- fit a logistic-regression model in Python and obtain fraud probabilities;
+- explain **TP, FP, TN and FN** in business language;
+- explain why `0.5` is not automatically the right threshold;
+- choose a threshold based on **false-negative cost, false-positive cost, recall, precision or F1**;
+- explain a logistic-regression result to a non-technical stakeholder.
 :::
 
-## From a line to a probability
+Every worked chart follows the same pattern: **Data Simulator → Plot Code → Visible Result**. The two code blocks are folded so you can focus on the visualization and expand the implementation when needed.
+
+# 1. The Problem: Detect Fraud, Not a Number
+
+Suppose each row is a credit-card transaction.
+
+Our target is
+
+$$
+Y =
+\begin{cases}
+1,&\text{fraud}\\
+0,&\text{legitimate}.
+\end{cases}
+$$
+
+Possible predictors include:
+
+- transaction amount;
+- transaction hour;
+- distance from the customer's usual location;
+- number of transactions in the previous hour;
+- whether the merchant is new to the customer;
+- whether the device is new;
+- historical customer behavior.
+
+For a transaction with feature vector
+
+$$
+X=(x_1,x_2,\ldots,x_p),
+$$
+
+we want to estimate
+
+$$
+P(Y=1\mid X).
+$$
+
+Read this as:
+
+> **The probability that the transaction is fraudulent, given the information in X.**
+
+Here:
+
+- $Y$ is the outcome we want to predict;
+- $X$ is the information available when the decision is made;
+- $P(Y=1\mid X)$ is a number between 0 and 1.
+
+<div class="lr-flow">
+TRANSACTION FEATURES X → MODEL → FRAUD PROBABILITY → BUSINESS THRESHOLD → ACTION
+</div>
+
+# 2. Why This Is Classification
+
+Regression and classification answer different kinds of questions.
+
+| Problem | Target | Example output |
+|---|---|---|
+| Linear regression | continuous number | expected monthly spend = $214 |
+| Logistic classification | category / event | probability of fraud = 0.73 |
+| Final business decision | action | block / review / allow |
+
+A binary classification problem has two outcomes. We encode them as 0 and 1 because that makes the mathematics convenient.
+
+The `1` class is usually called the **positive class**. Here:
+
+$$
+Y=1 \Rightarrow \text{fraud}.
+$$
+
+“Positive” does **not** mean good. It means the event we are trying to detect.
+
+# 3. Why Not Just Use Linear Regression?
+
+Linear regression models
+
+$$
+\hat y = \beta_0+\beta_1x.
+$$
+
+If we encode fraud as 1 and legitimate as 0, we might be tempted to fit a straight line and call $\hat y$ a probability.
+
+But a probability must satisfy
+
+$$
+0\le P(Y=1\mid X)\le1.
+$$
+
+A straight line has no such restriction.
+
+## 3.1 See the problem
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(42)
+
+n = 700
+amount = rng.gamma(shape=2.0, scale=85, size=n)
+
+# Simulated probability of fraud rises with transaction amount.
+true_logit = -4.2 + 0.012 * amount
+true_probability = 1 / (1 + np.exp(-true_logit))
+fraud = rng.binomial(1, true_probability)
+
+linear_vs_logistic = pd.DataFrame({
+    "amount": amount,
+    "fraud": fraud
+})
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import numpy as np
+import plotly.graph_objects as go
+from sklearn.linear_model import LinearRegression, LogisticRegression
+
+X_demo = linear_vs_logistic[["amount"]]
+y_demo = linear_vs_logistic["fraud"]
+
+linear_model = LinearRegression().fit(X_demo, y_demo)
+logistic_model = LogisticRegression().fit(X_demo, y_demo)
+
+grid = np.linspace(0, linear_vs_logistic["amount"].max()*1.12, 350)
+linear_prediction = linear_model.predict(grid.reshape(-1,1))
+logistic_probability = logistic_model.predict_proba(
+    grid.reshape(-1,1)
+)[:,1]
+
+fig = go.Figure()
+
+fig.add_scatter(
+    x=linear_vs_logistic["amount"],
+    y=linear_vs_logistic["fraud"],
+    mode="markers",
+    name="Observed transaction",
+    opacity=.18,
+    hovertemplate="Amount: $%{x:.0f}<br>Fraud label: %{y}<extra></extra>"
+)
+
+fig.add_scatter(
+    x=grid,
+    y=linear_prediction,
+    mode="lines",
+    name="Linear regression"
+)
+
+fig.add_scatter(
+    x=grid,
+    y=logistic_probability,
+    mode="lines",
+    name="Logistic regression"
+)
+
+fig.add_hline(y=0, line_dash="dot")
+fig.add_hline(y=1, line_dash="dot")
+
+fig.update_layout(
+    title="Why a Straight Line Is Awkward for a Probability",
+    xaxis_title="Transaction amount ($)",
+    yaxis_title="Fraud label / predicted probability",
+    yaxis_range=[-.25,1.25],
+    height=470
+)
+fig.show()
+```
+
+The observed target has only two values: **0 or 1**. Linear regression nevertheless tries to fit a continuous line.
+
+For sufficiently small or large values of $x$, the fitted line can predict below 0 or above 1. Those values cannot be probabilities.
+
+Logistic regression solves the range problem by transforming a linear score through an S-shaped function that always stays between 0 and 1.
+
+# 4. Linear vs Logistic Regression: The Mathematical Contrast
+
+## Linear regression
+
+$$
+Y \approx \beta_0+\beta_1X+\epsilon
+$$
+
+and
+
+$$
+E[Y\mid X=x]=\beta_0+\beta_1x.
+$$
+
+The right-hand side can take any real value.
+
+## Logistic regression
+
+Logistic regression still begins with a linear expression:
+
+$$
+z=\beta_0+\beta_1x.
+$$
+
+But $z$ is **not yet the probability**.
+
+We transform it:
+
+$$
+p(x)=\frac{1}{1+e^{-z}}
+=
+\frac{1}{1+e^{-(\beta_0+\beta_1x)}}.
+$$
+
+Therefore
+
+$$
+0<p(x)<1.
+$$
+
+<div class="lr-blue">
+
+### The key idea
+
+Logistic regression is still “linear” in an important sense:
+
+$$
+\beta_0+\beta_1x_1+\cdots+\beta_px_p
+$$
+
+is a linear score.
+
+The nonlinear logistic function then converts that score into a valid probability.
+
+</div>
+
+# 5. Probability: What Exactly Does 0.73 Mean?
+
+Suppose the model returns
+
+$$
+P(Y=1\mid X)=0.73.
+$$
+
+For our problem:
+
+$$
+P(\text{fraud}\mid\text{transaction information})=0.73.
+$$
+
+This is **not** the statement:
+
+> “This transaction is 73% fraudulent.”
+
+A transaction is ultimately fraud or not fraud.
+
+A probabilistic interpretation is:
+
+> Among transactions receiving comparable model probabilities, a well-calibrated model should see roughly the corresponding fraction become fraud.
+
+For example, among many transactions receiving probabilities around 0.80, approximately 80% should be fraudulent if the model is well calibrated.
+
+Probability quantifies uncertainty before the outcome is known.
+
+# 6. From Probability to Odds
+
+People often use probability and odds interchangeably, but mathematically they are different.
+
+If an event has probability $p$, its odds are
+
+$$
+\text{odds}=\frac{p}{1-p}.
+$$
+
+## Example: probability = 0.75
+
+$$
+\text{odds}
+=
+\frac{0.75}{0.25}
+=
+3.
+$$
+
+This means:
+
+> **3 to 1 odds in favor of the event.**
+
+For every one expected non-event, there are three expected events under this probability ratio.
+
+## Example: probability = 0.20
+
+$$
+\text{odds}
+=
+\frac{0.20}{0.80}
+=
+0.25.
+$$
+
+Equivalent wording:
+
+> **1 to 4 odds in favor of the event.**
+
+# 7. Probability ↔ Odds
+
+Starting with
+
+$$
+o=\frac{p}{1-p},
+$$
+
+solve for $p$:
+
+$$
+o(1-p)=p
+$$
+
+$$
+o-op=p
+$$
+
+$$
+o=p(1+o)
+$$
+
+therefore
+
+$$
+\boxed{p=\frac{o}{1+o}}.
+$$
+
+So probability and odds contain the same information; they simply use different scales.
+
+## 7.1 Interactive probability-to-odds relationship
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+p_values = np.linspace(.01,.99,199)
+
+probability_odds = pd.DataFrame({
+    "probability": p_values
+})
+probability_odds["odds"] = (
+    probability_odds["probability"]
+    / (1-probability_odds["probability"])
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    probability_odds,
+    x="probability",
+    y="odds",
+    title="Probability and Odds Are Different Scales"
+)
+
+fig.add_vline(x=.5, line_dash="dot")
+fig.add_hline(y=1, line_dash="dot")
+
+fig.update_layout(
+    xaxis_title="Probability p",
+    yaxis_title="Odds = p / (1-p)",
+    height=430
+)
+fig.show()
+```
+
+Notice:
+
+- $p=0.5$ corresponds to odds $=1$;
+- $p>0.5$ corresponds to odds greater than 1;
+- $p<0.5$ corresponds to odds less than 1;
+- odds are not restricted to 0–1.
+
+# 8. Why Log-Odds?
+
+Odds are positive:
+
+$$
+0<\text{odds}<\infty.
+$$
+
+Taking the logarithm gives
+
+$$
+-\infty<\log(\text{odds})<\infty.
+$$
+
+This is exactly the range a linear expression can occupy.
+
+Define the **logit**:
 
 $$
 \operatorname{logit}(p)
 =
-\log\frac{p}{1-p}
+\log\left(\frac{p}{1-p}\right).
+$$
+
+Logistic regression assumes:
+
+$$
+\boxed{
+\log\left(\frac{p}{1-p}\right)
 =
-\beta_0+\beta_1x.
+\beta_0+\beta_1x
+}
 $$
 
-Solving for $p$:
+or, with several predictors,
 
 $$
-p(x)=\frac{1}{1+\exp[-(\beta_0+\beta_1x)]}.
+\boxed{
+\log\left(\frac{p}{1-p}\right)
+=
+\beta_0+\beta_1x_1+\cdots+\beta_px_p
+}
 $$
 
-## Interactive sigmoid
+This is the central equation of logistic regression.
+
+<div class="lr-flow">
+FEATURES X → LINEAR SCORE → LOG-ODDS → ODDS → PROBABILITY
+</div>
+
+# 9. Deriving the Logistic Function
+
+Start with
+
+$$
+\log\left(\frac{p}{1-p}\right)=z.
+$$
+
+Exponentiate both sides:
+
+$$
+\frac{p}{1-p}=e^z.
+$$
+
+Multiply:
+
+$$
+p=e^z(1-p).
+$$
+
+Expand:
+
+$$
+p=e^z-e^zp.
+$$
+
+Collect terms containing $p$:
+
+$$
+p+e^zp=e^z.
+$$
+
+$$
+p(1+e^z)=e^z.
+$$
+
+Therefore
+
+$$
+p=\frac{e^z}{1+e^z}.
+$$
+
+Dividing numerator and denominator by $e^z$ gives
+
+$$
+\boxed{
+p=\frac{1}{1+e^{-z}}
+}.
+$$
+
+Substitute $z=\beta_0+\beta_1x$:
+
+$$
+\boxed{
+P(Y=1\mid X=x)
+=
+\frac{1}
+{1+\exp[-(\beta_0+\beta_1x)]}
+}.
+$$
+
+That S-shaped mapping is the **logistic** or **sigmoid** function.
+
+# 10. Why the Logistic Curve Is Needed
+
+The linear score $z$ may be:
+
+$$
+-20,\quad -2,\quad 0,\quad 4,\quad 100.
+$$
+
+But the sigmoid maps every one of those values into $(0,1)$.
+
+Important landmarks:
+
+$$
+z=0
+\Rightarrow
+p=\frac{1}{2}=0.5.
+$$
+
+Large positive $z$:
+
+$$
+p\rightarrow1.
+$$
+
+Large negative $z$:
+
+$$
+p\rightarrow0.
+$$
+
+## 10.1 Interactive sigmoid: move the intercept and slope
+
+Use the sliders to see what $\beta_0$ and $\beta_1$ do.
 
 ```{ojs}
-//| echo: false
-viewof aLog = Inputs.range([-6,6], {value:-1, step:.1, label:"Intercept β₀"})
-viewof bLog = Inputs.range([-4,4], {value:1.5, step:.1, label:"Slope β₁"})
-sig=z=>1/(1+Math.exp(-z))
-sigcurve=d3.range(-5,5.01,.05).map(x=>({x,p:sig(aLog+bLog*x)}))
+//| code-fold: true
+//| code-summary: "View Interactive Plot Code"
+
+viewof beta0 = Inputs.range([-6,6], {
+  value:-2.5,
+  step:.1,
+  label:"Intercept β₀"
+})
+
+viewof beta1 = Inputs.range([-4,4], {
+  value:1.2,
+  step:.1,
+  label:"Slope β₁"
+})
+
+sigmoid = z => 1/(1+Math.exp(-z))
+
+sigmoidData = d3.range(-5,5.01,.05).map(x => ({
+  x:x,
+  probability:sigmoid(beta0 + beta1*x)
+}))
+
 Plot.plot({
- height:330,x:{label:"x"},y:{domain:[0,1],label:"P(Y=1 | x)"},
- marks:[Plot.line(sigcurve,{x:"x",y:"p",stroke:"#4F46E5",strokeWidth:3}),Plot.ruleY([.5],{strokeDasharray:"4,4"})]
+  height:380,
+  x:{label:"Feature x"},
+  y:{domain:[0,1],label:"P(Y = 1 | x)"},
+  marks:[
+    Plot.ruleY([0.5],{strokeDasharray:"4,4"}),
+    Plot.line(sigmoidData,{
+      x:"x",
+      y:"probability",
+      strokeWidth:3,
+      tip:true
+    })
+  ]
 })
 ```
 
-## Thresholds create decisions
+### Interpret the controls
 
-A model may output:
+**$\beta_0$ — intercept:** shifts where the curve sits relative to $p=0.5$.
 
-```text
-P(fraud)=0.73
-```
+**$\beta_1$ — slope:** controls direction and steepness.
 
-A business rule converts probability into action:
+- $\beta_1>0$: probability rises with $x$;
+- $\beta_1<0$: probability falls with $x$;
+- $\beta_1=0$: $x$ contributes no change to log-odds.
 
-```text
-if p ≥ threshold → flag
-else             → do not flag
-```
+# 11. What Does a Logistic Coefficient Mean?
 
-Changing the threshold changes false positives and false negatives.
+Suppose
 
-## Animation: threshold sweeps the confusion matrix
+$$
+\log\left(\frac{p}{1-p}\right)
+=
+\beta_0+\beta_1x
+$$
 
-```{python}
-#| code-fold: true
-import numpy as np, pandas as pd
-import plotly.express as px
+and
 
-rng=np.random.default_rng(14)
-n=1200
-x=rng.normal(size=n)
-p=1/(1+np.exp(-(-.5+1.5*x)))
-y=rng.binomial(1,p)
-rows=[]
-for t in np.linspace(.05,.95,19):
-    pred=(p>=t)
-    tp=((pred==1)&(y==1)).sum(); fp=((pred==1)&(y==0)).sum()
-    fn=((pred==0)&(y==1)).sum(); tn=((pred==0)&(y==0)).sum()
-    for label,val in {"TP":tp,"FP":fp,"FN":fn,"TN":tn}.items():
-        rows.append({"threshold":round(t,2),"cell":label,"count":val})
-df=pd.DataFrame(rows)
-fig=px.bar(df,x="cell",y="count",animation_frame="threshold",
-           range_y=[0,n])
-fig.update_layout(height=380)
-fig.show()
-```
+$$
+\beta_1=0.7.
+$$
 
-## Odds ratios
+If $x$ increases by one unit:
 
-If $\beta_1=0.7$, a one-unit increase in $x$ multiplies the odds by
+$$
+\text{new log-odds}
+=
+\text{old log-odds}+0.7.
+$$
+
+So the **log-odds increase by 0.7**.
+
+But log-odds are not intuitive for most business audiences.
+
+Exponentiate:
 
 $$
 e^{0.7}\approx2.01.
 $$
 
-That is an odds statement, not a doubling of probability.
+Therefore:
 
-## DS/ML Bridge
+> A one-unit increase in $x$ multiplies the odds of the positive outcome by approximately **2.01**, holding the other model variables constant.
 
-Logistic regression teaches several ideas that survive in modern classifiers:
+This quantity is the **odds ratio**:
 
-```text
-probability output
-loss / likelihood
-decision threshold
-precision-recall tradeoff
-ROC behavior
-calibration
-class imbalance
+$$
+\boxed{OR=e^{\beta_1}}.
+$$
+
+# 12. Odds Ratios: The Most Useful Coefficient Interpretation
+
+If
+
+$$
+\beta_j=0.7,
+$$
+
+then
+
+$$
+OR=e^{0.7}\approx2.01.
+$$
+
+The odds are about **2.01 times as large** after a one-unit increase in $x_j$, all else equal.
+
+If
+
+$$
+\beta_j=-0.4,
+$$
+
+then
+
+$$
+OR=e^{-0.4}\approx0.67.
+$$
+
+The odds are multiplied by 0.67—a reduction of roughly 33%.
+
+If
+
+$$
+\beta_j=0,
+$$
+
+then
+
+$$
+OR=e^0=1.
+$$
+
+No multiplicative change in odds.
+
+::: {.callout-warning}
+## Odds ratio is not probability ratio
+
+If the odds double, the probability does **not necessarily double**.
+
+The probability change depends on the starting probability.
+:::
+
+# 13. Same Odds Ratio, Different Probability Change
+
+Suppose an exposure doubles the odds: $OR=2$.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+base_p = np.linspace(.02,.90,180)
+base_odds = base_p/(1-base_p)
+
+new_odds = 2 * base_odds
+new_p = new_odds/(1+new_odds)
+
+odds_ratio_demo = pd.DataFrame({
+    "starting_probability":base_p,
+    "new_probability":new_p
+})
+odds_ratio_demo["probability_change"] = (
+    odds_ratio_demo["new_probability"]
+    - odds_ratio_demo["starting_probability"]
+)
 ```
 
-A high AUC does not guarantee well-calibrated probabilities. Ranking quality and probability quality are distinct.
+### Plot Code
 
-## Summary
-- Logistic regression maps a linear score into $(0,1)$.
-- Coefficients act additively on log-odds and multiplicatively on odds.
-- Classification thresholds are decision choices, not intrinsic model truths.
-- Evaluate both discrimination and calibration when probabilities matter.
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    odds_ratio_demo,
+    x="starting_probability",
+    y="new_probability",
+    title="A Constant Odds Ratio Does Not Mean a Constant Probability Increase"
+)
+
+fig.add_shape(
+    type="line",
+    x0=0, y0=0, x1=1, y1=1,
+    line={"dash":"dot"}
+)
+
+fig.update_layout(
+    xaxis_title="Starting probability",
+    yaxis_title="Probability after doubling the odds",
+    height=440
+)
+fig.show()
+```
+
+For example:
+
+- starting at $p=0.10$, doubling odds gives about $p=0.182$;
+- starting at $p=0.50$, doubling odds gives about $p=0.667$.
+
+That is why logistic-regression coefficients are naturally interpreted on the **odds scale**.
+
+# 14. A More Realistic Fraud Model
+
+Now let us simulate transactions with several useful predictors.
+
+We will use:
+
+- `amount_100`: transaction amount measured in hundreds of dollars;
+- `distance_100km`: distance from usual location in hundreds of kilometers;
+- `new_device`: 1 if the device has not been seen before;
+- `tx_last_hour`: number of transactions in the previous hour.
+
+The model is
+
+$$
+\log\frac{p}{1-p}
+=
+\beta_0
++\beta_1(\text{amount})
++\beta_2(\text{distance})
++\beta_3(\text{new device})
++\beta_4(\text{velocity}).
+$$
+
+## 14.1 Simulate and fit
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(2026)
+n = 7000
+
+fraud_data = pd.DataFrame({
+    "amount_100": rng.gamma(2.0,.9,n),
+    "distance_100km": rng.exponential(.55,n),
+    "new_device": rng.binomial(1,.16,n),
+    "tx_last_hour": rng.poisson(.7,n)
+})
+
+latent_log_odds = (
+    -4.7
+    + .42*fraud_data["amount_100"]
+    + .68*fraud_data["distance_100km"]
+    + 1.05*fraud_data["new_device"]
+    + .38*fraud_data["tx_last_hour"]
+)
+
+fraud_data["true_probability"] = 1/(1+np.exp(-latent_log_odds))
+fraud_data["fraud"] = rng.binomial(
+    1,
+    fraud_data["true_probability"]
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+plot_sample = fraud_data.sample(
+    min(1600,len(fraud_data)),
+    random_state=7
+).copy()
+
+plot_sample["amount_dollars"] = 100*plot_sample["amount_100"]
+plot_sample["class"] = plot_sample["fraud"].map({
+    0:"Legitimate",
+    1:"Fraud"
+})
+
+fig = px.scatter(
+    plot_sample,
+    x="amount_dollars",
+    y="distance_100km",
+    color="class",
+    symbol="new_device",
+    hover_data=["tx_last_hour","true_probability"],
+    title="Simulated Fraud Problem: Transactions Overlap"
+)
+
+fig.update_layout(
+    xaxis_title="Transaction amount ($)",
+    yaxis_title="Distance from usual location (100 km)",
+    height=500
+)
+fig.show()
+```
+
+Notice the overlap. Fraud does not occur only above one perfect amount or distance.
+
+This is exactly why **probability** is useful: the model can represent varying degrees of risk rather than pretending there is a perfect boundary in the raw data.
+
+# 15. Fit Logistic Regression in Python
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Model-Fitting Code"
+#| warning: false
+
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+features = [
+    "amount_100",
+    "distance_100km",
+    "new_device",
+    "tx_last_hour"
+]
+
+X = fraud_data[features]
+y = fraud_data["fraud"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=.30,
+    stratify=y,
+    random_state=42
+)
+
+model = LogisticRegression(
+    penalty=None,
+    max_iter=2000
+)
+
+model.fit(X_train,y_train)
+
+test_probability = model.predict_proba(X_test)[:,1]
+```
+
+The important output is not initially `0` or `1`.
+
+It is:
+
+```python
+model.predict_proba(X_test)
+```
+
+For binary classification, this returns estimated probabilities for both classes.
+
+For a particular transaction we might get:
+
+```text
+P(legitimate) = 0.27
+P(fraud)      = 0.73
+```
+
+and the two sum to 1.
+
+# 16. Inspect Coefficients as Odds Ratios
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Preparation Code"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+coefficient_table = pd.DataFrame({
+    "feature":features,
+    "coefficient":model.coef_[0]
+})
+
+coefficient_table["odds_ratio"] = np.exp(
+    coefficient_table["coefficient"]
+)
+
+coefficient_table = coefficient_table.sort_values(
+    "odds_ratio"
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.bar(
+    coefficient_table,
+    x="odds_ratio",
+    y="feature",
+    orientation="h",
+    hover_data=["coefficient"],
+    title="Model Coefficients Expressed as Odds Ratios"
+)
+
+fig.add_vline(x=1, line_dash="dot")
+
+fig.update_layout(
+    xaxis_title="Odds ratio = exp(coefficient)",
+    yaxis_title="Feature",
+    height=430
+)
+fig.show()
+```
+
+Interpretation depends on each feature's unit.
+
+For example, because `amount_100` is measured per **$100**, an odds ratio of 1.5 would mean:
+
+> Holding the other included variables constant, each additional $100 multiplies the estimated fraud odds by 1.5.
+
+Units matter enormously.
+
+# 17. Probability Is Not Yet a Classification Decision
+
+Suppose the model gives five transactions:
+
+| Transaction | Fraud probability |
+|---|---:|
+| A | 0.03 |
+| B | 0.18 |
+| C | 0.46 |
+| D | 0.62 |
+| E | 0.91 |
+
+These are **risk estimates**.
+
+To produce labels, choose a threshold $t$:
+
+$$
+\hat Y =
+\begin{cases}
+1,&\hat p\ge t\\
+0,&\hat p<t.
+\end{cases}
+$$
+
+At $t=0.50$:
+
+```text
+A → legitimate
+B → legitimate
+C → legitimate
+D → fraud
+E → fraud
+```
+
+At $t=0.20$:
+
+```text
+A → legitimate
+B → legitimate
+C → fraud
+D → fraud
+E → fraud
+```
+
+Same model. Same probabilities. Different decisions.
+
+<div class="lr-green">
+
+### Probability model versus decision policy
+
+The fitted logistic regression determines the risk score.
+
+The **threshold** determines how aggressively the organization acts on that risk.
+
+</div>
+
+# 18. TP, FP, TN and FN in Plain Business Language
+
+After choosing a threshold, every transaction falls into one of four outcomes.
+
+| Reality | Bank predicts legitimate | Bank predicts fraud |
+|---|---|---|
+| **Legitimate** | **TN** — correctly allow | **FP** — inconvenience a legitimate customer |
+| **Fraud** | **FN** — fraud gets through | **TP** — correctly flag fraud |
+
+## True Positive — TP
+
+Fraud occurred and the model flagged it.
+
+**Good:** fraud was detected.
+
+## False Positive — FP
+
+Transaction was legitimate but the model flagged it.
+
+**Cost:** declined purchase, customer frustration, manual review.
+
+## True Negative — TN
+
+Transaction was legitimate and the model allowed it.
+
+**Good:** normal customer experience.
+
+## False Negative — FN
+
+Transaction was fraud but the model allowed it.
+
+**Cost:** financial loss, reimbursement, operational risk.
+
+The word **false** means the prediction was wrong.
+
+# 19. Threshold Animation: Watch the Confusion Matrix Change
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+threshold_rows = []
+
+for t in np.round(np.arange(.05,.96,.05),2):
+    pred = (test_probability >= t).astype(int)
+
+    tp = int(((pred==1) & (y_test.to_numpy()==1)).sum())
+    fp = int(((pred==1) & (y_test.to_numpy()==0)).sum())
+    fn = int(((pred==0) & (y_test.to_numpy()==1)).sum())
+    tn = int(((pred==0) & (y_test.to_numpy()==0)).sum())
+
+    for cell,count in {
+        "TP: fraud caught":tp,
+        "FP: legitimate flagged":fp,
+        "FN: fraud missed":fn,
+        "TN: legitimate allowed":tn
+    }.items():
+        threshold_rows.append({
+            "threshold":f"{t:.2f}",
+            "cell":cell,
+            "count":count
+        })
+
+threshold_animation = pd.DataFrame(threshold_rows)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.bar(
+    threshold_animation,
+    x="cell",
+    y="count",
+    animation_frame="threshold",
+    range_y=[0,threshold_animation["count"].max()*1.12],
+    title="Move the Threshold: Every Decision Count Changes"
+)
+
+fig.update_layout(
+    xaxis_title="Outcome",
+    yaxis_title="Number of test transactions",
+    height=480
+)
+fig.show()
+```
+
+Press **Play**.
+
+As the threshold rises, the bank becomes more conservative about labeling something fraud.
+
+Typically:
+
+- fewer transactions are flagged;
+- false positives decrease;
+- true positives can also decrease;
+- false negatives increase.
+
+There is no threshold that magically eliminates both types of error when the classes overlap.
+
+# 20. Recall: When Missing Fraud Is Expensive
+
+Recall asks:
+
+> **Of all actual fraud transactions, what fraction did we catch?**
+
+$$
+\boxed{
+\text{Recall}
+=
+\frac{TP}{TP+FN}
+}
+$$
+
+The denominator contains **all actual positives**.
+
+High recall means few false negatives.
+
+For fraud detection, medical screening, safety alerts and some security systems, false negatives can be particularly costly. In such cases, the organization may choose a lower threshold to catch more positives.
+
+But that usually creates more false positives.
+
+# 21. Precision: When False Alarms Are Expensive
+
+Precision asks:
+
+> **Of everything we flagged as fraud, what fraction was actually fraud?**
+
+$$
+\boxed{
+\text{Precision}
+=
+\frac{TP}{TP+FP}
+}
+$$
+
+The denominator contains **all predicted positives**.
+
+High precision means relatively few false alarms among flagged cases.
+
+Precision may be especially important when:
+
+- every alert requires expensive manual investigation;
+- customers suffer major friction when flagged;
+- review capacity is limited;
+- the positive action itself is costly.
+
+# 22. F1: Balance Precision and Recall
+
+Sometimes both false positives and false negatives matter and we want one summary that balances precision and recall.
+
+The F1 score is the harmonic mean:
+
+$$
+\boxed{
+F_1
+=
+2
+\frac{\text{Precision}\times\text{Recall}}
+{\text{Precision}+\text{Recall}}
+}
+$$
+
+Equivalent form:
+
+$$
+F_1
+=
+\frac{2TP}
+{2TP+FP+FN}.
+$$
+
+F1 is high only when both precision and recall are reasonably high.
+
+But F1 does **not** know the dollar cost of fraud, customer friction, staffing constraints or legal requirements.
+
+# 23. Interactive Threshold Tradeoff: Precision, Recall and F1
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+metric_rows = []
+
+for t in np.arange(.02,.96,.01):
+    pred = (test_probability >= t).astype(int)
+
+    metric_rows.append({
+        "threshold":t,
+        "precision":precision_score(
+            y_test,pred,zero_division=0
+        ),
+        "recall":recall_score(
+            y_test,pred,zero_division=0
+        ),
+        "F1":f1_score(
+            y_test,pred,zero_division=0
+        )
+    })
+
+threshold_metrics = pd.DataFrame(metric_rows)
+
+threshold_metrics_long = threshold_metrics.melt(
+    id_vars="threshold",
+    var_name="metric",
+    value_name="score"
+)
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    threshold_metrics_long,
+    x="threshold",
+    y="score",
+    color="metric",
+    title="Threshold Is a Business Lever"
+)
+
+fig.update_traces(
+    hovertemplate="Threshold=%{x:.2f}<br>Score=%{y:.3f}"
+)
+
+fig.update_layout(
+    yaxis_range=[0,1.02],
+    xaxis_title="Fraud threshold",
+    yaxis_title="Metric value",
+    height=470
+)
+fig.show()
+```
+
+Hover over the curves.
+
+A lower threshold generally increases recall because the model flags more transactions.
+
+A higher threshold generally increases the strictness required to call something fraud and can improve precision over useful ranges, while recall falls.
+
+# 24. How Should a Business Choose the Threshold?
+
+There is no universal “correct” threshold.
+
+Start with the business consequence.
+
+<div class="lr-grid">
+<div class="lr-card">
+
+#### 🛡️ Minimize missed fraud
+
+False negatives are very costly.
+
+**Emphasize:** recall.
+
+Often choose a **lower** threshold.
+
+</div>
+<div class="lr-card">
+
+#### 🚨 Minimize false alarms
+
+Investigations or customer blocks are expensive.
+
+**Emphasize:** precision.
+
+Often choose a **higher** threshold.
+
+</div>
+<div class="lr-card">
+
+#### ⚖️ Balance both
+
+FP and FN both matter without a clear asymmetric cost.
+
+**Possible summary:** F1.
+
+Still inspect the actual errors.
+
+</div>
+<div class="lr-card">
+
+#### 💵 Known business costs
+
+Translate TP, FP, FN and TN into money or utility.
+
+**Choose:** threshold maximizing expected business value.
+
+</div>
+</div>
+
+# 25. Threshold Selection by Business Cost
+
+Suppose, for teaching purposes:
+
+- each missed fraud (**FN**) costs $500;
+- each false alarm (**FP**) costs $12;
+- catching fraud has no additional modeled loss;
+- correctly allowing a legitimate transaction has no modeled loss.
+
+Then
+
+$$
+\text{Cost}(t)
+=
+500\,FN(t)
++
+12\,FP(t).
+$$
+
+This is not a universal fraud-cost model. It is an example of converting business consequences into a threshold objective.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Simulator"
+#| warning: false
+
+import numpy as np
+import pandas as pd
+
+business_rows = []
+
+for t in np.arange(.02,.96,.01):
+    pred = (test_probability >= t).astype(int)
+    truth = y_test.to_numpy()
+
+    tp = ((pred==1)&(truth==1)).sum()
+    fp = ((pred==1)&(truth==0)).sum()
+    fn = ((pred==0)&(truth==1)).sum()
+    tn = ((pred==0)&(truth==0)).sum()
+
+    cost = 500*fn + 12*fp
+
+    business_rows.append({
+        "threshold":t,
+        "TP":tp,
+        "FP":fp,
+        "FN":fn,
+        "TN":tn,
+        "business_cost":cost
+    })
+
+business_threshold = pd.DataFrame(business_rows)
+
+best_business_row = business_threshold.loc[
+    business_threshold["business_cost"].idxmin()
+]
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    business_threshold,
+    x="threshold",
+    y="business_cost",
+    title="Choose a Threshold from Business Consequences"
+)
+
+fig.add_vline(
+    x=float(best_business_row["threshold"]),
+    line_dash="dash",
+    annotation_text=(
+        "Lowest simulated cost: "
+        f"{best_business_row['threshold']:.2f}"
+    )
+)
+
+fig.update_layout(
+    xaxis_title="Fraud threshold",
+    yaxis_title="Simulated error cost ($)",
+    height=450
+)
+fig.show()
+```
+
+This makes the logic explicit:
+
+> The threshold is not chosen because 0.5 “looks mathematically natural.” It is chosen because a particular operating point best supports the decision objective.
+
+::: {.callout-important}
+## Important correction to a common simplification
+
+It is not generally true that businesses “mostly maximize recall.”
+
+Some applications strongly prioritize recall; others prioritize precision, capacity, expected cost, safety, customer experience, or a constrained combination.
+
+The metric should follow the **consequence of the errors**.
+:::
+
+# 26. A Three-Zone Policy Can Be Better Than One Hard Threshold
+
+Real systems do not always need only two actions.
+
+A bank might use:
+
+```text
+p < 0.10        → allow automatically
+0.10 ≤ p < 0.60 → request verification / review
+p ≥ 0.60        → block or escalate
+```
+
+Probability is valuable precisely because it supports **graded decisions**.
+
+The model can rank risk while the business chooses multiple action regions.
+
+# 27. What About Accuracy?
+
+Accuracy is
+
+$$
+\text{Accuracy}
+=
+\frac{TP+TN}
+{TP+TN+FP+FN}.
+$$
+
+It can be misleading for rare events.
+
+Suppose only 1% of transactions are fraud.
+
+A useless model that predicts **“legitimate” for every transaction** achieves:
+
+$$
+99\%\text{ accuracy}.
+$$
+
+But:
+
+$$
+\text{Recall}=0.
+$$
+
+It catches no fraud.
+
+For imbalanced classification, always ask what the metric is rewarding.
+
+# 28. Precision–Recall Curve: See Many Thresholds at Once
+
+Instead of selecting one threshold immediately, inspect the available precision–recall tradeoff.
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Preparation Code"
+#| warning: false
+
+import pandas as pd
+from sklearn.metrics import precision_recall_curve
+
+pr_precision, pr_recall, pr_threshold = precision_recall_curve(
+    y_test,
+    test_probability
+)
+
+pr_data = pd.DataFrame({
+    "recall":pr_recall[:-1],
+    "precision":pr_precision[:-1],
+    "threshold":pr_threshold
+})
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.express as px
+
+fig = px.line(
+    pr_data,
+    x="recall",
+    y="precision",
+    hover_data={"threshold":":.3f"},
+    title="Precision–Recall Tradeoff Across Thresholds"
+)
+
+fig.update_layout(
+    xaxis_range=[0,1.02],
+    yaxis_range=[0,1.02],
+    height=470
+)
+fig.show()
+```
+
+Hover over the curve to inspect thresholds that produce different operating points.
+
+# 29. Probability Quality: Calibration
+
+A classifier can rank transactions well but still give poor numerical probabilities.
+
+A well-calibrated model should approximately satisfy:
+
+> Among transactions assigned probability near 0.20, about 20% are actually fraud.
+
+This matters if probabilities drive:
+
+- expected-loss calculations;
+- pricing;
+- resource allocation;
+- risk tiers;
+- decision thresholds based on cost.
+
+## 29.1 Calibration plot
+
+### Data Simulator
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Data Preparation Code"
+#| warning: false
+
+import pandas as pd
+from sklearn.calibration import calibration_curve
+
+observed_rate, mean_predicted = calibration_curve(
+    y_test,
+    test_probability,
+    n_bins=10,
+    strategy="quantile"
+)
+
+calibration_data = pd.DataFrame({
+    "mean_predicted_probability":mean_predicted,
+    "observed_fraud_rate":observed_rate
+})
+```
+
+### Plot Code
+
+```{python}
+#| code-fold: true
+#| code-summary: "View Plot Code"
+#| warning: false
+
+import plotly.graph_objects as go
+
+fig = go.Figure()
+
+fig.add_scatter(
+    x=calibration_data["mean_predicted_probability"],
+    y=calibration_data["observed_fraud_rate"],
+    mode="lines+markers",
+    name="Model"
+)
+
+fig.add_scatter(
+    x=[0,1],
+    y=[0,1],
+    mode="lines",
+    name="Perfect calibration",
+    line={"dash":"dash"}
+)
+
+fig.update_layout(
+    title="Do Predicted Probabilities Match Observed Frequencies?",
+    xaxis_title="Mean predicted fraud probability",
+    yaxis_title="Observed fraud rate",
+    xaxis_range=[0,1],
+    yaxis_range=[0,1],
+    height=470
+)
+fig.show()
+```
+
+# 30. How Logistic Regression Learns
+
+The model needs coefficients that make observed outcomes probable.
+
+For observation $i$, let
+
+$$
+p_i=P(Y_i=1\mid X_i).
+$$
+
+Because $Y_i\in\{0,1\}$, its Bernoulli likelihood contribution can be written compactly:
+
+$$
+P(Y_i=y_i)
+=
+p_i^{y_i}(1-p_i)^{1-y_i}.
+$$
+
+For independent observations:
+
+$$
+L(\beta)
+=
+\prod_{i=1}^n
+p_i^{y_i}
+(1-p_i)^{1-y_i}.
+$$
+
+Taking logs turns products into sums:
+
+$$
+\ell(\beta)
+=
+\sum_{i=1}^n
+\left[
+y_i\log p_i
++
+(1-y_i)\log(1-p_i)
+\right].
+$$
+
+Logistic regression chooses coefficients that maximize this log-likelihood, or equivalently minimize the negative log-likelihood / log loss.
+
+<div class="lr-blue">
+
+### Why this loss makes sense
+
+If the true outcome is fraud ($y=1$), the model is rewarded for assigning high $p$.
+
+If the true outcome is legitimate ($y=0$), the model is rewarded for assigning high $1-p$.
+
+Confidently wrong probabilities are penalized heavily.
+
+</div>
+
+# 31. One Transaction from Beginning to End
+
+Suppose a fitted model is
+
+$$
+\log\frac{p}{1-p}
+=
+-4.0
++
+0.5x_1
++
+0.8x_2
++
+1.1x_3,
+$$
+
+where:
+
+- $x_1$ = amount in hundreds of dollars;
+- $x_2$ = distance in hundreds of kilometers;
+- $x_3$ = new-device indicator.
+
+For a $400 transaction:
+
+$$
+x_1=4.
+$$
+
+Suppose it is 200 km from the usual location:
+
+$$
+x_2=2.
+$$
+
+and it uses a new device:
+
+$$
+x_3=1.
+$$
+
+Then
+
+$$
+z
+=
+-4
++
+0.5(4)
++
+0.8(2)
++
+1.1(1).
+$$
+
+$$
+z=0.7.
+$$
+
+This is the log-odds.
+
+Convert to odds:
+
+$$
+\text{odds}=e^{0.7}\approx2.01.
+$$
+
+Convert to probability:
+
+$$
+p
+=
+\frac{2.01}{1+2.01}
+\approx0.668.
+$$
+
+So the estimated fraud probability is approximately 66.8%.
+
+Now the business rule acts.
+
+At threshold 0.50:
+
+$$
+0.668\ge0.50
+\Rightarrow
+\text{flag fraud}.
+$$
+
+At threshold 0.80:
+
+$$
+0.668<0.80
+\Rightarrow
+\text{do not flag}.
+$$
+
+**Nothing about the fitted probability changed. Only the decision policy changed.**
+
+# 32. How to Explain a Logistic Regression Result
+
+A good explanation has three levels.
+
+## Level 1 — Probability
+
+> “The model estimates a 67% probability of fraud for this transaction.”
+
+## Level 2 — Feature / odds interpretation
+
+> “Holding the other modeled variables fixed, a one-unit increase in this predictor multiplies fraud odds by $e^{\beta_j}$.”
+
+## Level 3 — Decision
+
+> “Our current operating threshold is 40%, so this transaction is sent for review.”
+
+Do not collapse these into one statement.
+
+```text
+MODEL INTERPRETATION ≠ PROBABILITY INTERPRETATION ≠ BUSINESS DECISION
+```
+
+# 33. Common Mistakes
+
+## Mistake 1: “Logistic regression predicts 0 or 1.”
+
+More precisely, logistic regression estimates probabilities/scores; a decision rule converts them into class labels.
+
+## Mistake 2: “A coefficient of 0.7 means probability rises by 70%.”
+
+No. It means log-odds increase by 0.7 per unit, and odds are multiplied by $e^{0.7}$.
+
+## Mistake 3: “Odds ratio 2 means probability doubles.”
+
+No. Probability change depends on the starting probability.
+
+## Mistake 4: “0.5 is the correct threshold.”
+
+It is a common default, not a universal business optimum.
+
+## Mistake 5: “High accuracy means good fraud detection.”
+
+Not with severe class imbalance.
+
+## Mistake 6: “High recall is always best.”
+
+Only when the value of catching positives justifies the false-positive burden and other consequences.
+
+## Mistake 7: “Probability 0.8 automatically means 80% of such cases are positive.”
+
+That interpretation requires adequate calibration on the relevant population.
+
+# 34. Probability Is the Center of the Classification Story
+
+Logistic regression is valuable because it separates **uncertainty estimation** from **action**.
+
+<div class="lr-flow">
+X
+↓
+LINEAR SCORE
+z = β₀ + βᵀX
+↓
+LOG-ODDS
+↓ exp()
+ODDS
+↓ o/(1+o)
+PROBABILITY
+P(Y=1|X)
+↓ threshold / policy
+CLASSIFICATION OR BUSINESS ACTION
+</div>
+
+Probability enables several different uses:
+
+### Ranking
+
+Who is riskier?
+
+```text
+0.91 > 0.72 > 0.28
+```
+
+### Binary classification
+
+Is probability above a chosen threshold?
+
+### Multiple action tiers
+
+Allow, verify, review, block.
+
+### Expected value
+
+Combine probability with financial consequences.
+
+### Communication
+
+Explain uncertainty rather than pretending every prediction is certain.
+
+# 35. A Compact Decision Guide
+
+| Business question | What to examine |
+|---|---|
+| “How likely is fraud?” | predicted probability |
+| “How does x change risk?” | coefficient + odds ratio |
+| “Catch as much fraud as possible” | recall + FN |
+| “Reduce false alarms” | precision + FP |
+| “Balance precision and recall” | F1 + actual error counts |
+| “Choose an operating policy” | threshold curves |
+| “Errors have dollar values” | expected business cost/value |
+| “Can we trust 0.8 as 80%?” | calibration |
+| “Fraud is rare” | precision–recall behavior + class balance |
+
+# 36. Final Mental Model
+
+<div class="lr-hero">
+<div class="big">✨ Logistic regression does not begin with classification. It begins with probability.</div>
+
+The model learns a linear relationship on the **log-odds scale**, converts it to a probability with the **logistic function**, and only then does the organization choose how that probability becomes a decision.
+</div>
+
+Remember the chain:
+
+$$
+\boxed{
+X
+\rightarrow
+\beta_0+\beta^TX
+\rightarrow
+\log\frac{p}{1-p}
+\rightarrow
+p
+\rightarrow
+\text{threshold}
+\rightarrow
+\text{action}
+}
+$$
+
+# Summary
+
+- Fraud detection is a **binary classification** problem because the target is fraud/not fraud.
+- Linear regression is poorly suited to modeling a probability directly because a line is unbounded.
+- Logistic regression models
+
+$$
+\log\frac{p}{1-p}
+=
+\beta_0+\beta^TX.
+$$
+
+- The sigmoid converts any real-valued score into a probability between 0 and 1.
+- Odds are
+
+$$
+\frac{p}{1-p}.
+$$
+
+- A coefficient $\beta_j$ changes log-odds additively.
+- $e^{\beta_j}$ is the corresponding **odds ratio** for a one-unit predictor increase, holding other included predictors fixed.
+- The predicted probability and the final class decision are different objects.
+- Thresholds control the balance between TP, FP, TN and FN.
+- Recall emphasizes catching positives and reducing FN.
+- Precision emphasizes reliability of positive flags and reducing FP.
+- F1 balances precision and recall, but does not encode actual business costs.
+- The best threshold depends on the real consequence of errors.
+- Calibration asks whether numerical probabilities correspond to observed event frequencies.
+- Probability is what makes logistic regression useful not only for classification, but for ranking, risk estimation, tiered actions and business decisions.
 
 **Next:** *Bayesian Statistics — Learning by Updating*
