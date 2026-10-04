@@ -1,0 +1,1232 @@
+---
+title: "Forecasting Hourly Store Traffic to Staff the Floor: Time Series from Math to Production 🛒"
+description: "An end-to-end time series case study: forecast hourly customer arrivals at a grocery store, turn the forecast into a staffing plan with queueing theory, compare ARIMAX, Prophet and gradient boosting with rolling-origin validation, then save, ship, load and monitor the model."
+author: "MLStation"
+date: 2026-10-03
+categories: [Statistics, Time Series, Forecasting, ARIMAX, Prophet, Gradient Boosting, MLOps]
+draft: false
+code-fold: true
+code-summary: "Show the code"
+---
+
+Every evening at 18:00, the manager of a mid-sized grocery store publishes tomorrow's shift plan. Put too few people on the tills and queues grow, baskets are abandoned and loyal customers drift away. Put too many on and the store pays for idle hours. The whole decision rests on one number per hour: **how many customers will walk in?**
+
+That makes it a **time series forecasting** problem with money attached. In this article we solve it end to end: from the business question, through the math of three forecasting models, to a saved model that a scheduling app loads and runs. 🚀
+
+::: {.callout-tip}
+## 🎯 What you will learn
+- How to frame a forecast around a **business decision**, not a metric
+- Why ordinary regression with a random train/test split gives **wrong answers** on time series
+- The math behind **ARIMAX**, **Prophet** and **gradient boosting with lag features**, kept short
+- How to validate forecasts honestly with **rolling-origin evaluation**, MASE and pinball loss
+- How to turn a forecast into **staff numbers** with the Erlang C queueing model and a cost-based quantile
+- How to **save, ship, load and monitor** the model, with an animated production console
+:::
+
+::: {.callout-note collapse="true"}
+## 🧾 About the data
+All data in this article are **simulated**: two years of hourly arrivals for a fictional store, FreshCart, open 07:00–23:00. The simulation includes daily and weekly rhythm, seasons, weather, promotions, holidays, local events, paydays and a competitor opening. Because we generated the data, we also know the true arrival rate, which lets us measure how close each model gets to the best possible forecast.
+:::
+
+## 🛒 1. The problem: a Friday with fixed staffing
+
+FreshCart staffs the tills the same way every day. Watch what happens on a busy Friday with promotions running. Press **Play**, then try changing the number of cashiers.
+
+```{python}
+#| label: setup-data
+#| code-summary: "Show the code: simulate two years of hourly arrivals"
+import numpy as np, pandas as pd, json, math, time, hashlib, tempfile, pathlib
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from ms_charts import COLORS, SEQ, PLOTLY_CONFIG
+
+rng = np.random.default_rng(2026)
+OPEN, CLOSE = 7, 23                     # open 07:00-23:00 -> 16 hourly slots
+H = CLOSE - OPEN
+days = pd.date_range("2024-01-01", "2025-12-31", freq="D"); nd = len(days)
+doy = days.dayofyear.values
+
+# --- daily drivers, all known the evening before ---
+temp = 19 + 11*np.sin(2*np.pi*(doy-110)/365.25) + rng.normal(0, 3.2, nd)   # forecast high, °C
+rain = (rng.random(nd) < 0.22 + 0.10*np.cos(2*np.pi*(doy-120)/365.25)).astype(int)
+promo = np.array([int(d.dayofweek in (3, 4, 5) and d.isocalendar().week % 5 in (0, 2)) for d in days])
+hol = pd.to_datetime(["2024-01-01", "2024-05-27", "2024-07-04", "2024-09-02", "2024-11-28", "2024-12-25",
+                      "2025-01-01", "2025-05-26", "2025-07-04", "2025-09-01", "2025-11-27", "2025-12-25"])
+holiday = days.isin(hol).astype(int); pre_hol = days.isin(hol - pd.Timedelta(days=1)).astype(int)
+event = np.zeros(nd, int); event[rng.choice(nd, 40, replace=False)] = 1    # game nights on the town calendar
+payday = ((days.day == 1) | (days.day == 15)).astype(int)
+competitor = (days >= pd.Timestamp("2025-03-15")).astype(int)            # a discounter opens nearby
+
+hours = np.arange(OPEN, CLOSE)
+wk_prof = .55*np.exp(-.5*((hours-12.5)/1.6)**2) + 1.0*np.exp(-.5*((hours-17.8)/1.4)**2) + .25  # weekday: lunch + after work
+we_prof = 1.0*np.exp(-.5*((hours-11.5)/2.4)**2) + .55*np.exp(-.5*((hours-16)/2.0)**2) + .25   # weekend: late morning
+dow_lvl = np.array([0.0, -.05, -.02, .03, .12, .22, .10])
+
+rows, eta = [], 0.0
+for d in range(nd):
+    dow = days[d].dayofweek; prof = we_prof if dow >= 5 else wk_prof; tz = (temp[d]-20)/10
+    for j, h in enumerate(hours):
+        eta = 0.9*eta + rng.normal(0, 0.06)                               # unobserved surprises that persist for hours (AR(1), log scale)
+        log_lam = (3.65 + np.log(prof[j]) + dow_lvl[dow] + 0.10*d/365.25 + 0.05*np.sin(2*np.pi*(doy[d]-330)/365.25)
+                   - 0.06*tz**2 + 0.03*tz - 0.16*rain[d]*(1 + 0.6*(h >= 16)) + 0.20*promo[d]
+                   + 0.45*pre_hol[d]*(h >= 14) - 0.9*holiday[d]
+                   + 0.12*promo[d]*(dow >= 5) + 0.10*promo[d]*(h >= 17)
+                   - 0.10*max(tz, 0)*(13 <= h <= 16) + 0.08*max(tz, 0)*(h >= 19)
+                   + 0.55*event[d]*(16 <= h <= 19) - 0.25*event[d]*(h >= 20)
+                   + 0.10*payday[d] - 0.08*competitor[d]*(dow < 5) + eta)
+        lam = np.exp(log_lam)
+        y = rng.poisson(rng.gamma(50.0, lam/50.0))                        # negative binomial counts
+        rows.append((days[d] + pd.Timedelta(hours=int(h)), d, dow, h, temp[d], rain[d], promo[d], holiday[d],
+                     pre_hol[d], event[d], payday[d], competitor[d], y, lam))
+df = pd.DataFrame(rows, columns=["ts", "day", "dow", "hour", "temp", "rain", "promo", "holiday", "pre_holiday",
+                                 "event", "payday", "competitor", "y", "lam"])
+df["t"] = np.arange(len(df)); df["doy"] = df.ts.dt.dayofyear; df["weekend"] = (df.dow >= 5).astype(int)
+print(f"{len(df):,} hourly rows · {df.ts.min():%Y-%m-%d} to {df.ts.max():%Y-%m-%d} · mean {df.y.mean():.1f} customers/hour · max {df.y.max()}")
+```
+
+```{python}
+#| label: problem-day
+#| code-summary: "Show the code: pick a busy promo Friday"
+fri = df[(df.dow == 4) & (df.promo == 1) & (df.ts.dt.year == 2025)].groupby("day").y.sum().idxmax()
+friday = df[df.day == fri][["hour", "y"]].rename(columns={"y": "arrivals"})
+ojs_define(friday=friday.to_dict(orient="records"),
+           friday_label=f"{df[df.day == fri].ts.iloc[0]:%A %d %B %Y}")
+```
+
+```{ojs}
+//| echo: false
+import {ms, msStyle} from "/assets/js/ms-plot.js"
+viewof cashiers = Inputs.range([2, 8], {step: 1, value: 3, label: "🧑‍💼 Cashiers (all day)"})
+viewof playDay = Inputs.toggle({label: "▶ Play the day", value: true})
+```
+
+```{ojs}
+//| echo: false
+dayState = ({h: 0})
+dayTick = {
+  while (true) { yield dayState.h; if (!playDay) return; dayState.h = (dayState.h + 1) % 20; await Promises.delay(650); }
+}
+simDay = {
+  const mu = 15;                                   // one cashier serves 15 customers per hour (4 min each)
+  let q = 0, out = [];
+  for (const r of friday) {
+    const cap = cashiers * mu, load = q + r.arrivals;
+    const served = Math.min(load, cap);
+    const waiting = load - served;
+    const walk = Math.round(0.3 * waiting);         // 30% of people left in the queue give up
+    q = waiting - walk;
+    out.push({hour: r.hour, arrivals: r.arrivals, cap, queue: q, walk, idle: Math.max(0, cap - load) / mu});
+  }
+  return out;
+}
+{
+  const shown = simDay.slice(0, Math.min(16, dayTick + 1));
+  const lost = d3.sum(shown, d => d.walk), idle = d3.sum(shown, d => d.idle);
+  const chart = Plot.plot({
+    ...msStyle, height: 300, width: 760, marginLeft: 50,
+    x: {label: "Hour of day →", domain: d3.range(7, 23), tickFormat: d => d + ":00"},
+    y: {label: "↑ Customers", domain: [0, Math.max(80, d3.max(friday, d => d.arrivals) + 10)]},
+    color: {legend: true, domain: ["Arrivals", "Waiting at end of hour"], range: [ms.indigo, ms.rose]},
+    marks: [
+      Plot.barY(shown, {x: "hour", y: "arrivals", fill: () => "Arrivals", rx: 3, inset: 4}),
+      Plot.barY(shown, {x: "hour", y: "queue", fill: () => "Waiting at end of hour", rx: 3, inset: 12}),
+      Plot.ruleY([cashiers * 15], {stroke: ms.amber, strokeWidth: 2.5, strokeDasharray: "6,4"}),
+      Plot.text([{x: 8, y: cashiers * 15}], {x: "x", y: "y", text: () => `Till capacity: ${cashiers * 15}/hour`, dy: -8, fill: ms.amber, fontWeight: 700, textAnchor: "start"}),
+      Plot.ruleY([0]),
+      Plot.tip(shown, Plot.pointerX({x: "hour", y: "arrivals",
+        title: d => `${d.hour}:00–${d.hour + 1}:00\nArrivals: ${d.arrivals}\nTill capacity: ${d.cap}\nStill waiting: ${d.queue}\nGave up: ${d.walk}\nIdle cashier-hours: ${d.idle.toFixed(1)}`}))
+    ]
+  });
+  return htl.html`<div>
+    <div style="font-size:.85rem;opacity:.75;margin-bottom:6px">${friday_label} · hour ${Math.min(16, dayTick + 1)} of 16</div>
+    ${chart}
+    <div class="ms-readout"><span>🚶 Customers who gave up</span><b>${lost}</b><span>😴 Idle cashier-hours</span><b>${idle.toFixed(1)}</b></div>
+  </div>`;
+}
+```
+
+With 3 cashiers the evening rush overwhelms the tills and dozens of customers walk out. With 7 the store survives the rush but pays for many idle hours in the morning. **No fixed number works.** The right answer changes every hour, so we must **forecast every hour** and staff to the forecast.
+
+### 🧭 The decision we are supporting
+
+| Question | Answer for FreshCart |
+|---|---|
+| ⏰ **When** is the decision made? | 18:00 the day before, when tomorrow's shifts are published |
+| 🔭 **Forecast horizon** | The 16 opening hours of the next day (1 to 29 hours ahead) |
+| 🧮 **What do we forecast?** | Customer arrivals per hour, with a **probability range**, not just one number |
+| 👥 **What do we decide?** | Cashiers and floor assistants per hour |
+| 💰 **What does a wrong answer cost?** | Understaffing: lost sales and goodwill. Overstaffing: wages for idle time |
+| 📥 **What is known at 18:00?** | History up to now, tomorrow's calendar (holiday, promo, events, payday) and the weather forecast |
+
+The last row matters most. A feature is only allowed if it is **known when the forecast is made**. Tomorrow's actual sales are not; tomorrow's promotion calendar is.
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+  A["🛒 Business problem<br/>staff each hour"] --> B["📊 Data<br/>hourly arrivals + drivers"]
+  B --> C["🔍 Explore<br/>seasonality, effects, autocorrelation"]
+  C --> D["🧮 Model<br/>ARIMAX · Prophet · Gradient boosting"]
+  D --> E["✅ Validate<br/>rolling origin, MASE, pinball, coverage"]
+  E --> F["🏆 Choose<br/>accuracy + calibration + operations"]
+  F --> G["👥 Decide<br/>Erlang C + cost-based quantile"]
+  G --> H["💾 Save<br/>versioned artifact + model card"]
+  H --> I["🚚 Serve<br/>scheduler loads model, predicts"]
+  I --> J["📡 Monitor<br/>errors, drift, retrain"]
+  J -. "new data" .-> B
+```
+
+## 📊 2. Look at the data first
+
+A forecaster's first job is to understand the **structure** of the series. Use the range slider to zoom from two years down to a single week.
+
+```{python}
+#| label: fig-daily
+#| fig-cap: "Daily customer totals (simulated). Notice the weekly sawtooth, holiday dips and the gentle yearly wave. Zoom in to see the weekday dip after a competitor opened in March 2025."
+daily = df.groupby(df.ts.dt.date).agg(y=("y", "sum"), holiday=("holiday", "max")).reset_index()
+daily["ts"] = pd.to_datetime(daily.ts); daily["ma7"] = daily.y.rolling(7, center=True).mean()
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=daily.ts, y=daily.y, name="Daily customers", line=dict(color=COLORS["indigo"], width=1), opacity=.55,
+                         hovertemplate="%{x|%a %d %b %Y}<br>%{y:,} customers<extra></extra>"))
+fig.add_trace(go.Scatter(x=daily.ts, y=daily.ma7, name="7-day average", line=dict(color=COLORS["rose"], width=2.5),
+                         hovertemplate="%{x|%d %b %Y}<br>7-day avg %{y:,.0f}<extra></extra>"))
+hd = daily[daily.holiday == 1]
+fig.add_trace(go.Scatter(x=hd.ts, y=hd.y, mode="markers", name="Public holiday", marker=dict(color=COLORS["amber"], size=9, symbol="diamond"),
+                         hovertemplate="Holiday %{x|%a %d %b %Y}<br>%{y:,} customers<extra></extra>"))
+fig.add_vline(x=pd.Timestamp("2025-03-15").timestamp()*1000, line=dict(color=COLORS["slate"], dash="dot"))
+fig.add_annotation(x=pd.Timestamp("2025-03-15"), y=daily.y.max(), text="Competitor opens", showarrow=False, yshift=10, font=dict(color=COLORS["slate"]))
+fig.update_layout(height=400, margin=dict(l=60, r=20, t=30, b=40), yaxis_title="Customers per day",
+                  xaxis=dict(rangeslider=dict(visible=True), rangeselector=dict(buttons=[
+                      dict(count=7, label="1w", step="day", stepmode="backward"),
+                      dict(count=1, label="1m", step="month", stepmode="backward"),
+                      dict(count=6, label="6m", step="month", stepmode="backward"), dict(step="all", label="All")])),
+                  legend=dict(orientation="h", y=1.12))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The hourly pattern is different on weekdays and weekends: a lunch bump and a big after-work peak on weekdays, a late-morning peak on Saturdays and Sundays.
+
+```{python}
+#| label: fig-heatmap
+#| fig-cap: "Average customers by hour and day of week. Weekdays peak around 18:00; weekends peak before noon."
+hm = df[df.holiday == 0].pivot_table(index="dow", columns="hour", values="y", aggfunc="mean")
+fig = go.Figure(go.Heatmap(z=hm.values, x=[f"{h}:00" for h in hm.columns], y=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                           colorscale=[[0, "#EEF2FF"], [.5, COLORS["indigo"]], [1, "#3730A3"]], colorbar=dict(title="Avg"),
+                           hovertemplate="%{y} %{x}<br>%{z:.1f} customers<extra></extra>"))
+fig.update_layout(height=330, margin=dict(l=60, r=20, t=20, b=40), yaxis=dict(autorange="reversed"))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+How strongly do the drivers move traffic? Each bar compares average customers per hour with and without the driver.
+
+```{python}
+#| label: fig-effects
+#| fig-cap: "Average effect of each driver on hourly traffic, as a percentage change (simulated data, raw averages before adjusting for other drivers)."
+base = df[(df.holiday == 0)]
+def lift(col): g = base.groupby(col).y.mean(); return 100*(g.loc[1]/g.loc[0]-1)
+eff = pd.DataFrame({"driver": ["🏷️ Promotion", "🌧️ Rain", "🏟️ Event day", "💵 Payday", "🏪 Competitor open"],
+                    "lift": [lift("promo"), lift("rain"), lift("event"), lift("payday"), lift("competitor")]})
+pre = 100*(df[df.pre_holiday == 1].y.mean()/base[base.pre_holiday == 0].y.mean()-1)
+eff.loc[len(eff)] = ["🎄 Day before holiday", pre]
+eff = eff.sort_values("lift")
+fig = go.Figure(go.Bar(x=eff.lift, y=eff.driver, orientation="h", marker_color=[COLORS["rose"] if v < 0 else COLORS["teal"] for v in eff.lift],
+                       text=[f"{v:+.0f}%" for v in eff.lift], textposition="outside", cliponaxis=False,
+                       hovertemplate="%{y}<br>%{x:+.1f}% vs. hours without it<extra></extra>"))
+fig.update_layout(height=320, margin=dict(l=170, r=50, t=20, b=40), xaxis_title="Change in average customers per hour (%)",
+                  xaxis=dict(range=[min(eff.lift.min(), 0) - 12, eff.lift.max() + 12]))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+::: {.callout-note}
+## 📝 Raw averages can mislead
+The competitor bar mixes two things: the competitor effect and the store's own growth over time. Separating overlapping effects is exactly what a model does. Raw comparisons are for spotting candidates, not for measuring effects.
+:::
+
+### 🔁 Autocorrelation: the fingerprint of a time series
+
+The **autocorrelation function** (ACF) measures how similar the series is to itself $k$ steps earlier:
+
+$$
+\rho_k = \frac{\operatorname{Cov}(y_t, y_{t-k})}{\operatorname{Var}(y_t)}, \qquad
+\hat\rho_k = \frac{\sum_{t=k+1}^{n}(y_t-\bar y)(y_{t-k}-\bar y)}{\sum_{t=1}^{n}(y_t-\bar y)^2}.
+$$
+
+With 16 opening hours per day, spikes at lag 16 (same hour yesterday) and lag 112 (same hour last week) reveal the daily and weekly seasonality.
+
+```{python}
+#| label: fig-acf
+#| fig-cap: "Autocorrelation of hourly arrivals. Peaks at multiples of 16 (one day) and the tallest at 112 (one week). Dashed lines: approximate 95% band for white noise, ±1.96/√n."
+def acf(x, nlags):
+    x = np.asarray(x, float) - np.mean(x); d = np.sum(x**2)
+    return np.array([np.sum(x[k:]*x[:len(x)-k])/d for k in range(nlags+1)])
+r = acf(df.y, 130)
+cols = [COLORS["amber"] if k % 112 == 0 and k else (COLORS["rose"] if k % 16 == 0 and k else COLORS["indigo"]) for k in range(131)]
+fig = go.Figure(go.Bar(x=np.arange(131), y=r, marker_color=cols, hovertemplate="lag %{x}<br>ρ = %{y:.2f}<extra></extra>"))
+band = 1.96/np.sqrt(len(df))
+for s in (band, -band): fig.add_hline(y=s, line=dict(dash="dash", color=COLORS["slate"]))
+fig.add_annotation(x=16, y=r[16], text="1 day", yshift=14, showarrow=False); fig.add_annotation(x=112, y=r[112], text="1 week", yshift=14, showarrow=False)
+fig.update_layout(height=320, margin=dict(l=60, r=20, t=20, b=40), xaxis_title="Lag (opening hours)", yaxis_title="Autocorrelation")
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## ⚠️ 3. Why ordinary regression is the wrong tool
+
+A natural first idea is: "regress customers on hour, day and the drivers, and split the rows randomly into train and test." This fails for four reasons, each of which follows from the math.
+
+1. **The errors are not independent.** Ordinary least squares assumes $\operatorname{Cov}(\varepsilon_t, \varepsilon_s) = 0$. In a time series a busy hour is usually followed by another busy hour, so $\operatorname{Cov}(\varepsilon_t,\varepsilon_{t-1}) > 0$. The estimates $\hat\beta = (X^\top X)^{-1}X^\top y$ stay unbiased, but their true variance becomes
+   $$\operatorname{Var}(\hat\beta) = (X^\top X)^{-1} X^\top \Omega X (X^\top X)^{-1} \neq \sigma^2 (X^\top X)^{-1},$$
+   so standard errors, p-values and prediction intervals are **too optimistic**. It also throws away information: the last few hours tell you something about the next one.
+2. **Random splits leak the future.** With a random split, the model trains on Tuesday and Thursday and is "tested" on Wednesday. It interpolates between known neighbours, which it can never do in production, where tomorrow is always beyond the edge of the data.
+3. **Counts are not Gaussian.** Arrivals are non-negative integers whose variance grows with the mean. A linear model on raw counts can predict negative customers at 07:00 and gives intervals of the same width at 07:00 and 18:00.
+4. **Trends and breaks.** A straight time trend extrapolates forever. A competitor opening is a level shift that an i.i.d. model cannot adapt to.
+
+The checks below make problems 1 and 2 concrete.
+
+```{python}
+#| label: naive-regression
+#| code-summary: "Show the code: naive OLS, residual autocorrelation and the leakage test"
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.model_selection import KFold
+
+Xn = pd.get_dummies(df[["hour", "dow"]].astype(str)).astype(float)
+Xn[["promo", "rain", "holiday", "temp"]] = df[["promo", "rain", "holiday", "temp"]]
+Xn["t"] = df.t/len(df); Xn["const"] = 1.0
+bn = np.linalg.lstsq(Xn.values, df.y.values, rcond=None)[0]
+res_naive = df.y.values - Xn.values @ bn
+dw = np.sum(np.diff(res_naive)**2)/np.sum(res_naive**2)        # Durbin-Watson: 2 = no autocorrelation
+r_res = acf(res_naive, 40)
+neg_pred = int(((Xn.values @ bn) < 0).sum())
+
+# leakage: same model, random 5-fold CV vs. honest "train on the past, test on the next 3 months"
+feat_leak = ["hour", "dow", "doy", "temp", "rain", "promo", "holiday", "pre_holiday", "event", "payday", "t"]
+gb = lambda: HistGradientBoostingRegressor(loss="poisson", max_iter=300, learning_rate=.05, random_state=0)
+df["y_smooth3"] = df.y.rolling(3, center=True, min_periods=1).mean()   # a "smoothed traffic" column: quietly uses the next hour
+def kfold_mae(cols):
+    out = []
+    for tr, te in KFold(5, shuffle=True, random_state=0).split(df):
+        m = gb().fit(df.iloc[tr][cols], df.y.iloc[tr]); out.append(np.mean(np.abs(m.predict(df.iloc[te][cols]) - df.y.iloc[te])))
+    return np.mean(out)
+rand_mae = kfold_mae(feat_leak); leak_mae = kfold_mae(feat_leak + ["y_smooth3"])
+cut = pd.Timestamp("2025-10-01")
+trn, tst = df[df.ts < cut], df[df.ts >= cut]
+m = gb().fit(trn[feat_leak], trn.y); time_mae = np.mean(np.abs(m.predict(tst[feat_leak]) - tst.y))
+print(f"Durbin-Watson = {dw:.2f}  (2.0 = no autocorrelation)")
+print(f"Lag-1 residual autocorrelation = {r_res[1]:.2f}")
+print(f"Negative predictions from linear model on counts: {neg_pred}")
+print(f"Random 5-fold MAE           = {rand_mae:.2f}")
+print(f"  + smoothed-traffic column  = {leak_mae:.2f}")
+print(f"Honest past -> future test  = {time_mae:.2f}")
+```
+
+```{python}
+#| label: fig-naive
+#| fig-cap: "Left: residuals of the naive regression are strongly autocorrelated (independent errors would stay inside the dashed band). Right: random splits, especially with a column that peeks at neighbouring hours, report a better error than the model achieves on genuinely future data."
+fig = make_subplots(rows=1, cols=2, column_widths=[.6, .4], subplot_titles=("Residual ACF of naive regression", "MAE: random split vs. future test"))
+fig.add_trace(go.Bar(x=np.arange(1, 41), y=r_res[1:], marker_color=COLORS["rose"], showlegend=False,
+                     hovertemplate="lag %{x} h<br>residual ρ = %{y:.2f}<extra></extra>"), 1, 1)
+for s in (band, -band): fig.add_hline(y=s, line=dict(dash="dash", color=COLORS["slate"]), row=1, col=1)
+fig.add_trace(go.Bar(x=["Random<br>+ leak", "Random", "Past →<br>future"], y=[leak_mae, rand_mae, time_mae],
+                     marker_color=[COLORS["rose"], COLORS["amber"], COLORS["indigo"]], text=[f"{v:.2f}" for v in (leak_mae, rand_mae, time_mae)], textposition="outside", showlegend=False,
+                     hovertemplate="%{x}<br>MAE %{y:.2f} customers/hour<extra></extra>"), 1, 2)
+fig.update_xaxes(title_text="Lag (hours)", row=1, col=1); fig.update_xaxes(tickangle=0, row=1, col=2); fig.update_yaxes(title_text="Customers (MAE)", row=1, col=2)
+fig.update_layout(height=360, margin=dict(l=60, r=20, t=50, b=50))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The Durbin–Watson statistic is $d = \sum_t (e_t - e_{t-1})^2 / \sum_t e_t^2 \approx 2(1-\hat\rho_1)$. Here $d$ = `{python} f"{dw:.2f}"`, far below 2, which signals strong positive autocorrelation. On the right, the random split alone already flatters the model (`{python} f"{rand_mae:.2f}"` vs `{python} f"{time_mae:.2f}"`). Add an innocent-looking "smoothed traffic" column, a centred 3-hour average that secretly contains the next hour, and the random split reports an MAE of `{python} f"{leak_mae:.2f}"`, about `{python} f"{100*(1-leak_mae/time_mae):.0f}"`% better than the model can ever do in production. A time-ordered test exposes the leak at once, because the future column does not exist yet. A planner trusting the leaky number would understaff.
+
+::: {.callout-important}
+## ✅ The fix is not "never use regression"
+All three models below **are** regressions in a broad sense. What changes is that they (a) model the dependence over time, (b) respect the count nature of the data, and (c) are validated by **training on the past and testing on the future**.
+:::
+
+## 🧮 4. Three ways to forecast
+
+We give all three models the same information: the calendar, tomorrow's weather forecast, promotions, events, paydays and the competitor flag. They differ in how they turn it into a forecast. Each model works on $z_t = \log(1+y_t)$ or uses a count loss, which handles the "variance grows with the mean" problem.
+
+::: {.panel-tabset}
+## 📐 ARIMAX
+
+**Regression with ARIMA errors** (often called ARIMAX or dynamic regression) splits the series into a part explained by known drivers and a part that remembers recent surprises:
+
+$$
+z_t = \mathbf{x}_t^\top \boldsymbol\beta + \eta_t,
+\qquad
+\phi(B)\,\Phi(B^{s})\,(1-B)^d \eta_t = \theta(B)\,\Theta(B^{s})\,\varepsilon_t,
+\quad \varepsilon_t \sim \mathcal{N}(0,\sigma^2).
+$$
+
+$B$ is the backshift operator ($B\eta_t = \eta_{t-1}$), $s = 16$ is one day of opening hours, $\phi,\theta$ are short-term polynomials and $\Phi,\Theta$ seasonal ones. Our data needs only
+
+$$
+\eta_t = \phi_1 \eta_{t-1} + \phi_{16}\,\eta_{t-16} + \varepsilon_t .
+$$
+
+**Features $\mathbf{x}_t$:** hour × weekend dummies, day-of-week, yearly Fourier terms, trend, temperature and its square, rain, promotion, event, payday, holiday, competitor, plus a few interactions spotted in the exploration (promo on weekends and evenings, heat in the afternoon and evening).
+
+**Estimation.** We use two-step feasible generalised least squares: fit $\boldsymbol\beta$ by OLS, estimate $\phi$ from the residuals, filter both sides with $\phi(B)$ and refit. Libraries such as `statsmodels` maximise the exact Gaussian likelihood instead.
+
+**Forecast and uncertainty.** The $h$-step forecast of $\eta$ decays towards zero, and its variance grows:
+
+$$
+\hat\eta_{t+h} = \phi_1\hat\eta_{t+h-1} + \phi_{16}\eta_{t+h-16}, \qquad
+v_h = \phi_1^2 v_{h-1} + \sigma^2 .
+$$
+
+On the original scale the mean is $\mathbb{E}[1+y] = \exp(\hat z + v_h/2)$ (the log-normal correction), and the $q$-quantile is $\exp(\hat z + z_q\sqrt{v_h}) - 1$.
+
+✅ Interpretable effects, honest intervals, cheap. ⚠️ Interactions must be engineered by hand. See the side-by-side contrast below the tabs.
+
+## 📈 Prophet
+
+**Prophet** ([Taylor and Letham, 2018](https://peerj.com/preprints/3190/)) is a decomposable curve-fitting model:
+
+$$
+z_t = g(t) + s(t) + h(t) + \mathbf{x}_t^\top\boldsymbol\beta + \varepsilon_t .
+$$
+
+**Trend** $g(t)$ is piecewise linear with changepoints $c_1,\dots,c_S$:
+
+$$
+g(t) = \big(k + \mathbf{a}(t)^\top\boldsymbol\delta\big)\,t + \big(m + \mathbf{a}(t)^\top\boldsymbol\gamma\big),
+\qquad a_j(t) = \mathbb{1}[t \ge c_j],
+$$
+
+with a sparse prior $\delta_j \sim \operatorname{Laplace}(0,\tau)$ so the trend only bends when the data insist, as after the competitor opened.
+
+**Seasonality** $s(t)$ is a Fourier series for each period $P$ (daily, weekly, yearly):
+
+$$
+s_P(t) = \sum_{n=1}^{N}\Big[a_n \cos\!\Big(\tfrac{2\pi n t}{P}\Big) + b_n \sin\!\Big(\tfrac{2\pi n t}{P}\Big)\Big].
+$$
+
+**Holidays** $h(t)$ get their own effects. Prophet fits the maximum a posteriori estimate with L-BFGS. Our NumPy version uses a Gaussian (ridge) prior on the changepoints instead of a Laplace prior, which keeps it to one linear solve.
+
+✅ Very easy for analysts, robust to gaps and outliers. ⚠️ Errors are treated as independent, so it cannot use "the last hour was unusually busy."
+
+## 🌲 Gradient boosting
+
+**Gradient-boosted trees** (LightGBM, XGBoost, scikit-learn's `HistGradientBoostingRegressor`) turn forecasting into supervised learning on **lag features**. They have a strong record in forecasting competitions such as M5. The model is an additive ensemble of $M$ small trees:
+
+$$
+F_M(\mathbf{x}) = F_0 + \nu\sum_{m=1}^{M} f_m(\mathbf{x}),
+\qquad
+f_m = \arg\min_{f}\sum_t \Big(g_t^{(m)} - f(\mathbf{x}_t)\Big)^2,
+\quad g_t^{(m)} = -\frac{\partial \ell(y_t, F)}{\partial F}\Big|_{F_{m-1}} .
+$$
+
+Each tree fits the negative gradient of the loss, and $\nu$ is the learning rate. For counts we use the **Poisson deviance**, which models $\log\lambda_t = F(\mathbf{x}_t)$:
+
+$$
+\ell(y,F) = e^{F} - yF .
+$$
+
+For staffing ranges we train extra models with the **pinball (quantile) loss**:
+
+$$
+\ell_q(y,\hat y) = \max\big(q\,(y-\hat y),\,(q-1)(y-\hat y)\big).
+$$
+
+**Lag features must exist at 18:00 the day before**: same hour yesterday ($y_{t-16}$), same hour last week ($y_{t-112}$) and yesterday's mean. Using $y_{t-1}$ would leak, because at 18:00 we do not yet know tomorrow's 9:00 count.
+
+✅ Learns interactions and non-linear effects automatically, and scales to thousands of stores in one model. ⚠️ Less interpretable, and its quantile intervals need calibration checks.
+:::
+
+::: {.callout-note collapse="true"}
+## 🔭 State of the art beyond these three
+| Family | Examples | When to consider it |
+|---|---|---|
+| 🧠 Deep sequence models | [Temporal Fusion Transformer](https://arxiv.org/abs/1912.09363), [N-HiTS](https://arxiv.org/abs/2201.12886) | Many related series, rich covariates, a team that can maintain deep models |
+| 🌐 Foundation models | [Chronos](https://arxiv.org/abs/2403.07815), [TimesFM](https://arxiv.org/abs/2310.10688) | Zero-shot forecasts for new stores with little history |
+| 📦 Hierarchical reconciliation | Store → region → chain, MinT | Plans that must add up across levels |
+
+For one store with two years of data, the three models above are usually as accurate and far simpler to run. The textbook [Forecasting: Principles and Practice](https://otexts.com/fpp3/) covers the classical side in depth.
+:::
+
+```{python}
+#| label: models
+#| code-summary: "Show the code: the three models in NumPy and scikit-learn"
+def fourier(x, period, K):
+    return {f"{f}{k}": (np.sin if f == "s" else np.cos)(2*np.pi*k*np.asarray(x, float)/period) for k in range(1, K+1) for f in "sc"}
+
+HW_COLS = [f"hw_{h}_{w}" for h in range(OPEN, CLOSE) for w in (0, 1)]
+ARIMAX_FEATURES = HW_COLS + ["yr_s1", "yr_c1", "yr_s2", "yr_c2", "dow_fri", "dow_sat", "dow_sun", "trend", "temp", "temp2",
+                             "rain", "rain_eve", "promo", "promo_we", "promo_eve", "heat_aft", "heat_eve", "event_pm",
+                             "event_late", "payday", "holiday", "prehol_pm", "comp_wd"]
+
+def arimax_features(d):
+    """Feature matrix for the dynamic regression. Pure arithmetic, so it is easy to re-implement anywhere."""
+    h, w, dow = d.hour.values, d.weekend.values, d.dow.values
+    tz = (d.temp.values - 20)/10; hot = np.maximum(tz, 0)
+    F = {c: ((h == int(c.split("_")[1])) & (w == int(c.split("_")[2]))).astype(float) for c in HW_COLS}
+    for k, v in fourier(d.doy.values, 365.25, 2).items(): F["yr_" + k] = v
+    F.update(dow_fri=(dow == 4)*1., dow_sat=(dow == 5)*1., dow_sun=(dow == 6)*1., trend=d.t.values/(365.25*H),
+             temp=tz, temp2=tz**2, rain=d.rain.values*1., rain_eve=d.rain.values*(h >= 16), promo=d.promo.values*1.,
+             promo_we=d.promo.values*w, promo_eve=d.promo.values*(h >= 17), heat_aft=hot*((h >= 13) & (h <= 16)),
+             heat_eve=hot*(h >= 19), event_pm=d.event.values*((h >= 16) & (h <= 19)), event_late=d.event.values*(h >= 20),
+             payday=d.payday.values*1., holiday=d.holiday.values*1., prehol_pm=d.pre_holiday.values*(h >= 14),
+             comp_wd=d.competitor.values*(dow < 5))
+    return np.column_stack([F[c] for c in ARIMAX_FEATURES]).astype(float)
+
+class ARIMAX:
+    """z_t = log(1+y_t) = x_t'beta + eta_t,  eta_t = phi1*eta_{t-1} + phi16*eta_{t-16} + eps_t  (two-step FGLS)."""
+    def fit(self, d):
+        X, z = arimax_features(d), np.log1p(d.y.values)
+        beta = np.linalg.lstsq(X, z, rcond=None)[0]
+        for _ in range(2):                                      # alternate: AR on residuals, then GLS refit of beta
+            e = z - X @ beta
+            A = np.column_stack([e[H-1:-1], e[:-H]]); phi = np.linalg.lstsq(A, e[H:], rcond=None)[0]
+            Xf = X[H:] - phi[0]*X[H-1:-1] - phi[1]*X[:-H]; zf = z[H:] - phi[0]*z[H-1:-1] - phi[1]*z[:-H]
+            beta = np.linalg.lstsq(Xf, zf, rcond=None)[0]
+        e = z - X @ beta; A = np.column_stack([e[H-1:-1], e[:-H]]); phi = np.linalg.lstsq(A, e[H:], rcond=None)[0]
+        self.beta, self.phi, self.sigma = beta, phi, float(np.std(e[H:] - A @ phi)); return self
+    def forecast_day(self, prev_day, day, qs=(0.1, 0.8, 0.9)):
+        """Forecast the 16 hours of `day` given the previous day's actuals (what is known at 18:00... plus closing)."""
+        e_prev = np.log1p(prev_day.y.values) - arimax_features(prev_day) @ self.beta
+        mu = arimax_features(day) @ self.beta
+        eta, v, out_eta, out_v = e_prev[-1], 0.0, [], []
+        for j in range(H):
+            eta = self.phi[0]*eta + self.phi[1]*e_prev[j]; v = self.phi[0]**2*v + self.sigma**2
+            out_eta.append(eta); out_v.append(v)
+        m, sd = mu + np.array(out_eta), np.sqrt(out_v)
+        zq = {0.1: -1.2816, 0.8: 0.8416, 0.9: 1.2816}
+        return np.expm1(m + sd**2/2), {q: np.expm1(m + zq[q]*sd) for q in qs}
+
+def prophet_features(d, cps):
+    t = d.t.values/(365.25*H); hrs = d.hour.values.astype(float); w = d.weekend.values
+    cols = [np.ones(len(d)), t] + [np.maximum(0, t - c) for c in cps]
+    for v in fourier(hrs, 24, 6).values(): cols += [v, v*w]                    # daily shape, different on weekends
+    for v in fourier(d.dow.values + hrs/24, 7, 3).values(): cols.append(v)      # weekly
+    for v in fourier(d.doy.values, 365.25, 3).values(): cols.append(v)          # yearly
+    X = arimax_features(d); keep = [ARIMAX_FEATURES.index(c) for c in ARIMAX_FEATURES if not c.startswith(("hw_", "yr_", "dow_", "trend"))]
+    return np.column_stack(cols + [X[:, keep]])
+
+class ProphetStyle:
+    """g(t) piecewise-linear trend + Fourier seasonalities + holidays/regressors, MAP fit with a ridge prior on changepoints."""
+    def fit(self, d, n_cp=10, tau=0.05):
+        t = d.t.values/(365.25*H); self.cps = np.quantile(t[:int(.85*len(t))], np.linspace(.05, .95, n_cp))
+        X, z = prophet_features(d, self.cps), np.log1p(d.y.values)
+        P = np.eye(X.shape[1])*1e-6; P[2:2+n_cp, 2:2+n_cp] += np.eye(n_cp)*len(d)*tau**2   # prior shrinks trend changes
+        self.w = np.linalg.solve(X.T @ X + P, X.T @ z); self.sigma = float(np.std(z - X @ self.w)); return self
+    def predict(self, d, qs=(0.1, 0.8, 0.9)):
+        m = prophet_features(d, self.cps) @ self.w; zq = {0.1: -1.2816, 0.8: 0.8416, 0.9: 1.2816}
+        return np.expm1(m + self.sigma**2/2), {q: np.expm1(m + zq[q]*self.sigma) for q in qs}
+
+# lag features that are known at 18:00 the day before
+df["y_lag_day"] = df.y.shift(H); df["y_lag_week"] = df.y.shift(7*H)
+df["y_mean_yday"] = df.groupby("day").y.transform("mean").shift(H)
+GBM_FEATURES = ["hour", "dow", "weekend", "doy", "temp", "rain", "promo", "holiday", "pre_holiday", "event", "payday",
+                "competitor", "y_lag_day", "y_lag_week", "y_mean_yday"]
+def gbm(loss="poisson", q=None):
+    kw = dict(loss=loss, max_iter=500, learning_rate=0.04, max_leaf_nodes=31, min_samples_leaf=40,
+              l2_regularization=1.0, categorical_features=[0, 1], random_state=0)
+    if q is not None: kw["quantile"] = q
+    return HistGradientBoostingRegressor(**kw)
+class GBMForecaster:
+    def fit(self, d):
+        d = d.dropna(subset=["y_lag_week", "y_mean_yday"])
+        self.mean = gbm().fit(d[GBM_FEATURES], d.y)
+        self.q = {q: gbm("quantile", q).fit(d[GBM_FEATURES], d.y) for q in (0.1, 0.8, 0.9)}; return self
+    def predict(self, d):
+        return self.mean.predict(d[GBM_FEATURES]), {q: m.predict(d[GBM_FEATURES]) for q, m in self.q.items()}
+print(f"ARIMAX: {len(ARIMAX_FEATURES)} features · Gradient boosting: {len(GBM_FEATURES)} features")
+```
+
+::: {.callout-note collapse="true"}
+## 🧰 The same models with production libraries
+In a real project you would use maintained libraries. The NumPy versions above follow the same math, so this article runs with only NumPy, pandas and scikit-learn.
+
+```{.python}
+# ARIMAX with exact maximum likelihood (pip install statsmodels)
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+fit = SARIMAX(np.log1p(train.y), exog=X_train, order=(1, 0, 0),
+              seasonal_order=(1, 0, 0, 16)).fit(disp=False)
+fc = fit.get_forecast(steps=16, exog=X_tomorrow)
+mean, ci = np.expm1(fc.predicted_mean), np.expm1(fc.conf_int(alpha=0.2))
+
+# Prophet (pip install prophet)
+from prophet import Prophet
+m = Prophet(changepoint_prior_scale=0.05, daily_seasonality=True, weekly_seasonality=True)
+for c in ["temp", "rain", "promo", "event", "payday"]:
+    m.add_regressor(c)
+m.add_country_holidays("US")
+m.fit(train.rename(columns={"ts": "ds", "y_log": "y"}))
+fc = m.predict(future_df)            # yhat, yhat_lower, yhat_upper
+
+# LightGBM (pip install lightgbm)
+import lightgbm as lgb
+mean_model = lgb.LGBMRegressor(objective="poisson", n_estimators=800, learning_rate=0.03)
+p90_model  = lgb.LGBMRegressor(objective="quantile", alpha=0.9, n_estimators=800)
+mean_model.fit(train[features], train.y)
+```
+:::
+
+
+### ⚖️ The math in contrast: one template, three answers
+
+All three models answer the same question: **what is the distribution of $y_{t+h}$ given everything known at forecast time $\mathcal{F}_t$?** Writing $z = \log(1+y)$, each one fills in the same template differently:
+
+$$
+z_{t+h} \;=\; \underbrace{m(\,t+h,\ \mathbf{x}_{t+h}\,)}_{\text{signal from time and drivers}} \;+\; \underbrace{r(\,\mathcal{F}_t\,)}_{\text{use of recent history}} \;+\; \underbrace{u_{t+h}}_{\text{noise}}
+$$
+
+**📐 ARIMAX**: linear signal, memory in the errors, Gaussian noise whose variance grows with the horizon
+
+$$
+m = \mathbf{x}_{t+h}^\top\boldsymbol\beta, \qquad
+r = \hat\eta_{t+h} = \phi_1\hat\eta_{t+h-1} + \phi_{16}\,\eta_{t+h-16}, \qquad
+u \sim \mathcal{N}(0,\, v_h)
+$$
+
+**📈 Prophet**: a curve in time plus drivers, no memory, constant noise
+
+$$
+m = g(t{+}h) + s(t{+}h) + h(t{+}h) + \mathbf{x}_{t+h}^\top\boldsymbol\beta, \qquad
+r = 0, \qquad
+u \sim \mathcal{N}(0,\, \sigma^2)
+$$
+
+**🌲 Gradient boosting**: signal and memory learned together by one function of drivers and lags, with a count likelihood
+
+$$
+\log \lambda_{t+h} = F_M\big(\mathbf{x}_{t+h},\ y_{t+h-16},\ y_{t+h-112},\ \bar y_{\text{yesterday}}\big), \qquad
+y_{t+h} \sim \operatorname{Poisson}(\lambda_{t+h})
+$$
+
+The table spells out what this means in practice.
+
+| | 📐 ARIMAX | 📈 Prophet | 🌲 Gradient boosting |
+|---|---|---|---|
+| **Function class** | Linear in features: $\mathbf{x}^\top\boldsymbol\beta$ | Additive (a GAM in time): $g + s + h + \mathbf{x}^\top\boldsymbol\beta$ | Sum of trees: piecewise constant, $F_M = \sum_m \nu f_m$ |
+| **How time enters** | Through the **error process** $\phi(B)\eta_t = \varepsilon_t$ | Through **explicit functions of $t$**: trend and Fourier terms | Through **lag features** chosen by the analyst |
+| **Seasonality** | Dummies (hour × weekend) + Fourier for the year | Fourier series $\sum a_n\cos + b_n\sin$ per period | Learned splits on `hour`, `dow`, `doy` |
+| **Trend** | Linear term + level-shift dummies | Piecewise linear with sparse changepoints $\delta_j \sim \text{Laplace}$ | None built in; trees **cannot extrapolate** a trend |
+| **Driver effects** | Fixed % effect $e^{\beta}-1$, the same at every level | Same as ARIMAX (additive on log scale) | Any shape and any interaction, learned from data |
+| **Error assumption** | Correlated: $\operatorname{Cov}(\eta_t,\eta_{t-k}) \neq 0$ | Independent: $\varepsilon_t \overset{iid}{\sim} \mathcal{N}(0,\sigma^2)$ | No error model; a loss function instead |
+| **Objective** | Gaussian likelihood / GLS: $\min (\mathbf z - X\boldsymbol\beta)^\top\Omega^{-1}(\mathbf z - X\boldsymbol\beta)$ | MAP: $\min \lVert \mathbf z - \hat{\mathbf z}\rVert^2/\sigma^2 + \sum_j \lvert\delta_j\rvert/\tau$ | Poisson deviance $\sum (e^{F} - yF)$, pinball loss for quantiles |
+| **Fitting** | Closed form (GLS) or numerical MLE | L-BFGS (one smooth optimisation) | Greedy, stage-wise: $M$ trees fitted to gradients |
+| **Uncertainty** | Analytic, grows with horizon: $v_h = \phi_1^2 v_{h-1} + \sigma^2$ | Constant noise + simulated trend paths | Separate quantile models; **no coherence guarantee** ($\hat y_{0.8}$ can cross $\hat y_{0.9}$) |
+| **Outside training range** | Extrapolates the linear/quadratic form | Extrapolates trend and Fourier terms | Flat: predicts the value of the last leaf |
+| **Parameters here** | `{python} f"{len(ARIMAX_FEATURES) + 3}"` numbers | about `{python} f"{ProphetStyle().fit(df[df.ts < pd.Timestamp('2025-07-01')]).w.size}"` numbers | thousands of split thresholds and leaf values |
+
+The biggest conceptual difference is **where memory lives**. ARIMAX keeps memory in the error term, so a surprise at 21:00 still shifts tomorrow's 07:00 forecast by $\phi_1^{h}$ of its size and then fades. Prophet has no memory: tomorrow's forecast is the same whatever happened today. Gradient boosting has exactly the memory we hand it through lag features, no more.
+
+The second difference is the **shape of the response**. The chart below fixes a Wednesday at 18:00 and varies only the temperature forecast, then fixes the temperature and varies the hour. ARIMAX and Prophet draw smooth curves from the same quadratic and Fourier terms; gradient boosting draws steps, and goes flat beyond the hottest day it has seen.
+
+```{python}
+#| label: fig-contrast
+#| fig-cap: "How each model responds to its inputs, with everything else held fixed (Wednesday, no promotion, no rain). Left: temperature response at 18:00; the shaded area is outside the training range. Right: daily profile at 22 °C, with the true simulated rate for reference."
+#| code-summary: "Show the code: response curves of the three models"
+fit_cut = pd.Timestamp("2025-07-01"); trn_c = df[df.ts < fit_cut]
+A_c, P_c, G_c = ARIMAX().fit(trn_c), ProphetStyle().fit(trn_c), GBMForecaster().fit(trn_c)
+ref_day = df[(df.dow == 2) & (df.promo == 0) & (df.rain == 0) & (df.event == 0) & (df.payday == 0) & (df.ts.dt.month == 6) & (df.ts.dt.year == 2025)].day.iloc[0]
+ref = df[df.day == ref_day].copy()
+def preds(frame):
+    a = np.expm1(arimax_features(frame) @ A_c.beta + A_c.sigma**2/2)          # AR memory switched off: pure signal
+    return a, P_c.predict(frame)[0], G_c.predict(frame)[0]
+temps = np.arange(-12, 49, 1.0); row = ref[ref.hour == 18]
+grid = pd.concat([row.assign(temp=t) for t in temps], ignore_index=True)
+ta, tp, tg = preds(grid)
+prof = ref.assign(temp=22.0); pa, pp, pg_ = preds(prof)
+lo, hi = df.temp.min(), df.temp.max()
+fig = make_subplots(rows=1, cols=2, subplot_titles=("Temperature response, Wed 18:00", "Daily profile, Wed at 22 °C"), horizontal_spacing=.1)
+for (nm, c, yv, yp) in [("ARIMAX", COLORS["indigo"], ta, pa), ("Prophet-style", COLORS["amber"], tp, pp), ("Gradient boosting", COLORS["teal"], tg, pg_)]:
+    shape = "hv" if nm == "Gradient boosting" else "linear"
+    fig.add_trace(go.Scatter(x=temps, y=yv, name=nm, line=dict(color=c, width=3, shape=shape), legendgroup=nm,
+                             hovertemplate="%{y:.1f} customers<extra>" + nm + "</extra>"), 1, 1)
+    fig.add_trace(go.Scatter(x=prof.hour, y=yp, name=nm, line=dict(color=c, width=3, shape=shape), legendgroup=nm, showlegend=False,
+                             hovertemplate="%{y:.1f} customers<extra>" + nm + "</extra>"), 1, 2)
+fig.add_trace(go.Scatter(x=ref.hour, y=ref.lam, name="True rate (simulation)", mode="markers", marker=dict(color=COLORS["rose"], size=7),
+                         hovertemplate="%{y:.1f} customers<extra>True rate</extra>"), 1, 2)
+for x0, x1 in [(temps.min(), lo), (hi, temps.max())]:
+    fig.add_vrect(x0=x0, x1=x1, fillcolor=COLORS["slate"], opacity=.12, line_width=0, row=1, col=1)
+fig.add_annotation(x=hi + 3.5, y=max(ta.max(), tp.max(), tg.max()), text="never seen", showarrow=False, font=dict(size=11, color=COLORS["slate"]), row=1, col=1)
+fig.update_xaxes(title_text="Forecast high (°C)", row=1, col=1); fig.update_xaxes(title_text="Hour", row=1, col=2)
+fig.update_yaxes(title_text="Expected customers", row=1, col=1)
+fig.update_layout(height=430, margin=dict(l=60, r=20, t=60, b=90), legend=dict(orientation="h", y=-.3), hovermode="x unified")
+fig.show(config=PLOTLY_CONFIG)
+```
+
+Reading the chart:
+
+- 🌡️ **Temperature.** ARIMAX and Prophet share the quadratic term $\beta_1 \tilde T + \beta_2 \tilde T^2$, so they agree and keep bending outside the data, which can be right or badly wrong in a heatwave. The trees learn a staircase from the data, which here also picks up that hot evenings behave differently, and stay flat beyond the edges. That is safe but blind: a record 45 °C day gets the same forecast as the hottest day in history.
+- 🕐 **Daily profile.** ARIMAX has one free coefficient per hour, so it can follow any shape. Prophet's daily curve is limited to 6 Fourier harmonics, which smooths sharp peaks a little. Gradient boosting learns the shape from splits on `hour`, interacted with everything else for free.
+- 🧠 **Memory.** Switched off here so the curves are comparable. In real forecasts ARIMAX adds $\hat\eta_{t+h}$, gradient boosting adds its lag features, and Prophet adds nothing.
+
+## ✅ 5. Validate like you will forecast
+
+### Rolling-origin evaluation
+
+The honest test copies production: **stand at a date, train on everything before it, forecast the next period, move forward, repeat.** This is rolling-origin (or time-series) cross-validation. With origins $o_1 < o_2 < \dots < o_K$:
+
+$$
+\text{Score} = \frac{1}{K}\sum_{k=1}^{K} \frac{1}{|T_k|}\sum_{t\in T_k} L\big(y_t, \hat y_{t \mid \mathcal{F}_{t-h}}\big),
+$$
+
+where $T_k$ is the test window after $o_k$ and $\hat y_{t\mid\mathcal{F}_{t-h}}$ uses only information available $h$ hours earlier. We use six 28-day folds from July to December 2025, with day-ahead forecasts inside each fold.
+
+```{ojs}
+//| echo: false
+viewof playCV = Inputs.toggle({label: "▶ Animate the folds", value: true})
+```
+
+```{ojs}
+//| echo: false
+cvState = ({k: 0})
+cvTick = { while (true) { yield cvState.k; if (!playCV) return; cvState.k = (cvState.k + 1) % 6; await Promises.delay(1200); } }
+{
+  const W = 760, rowH = 34, x0 = 90, x1 = W - 20;
+  const start = new Date("2024-01-01"), end = new Date("2025-12-31");
+  const X = d => x0 + (d - start) / (end - start) * (x1 - x0);
+  const folds = d3.range(6).map(k => { const o = new Date(2025, 6, 1 + 28 * k); return {k, o, e: new Date(o.getTime() + 28 * 864e5)}; });
+  return htl.svg`<svg viewBox="0 0 ${W} ${6 * rowH + 50}" style="width:100%;max-width:${W}px;font-family:Inter,system-ui,sans-serif">
+    ${folds.map(f => htl.svg`<g opacity="${f.k === cvTick ? 1 : 0.35}">
+      <text x="${x0 - 10}" y="${20 + f.k * rowH + 15}" text-anchor="end" font-size="12.5" font-weight="600" fill="currentColor">Fold ${f.k + 1}</text>
+      <rect x="${X(start)}" y="${20 + f.k * rowH}" width="${X(f.o) - X(start)}" height="22" rx="5" fill="${ms.indigo}" fill-opacity="0.75" style="cursor:help"><title>Fold ${f.k + 1} · train: 1 Jan 2024 → ${d3.timeFormat("%d %b %Y")(new Date(f.o.getTime() - 864e5))}</title></rect>
+      <rect x="${X(f.o)}" y="${20 + f.k * rowH}" width="${X(f.e) - X(f.o)}" height="22" rx="5" fill="${ms.amber}" style="cursor:help"><title>Fold ${f.k + 1} · test: ${d3.timeFormat("%d %b")(f.o)} → ${d3.timeFormat("%d %b %Y")(new Date(f.e.getTime() - 864e5))} (28 days, 448 hourly forecasts)</title></rect>
+    </g>`)}
+    <text x="${X(start)}" y="${6 * rowH + 42}" font-size="12" fill="currentColor" opacity="0.7">Jan 2024</text>
+    <text x="${x1}" y="${6 * rowH + 42}" font-size="12" text-anchor="end" fill="currentColor" opacity="0.7">Dec 2025</text>
+    <rect x="${W / 2 - 150}" y="${6 * rowH + 30}" width="12" height="12" rx="3" fill="${ms.indigo}"/><text x="${W / 2 - 132}" y="${6 * rowH + 40}" font-size="12" fill="currentColor">Train (past only)</text>
+    <rect x="${W / 2 + 10}" y="${6 * rowH + 30}" width="12" height="12" rx="3" fill="${ms.amber}"/><text x="${W / 2 + 28}" y="${6 * rowH + 40}" font-size="12" fill="currentColor">Test (next 28 days)</text>
+  </svg>`;
+}
+```
+
+### Metrics that fit the decision
+
+| Metric | Formula | Why we use it |
+|---|---|---|
+| **MAE** | $\frac{1}{n}\sum \lvert y_t - \hat y_t\rvert$ | In customers per hour; easy to explain |
+| **RMSE** | $\sqrt{\frac{1}{n}\sum (y_t - \hat y_t)^2}$ | Punishes the big misses that cause queues |
+| **MASE** | $\dfrac{\text{MAE}}{\text{MAE of seasonal naive}}$ | Below 1 means we beat "same hour last week" |
+| **Pinball loss** | $\frac{1}{n}\sum \ell_q(y_t, \hat y_{q,t})$ | Scores the quantile we staff to |
+| **80% coverage** | share of $y_t \in [\hat y_{0.1}, \hat y_{0.9}]$ | Should be close to 80% if intervals are honest |
+| 👥 **Understaffed hours** | share of hours with fewer cashiers than the actual traffic needed | The business metric |
+
+We skip MAPE: early-morning hours with very few customers make percentage errors explode.
+
+```{python}
+#| label: erlang
+#| code-summary: "Show the code: Erlang C staffing rule"
+SERVICE_MIN, TARGET_WAIT_MIN, TARGET_SL = 4.0, 3.0, 0.80     # 4-min checkout, 80% of customers wait ≤ 3 min
+def erlang_c(c, a):
+    """Probability an arriving customer must wait (M/M/c), offered load a = lambda/mu < c."""
+    if c <= a: return 1.0
+    s = sum(a**k/math.factorial(k) for k in range(c)); top = a**c/math.factorial(c)*c/(c-a)
+    return top/(s + top)
+def cashiers_needed(lam_per_hour, service=SERVICE_MIN, wait=TARGET_WAIT_MIN, sl=TARGET_SL):
+    mu = 60/service; a = lam_per_hour/mu; c = max(1, int(np.ceil(a)))
+    while 1 - erlang_c(c, a)*np.exp(-(c*mu - lam_per_hour)*wait/60) < sl: c += 1
+    return c
+def floor_staff(lam): return max(1, int(np.ceil(lam/30)))    # one floor assistant per 30 customers per hour
+CASH = {lam: cashiers_needed(lam) for lam in range(0, 260)}
+need = lambda arr: np.array([CASH[int(min(259, max(0, round(v))))] for v in arr])
+print("Cashiers needed at 10, 30, 50, 80 customers/hour:", [cashiers_needed(v) for v in (10, 30, 50, 80)])
+```
+
+```{python}
+#| label: backtest
+#| code-summary: "Show the code: rolling-origin backtest of all models"
+origins = pd.date_range("2025-07-01", periods=6, freq="28D")
+MODELS = ["Seasonal naive", "ARIMAX", "Prophet-style", "Gradient boosting"]
+store = {m: {"mean": [], "p10": [], "p80": [], "p90": []} for m in MODELS}; actual, stamp, fold_id = [], [], []
+t0 = time.time()
+for k, o in enumerate(origins):
+    tr = df[df.ts < o]; te = df[(df.ts >= o) & (df.ts < o + pd.Timedelta(days=28))]
+    A, P, G = ARIMAX().fit(tr), ProphetStyle().fit(tr), GBMForecaster().fit(tr)
+    a_parts = [A.forecast_day(df[df.day == dd - 1], df[df.day == dd]) for dd in sorted(te.day.unique())]
+    outs = {"Seasonal naive": (te.y_lag_week.values, {0.1: .78*te.y_lag_week.values, 0.8: 1.12*te.y_lag_week.values, 0.9: 1.22*te.y_lag_week.values}),
+            "ARIMAX": (np.concatenate([p[0] for p in a_parts]), {q: np.concatenate([p[1][q] for p in a_parts]) for q in (0.1, 0.8, 0.9)}),
+            "Prophet-style": P.predict(te), "Gradient boosting": G.predict(te)}
+    for m, (mean, qd) in outs.items():
+        store[m]["mean"].append(mean); store[m]["p10"].append(qd[0.1]); store[m]["p80"].append(qd[0.8]); store[m]["p90"].append(qd[0.9])
+    actual.append(te.y.values); stamp.append(te.ts.values); fold_id.append(np.full(len(te), k + 1))
+y_bt = np.concatenate(actual); ts_bt = np.concatenate(stamp); fold_bt = np.concatenate(fold_id)
+lam_bt = df.set_index("ts").loc[ts_bt, "lam"].values
+for m in MODELS:
+    for key in store[m]: store[m][key] = np.concatenate(store[m][key])
+
+def pinball(y, f, q): d = y - f; return np.mean(np.maximum(q*d, (q-1)*d))
+need_actual = need(y_bt)
+mae_naive = np.mean(np.abs(store["Seasonal naive"]["mean"] - y_bt))
+rows = []
+for m in MODELS:
+    s = store[m]; e = s["mean"] - y_bt; plan = need(s["p80"])
+    rows.append(dict(Model=m, MAE=np.mean(np.abs(e)), RMSE=np.sqrt(np.mean(e**2)), MASE=np.mean(np.abs(e))/mae_naive,
+                     Pinball80=pinball(y_bt, s["p80"], .8), Coverage80=np.mean((y_bt >= s["p10"]) & (y_bt <= s["p90"])),
+                     Understaffed=np.mean(plan < need_actual), ExtraStaffHours=np.mean(np.maximum(plan - need_actual, 0))))
+res = pd.DataFrame(rows)
+oracle_mae = np.mean(np.abs(y_bt - lam_bt))          # best possible: we know the true rate
+print(f"Backtest: {len(y_bt):,} forecast hours in {len(origins)} folds · {time.time()-t0:.0f}s · noise floor MAE = {oracle_mae:.2f}")
+```
+
+```{python}
+#| label: tbl-results
+#| tbl-cap: "Rolling-origin results, July–December 2025 (day-ahead forecasts). Best value in each column in bold."
+from IPython.display import Markdown
+best = {"MAE": res.MAE.min(), "RMSE": res.RMSE.min(), "MASE": res.MASE.min(), "Pinball80": res.Pinball80.min(),
+        "Understaffed": res.Understaffed.min(), "ExtraStaffHours": res.ExtraStaffHours.min()}
+cov_best = res.Coverage80.iloc[(res.Coverage80 - .8).abs().argmin()]
+def b(v, col, fmt): s = format(v, fmt); return f"**{s}**" if (col == "Coverage80" and v == cov_best) or (col in best and v == best[col]) else s
+lines = ["| Model | MAE | RMSE | MASE | Pinball (q=0.8) | 80% coverage | Understaffed hours | Extra staff per hour |", "|---|---|---|---|---|---|---|---|"]
+for _, r0 in res.iterrows():
+    lines.append(f"| {r0.Model} | {b(r0.MAE,'MAE','.2f')} | {b(r0.RMSE,'RMSE','.2f')} | {b(r0.MASE,'MASE','.3f')} | {b(r0.Pinball80,'Pinball80','.2f')} | "
+                 f"{b(r0.Coverage80,'Coverage80','.0%')} | {b(r0.Understaffed,'Understaffed','.1%')} | {b(r0.ExtraStaffHours,'ExtraStaffHours','.2f')} |")
+Markdown("\n".join(lines))
+```
+
+```{python}
+#| label: fig-folds
+#| fig-cap: "MAE per fold. A model you can trust is good in every fold, not just on average. The dashed line is the noise floor: the error even a perfect model would make, because arrivals are random."
+fig = go.Figure()
+for m, c in zip(MODELS, [COLORS["slate"], COLORS["indigo"], COLORS["amber"], COLORS["teal"]]):
+    vals = [np.mean(np.abs(store[m]["mean"][fold_bt == k] - y_bt[fold_bt == k])) for k in range(1, 7)]
+    fig.add_trace(go.Scatter(x=[f"Fold {k}" for k in range(1, 7)], y=vals, name=m, mode="lines+markers", line=dict(color=c, width=3), marker=dict(size=9),
+                             hovertemplate=m + "<br>%{x}: MAE %{y:.2f}<extra></extra>"))
+fig.add_hline(y=oracle_mae, line=dict(dash="dash", color=COLORS["rose"]), annotation_text="Noise floor (true rate known)", annotation_position="bottom right")
+fig.update_layout(height=360, margin=dict(l=60, r=20, t=20, b=40), yaxis_title="MAE (customers per hour)", legend=dict(orientation="h", y=1.12))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+The **noise floor** is the most useful line on this chart. Arrivals are random even when the rate is known: at 40 customers per hour a Poisson count has a standard deviation of about $\sqrt{40}\approx 6.3$. Our best model's MAE of `{python} f"{res.MAE.min():.2f}"` sits close to the floor of `{python} f"{oracle_mae:.2f}"`, so most of the remaining error **cannot be modelled away**. It has to be handled by staffing to a quantile instead of the mean.
+
+Compare the forecasts for one test week. Use the buttons to switch models.
+
+```{python}
+#| label: fig-week
+#| fig-cap: "One test week (Mon–Sun, November 2025): actual arrivals (dots), mean forecast (line) and 80% interval (band) for each model."
+wk0 = pd.Timestamp("2025-11-17"); sel = (ts_bt >= np.datetime64(wk0)) & (ts_bt < np.datetime64(wk0 + pd.Timedelta(days=7)))
+x_lab = pd.to_datetime(ts_bt[sel]).strftime("%a %H:00"); xi = np.arange(sel.sum())
+fig = go.Figure(); n_per = 3
+for i, (m, c) in enumerate(zip(MODELS[1:], [COLORS["indigo"], COLORS["amber"], COLORS["teal"]])):
+    s = store[m]; vis = i == 0
+    fig.add_trace(go.Scatter(x=np.r_[xi, xi[::-1]], y=np.r_[s["p90"][sel], s["p10"][sel][::-1]], fill="toself", fillcolor=c, opacity=.18, line=dict(width=0), name="80% interval", visible=vis, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=xi, y=s["mean"][sel], line=dict(color=c, width=2.5), name=f"{m} forecast", visible=vis, text=x_lab, hovertemplate="%{text}<br>forecast %{y:.0f}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=xi, y=y_bt[sel], mode="markers", marker=dict(color=COLORS["rose"], size=5), name="Actual", visible=vis, text=x_lab, hovertemplate="%{text}<br>actual %{y}<extra></extra>"))
+btns = [dict(label=m, method="update", args=[{"visible": [j // n_per == i for j in range(3*n_per)]}]) for i, m in enumerate(MODELS[1:])]
+fig.update_layout(height=400, margin=dict(l=60, r=20, t=60, b=40), yaxis_title="Customers per hour",
+                  xaxis=dict(tickvals=xi[::16], ticktext=[x_lab[i].split()[0] for i in range(0, len(xi), 16)]),
+                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.18, xanchor="left", buttons=btns)], legend=dict(orientation="h", y=-.15))
+fig.show(config=PLOTLY_CONFIG)
+```
+
+## 🏆 6. Choosing the model
+
+Accuracy is one input. A forecast that feeds a weekly schedule also needs honest uncertainty, stability and something a manager can understand.
+
+```{python}
+#| label: choose
+#| code-summary: "Show the code: the selection scorecard"
+r_ = res.set_index("Model")
+best_acc = r_.drop("Seasonal naive").MAE.idxmin()
+best_staff = r_.drop("Seasonal naive").Understaffed.idxmin()
+cov_err = (r_.Coverage80 - .8).abs()
+champion = ARIMAX().fit(df[df.ts < pd.Timestamp("2025-12-18")])   # refit on all data up to the release date
+gap = 100*(r_.loc["ARIMAX", "MAE"]/r_.drop("Seasonal naive").MAE.min() - 1)
+print("Most accurate (MAE):     ", best_acc)
+print("Fewest understaffed hrs: ", best_staff)
+print("Best calibrated (80%):   ", cov_err.drop("Seasonal naive").idxmin())
+```
+
+| Criterion | 📐 ARIMAX | 📈 Prophet-style | 🌲 Gradient boosting |
+|---|---|---|---|
+| Accuracy (MAE, this backtest) | `{python} f"{r_.loc['ARIMAX','MAE']:.2f}"` | `{python} f"{r_.loc['Prophet-style','MAE']:.2f}"` | `{python} f"{r_.loc['Gradient boosting','MAE']:.2f}"` |
+| Interval calibration (target 80%) | `{python} f"{r_.loc['ARIMAX','Coverage80']:.0%}"` | `{python} f"{r_.loc['Prophet-style','Coverage80']:.0%}"` | `{python} f"{r_.loc['Gradient boosting','Coverage80']:.0%}"` |
+| Understaffed hours at P80 | `{python} f"{r_.loc['ARIMAX','Understaffed']:.1%}"` | `{python} f"{r_.loc['Prophet-style','Understaffed']:.1%}"` | `{python} f"{r_.loc['Gradient boosting','Understaffed']:.1%}"` |
+| Uses the latest surprise (intraday updates) | ✅ AR errors | ❌ independent errors | ⚠️ only through lags we allow |
+| Explains effects to a manager | ✅ one coefficient per driver | ✅ plots of trend and seasonality | ⚠️ needs SHAP or partial dependence |
+| Learns new interactions by itself | ❌ hand-engineered | ❌ hand-engineered | ✅ automatically |
+| Size and serving | ✅ about 60 numbers in JSON | ✅ small | ⚠️ several tree ensembles |
+| Scales to 500 stores | ⚠️ one model per store | ⚠️ one model per store | ✅ one global model |
+
+::: {.callout-tip}
+## 🧑‍🔬 My choice: ARIMAX in production, gradient boosting as the challenger
+For a single store, I would ship the **ARIMAX** (regression with seasonal AR errors). In this backtest its MAE is `{python} "the best" if gap < 0.05 else f"within {gap:.1f}% of the best"`, its staffing record is among the best (`{python} f"{r_.loc['ARIMAX','Understaffed']:.1%}"` understaffed hours against `{python} f"{r_.drop('Seasonal naive').Understaffed.min():.1%}"` for the best model), its 80% intervals contain `{python} f"{r_.loc['ARIMAX','Coverage80']:.0%}"` of actuals, so the staffing quantiles can be trusted, it can **update during the day** when the morning is busier than expected, and every coefficient has a business meaning ("rain on an evening costs `{python} f"{100*(1-np.exp(champion.beta[ARIMAX_FEATURES.index('rain')]+champion.beta[ARIMAX_FEATURES.index('rain_eve')])):.0f}"`% of traffic"). The whole model is a short JSON file, so the scheduling app does not even need Python.
+
+The Prophet-style model is a fine baseline that analysts can maintain, but it ignores autocorrelation. Gradient boosting becomes my first choice as soon as FreshCart forecasts **many stores** with one global model, or when new drivers with complex interactions appear. Until then it runs as a **challenger** in shadow mode, and replaces the champion only if it wins over several months.
+:::
+
+The fitted ARIMAX coefficients show why managers like it: on the log scale, $e^{\beta}-1$ is the percentage effect of each driver.
+
+```{python}
+#| label: fig-coefs
+#| fig-cap: "Effects learned by the ARIMAX model, as % change in expected customers. Hover for exact values. Interaction terms apply on top of the main effect."
+names = {"promo": "🏷️ Promotion", "promo_we": "🏷️ + on weekends", "promo_eve": "🏷️ + after 17:00", "rain": "🌧️ Rain", "rain_eve": "🌧️ + after 16:00",
+         "event_pm": "🏟️ Event day, 16–19h", "event_late": "🏟️ Event day, after 20h", "payday": "💵 Payday", "holiday": "🎄 Public holiday",
+         "prehol_pm": "🎄 Day before, after 14h", "comp_wd": "🏪 Competitor (weekdays)", "heat_aft": "🔥 Per +10°C above 20, afternoon", "heat_eve": "🔥 Per +10°C above 20, evening"}
+co = pd.DataFrame({"name": [names[k] for k in names], "eff": [100*(np.exp(champion.beta[ARIMAX_FEATURES.index(k)])-1) for k in names]}).sort_values("eff")
+fig = go.Figure(go.Bar(x=co.eff, y=co.name, orientation="h", marker_color=[COLORS["rose"] if v < 0 else COLORS["indigo"] for v in co.eff],
+                       text=[f"{v:+.0f}%" for v in co.eff], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:+.1f}%<extra></extra>"))
+fig.update_layout(height=470, margin=dict(l=220, r=50, t=20, b=40), xaxis_title="Effect on expected customers (%)",
+                  xaxis=dict(range=[co.eff.min() - 18, co.eff.max() + 15]))
+fig.show(config=PLOTLY_CONFIG)
+print(f"phi_1  = {champion.phi[0]:.2f}   memory of the previous hour")
+print(f"phi_16 = {champion.phi[1]:.2f}   same hour yesterday")
+print(f"sigma  = {champion.sigma:.3f}  innovation s.d. on the log scale")
+```
+
+## 👥 7. From forecast to staff: queueing math
+
+A forecast of "42 customers" does not say how many cashiers to schedule. Queueing theory does. Treat the tills as an **M/M/c queue**: arrivals at rate $\lambda$ per hour, each cashier serves $\mu = 60/\bar s$ customers per hour ($\bar s$ = average checkout minutes), and $c$ cashiers. With offered load $a = \lambda/\mu$, the **Erlang C** probability that a customer must wait is
+
+$$
+C(c, a) = \frac{\dfrac{a^c}{c!}\dfrac{c}{c-a}}{\displaystyle\sum_{k=0}^{c-1}\frac{a^k}{k!} + \frac{a^c}{c!}\frac{c}{c-a}}, \qquad c > a,
+$$
+
+and the **service level**, the share of customers who wait at most $T$ minutes, is
+
+$$
+\operatorname{SL}(c) = 1 - C(c,a)\,e^{-(c\mu - \lambda)\,T/60}.
+$$
+
+We choose the smallest $c$ with $\operatorname{SL}(c) \ge 80\%$.
+
+**Which forecast do we plug in?** Not the mean. Staffing is a **newsvendor** problem: if one understaffed hour costs $c_u$ (lost margin and goodwill) and one surplus staff-hour costs $c_o$ (wages), the cost-minimising plan uses the forecast quantile
+
+$$
+q^\star = \frac{c_u}{c_u + c_o}.
+$$
+
+With $c_u = 80$ dollars and $c_o = 20$ dollars, $q^\star = 80/100 = 0.8$: staff to the **P80** forecast. Try the planner below.
+
+```{python}
+#| label: planner-data
+#| code-summary: "Show the code: export tomorrow's forecast distribution for the planner"
+plan_day = df[df.ts.dt.date == pd.Timestamp("2025-12-19").date()]
+pm, pq = champion.forecast_day(df[df.day == plan_day.day.iloc[0]-1], plan_day)
+zgrid = np.round(np.linspace(-1.6, 1.6, 33), 2)
+e_prev = np.log1p(df[df.day == plan_day.day.iloc[0]-1].y.values) - arimax_features(df[df.day == plan_day.day.iloc[0]-1]) @ champion.beta
+mu_log = arimax_features(plan_day) @ champion.beta; eta, v, mlog, sd = e_prev[-1], 0, [], []
+for j in range(H):
+    eta = champion.phi[0]*eta + champion.phi[1]*e_prev[j]; v = champion.phi[0]**2*v + champion.sigma**2; mlog.append(mu_log[j] + eta); sd.append(np.sqrt(v))
+ojs_define(plan=[{"hour": int(h), "mlog": float(m), "sd": float(s)} for h, m, s in zip(plan_day.hour, mlog, sd)],
+           plan_label=f"{plan_day.ts.iloc[0]:%A %d %B %Y}")
+```
+
+```{ojs}
+//| echo: false
+viewof cu = Inputs.range([10, 200], {step: 5, value: 80, label: "💸 Understaffed hour ($)"})
+viewof co = Inputs.range([10, 60], {step: 1, value: 20, label: "🧾 Surplus staff-hour ($)"})
+viewof svc = Inputs.range([2, 7], {step: 0.5, value: 4, label: "⏱️ Checkout time (min)"})
+viewof waitT = Inputs.range([1, 6], {step: 0.5, value: 3, label: "⌛ Max wait (min)"})
+```
+
+```{ojs}
+//| echo: false
+erlangC = (c, a) => {
+  if (c <= a) return 1;
+  let s = 0, term = 1;
+  for (let k = 0; k < c; k++) { if (k > 0) term *= a / k; s += term; }
+  const top = term * a / c * c / (c - a);
+  return top / (s + top);
+}
+needC = (lam, service, T) => {
+  const mu = 60 / service, a = lam / mu; let c = Math.max(1, Math.ceil(a));
+  while (1 - erlangC(c, a) * Math.exp(-(c * mu - lam) * T / 60) < 0.8) c++;
+  return c;
+}
+normInv = p => { // Acklam's approximation of the standard normal quantile
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00],
+        b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01],
+        c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00],
+        d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const pl = 0.02425; let q, r;
+  if (p < pl) { q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  if (p > 1 - pl) { q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  q = p - 0.5; r = q * q;
+  return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+qStar = cu / (cu + co)
+planRows = plan.map(r => {
+  const mean = Math.expm1(r.mlog + r.sd * r.sd / 2), qv = Math.expm1(r.mlog + normInv(qStar) * r.sd);
+  return {hour: r.hour, mean, qv, cash: needC(qv, svc, waitT), cashMean: needC(mean, svc, waitT), floor: Math.max(1, Math.ceil(qv / 30))};
+})
+{
+  const tot = d3.sum(planRows, d => d.cash + d.floor), totMean = d3.sum(planRows, d => d.cashMean + d.floor);
+  const long = planRows.flatMap(d => [{hour: d.hour, role: "Cashiers", n: d.cash}, {hour: d.hour, role: "Floor assistants", n: d.floor}]);
+  return htl.html`<div>
+  <div class="ms-readout"><span>🎯 Staff to quantile</span><b>P${Math.round(qStar * 100)}</b><span>👥 Staff-hours tomorrow</span><b>${tot}</b><span>vs. staffing to the mean</span><b>${totMean}</b></div>
+  <div style="font-size:.85rem;opacity:.75;margin:6px 0">${plan_label} · forecast from the ARIMAX model</div>
+  ${Plot.plot({...msStyle, height: 260, width: 760, marginLeft: 50,
+    x: {label: "Hour →", tickFormat: d => d + ":00"}, y: {label: "↑ Customers per hour", grid: true},
+    marks: [Plot.lineY(planRows, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.5}),
+            Plot.lineY(planRows, {x: "hour", y: "qv", stroke: ms.rose, strokeWidth: 2.5, strokeDasharray: "6,4"}),
+            Plot.text(planRows.slice(-1), {x: "hour", y: "qv", text: () => `P${Math.round(qStar * 100)}`, dx: 18, dy: -8, fill: ms.rose, fontWeight: 700}),
+            Plot.text(planRows.slice(-1), {x: "hour", y: "mean", text: () => "mean", dx: 20, dy: 8, fill: ms.indigo, fontWeight: 700}),
+            Plot.ruleX(planRows, Plot.pointerX({x: "hour", stroke: ms.slate, strokeOpacity: 0.4})),
+            Plot.dot(planRows, Plot.pointerX({x: "hour", y: "qv", r: 5, fill: ms.rose})),
+            Plot.tip(planRows, Plot.pointerX({x: "hour", y: "qv",
+              title: d => `${d.hour}:00\nMean forecast: ${d.mean.toFixed(1)} customers\nP${Math.round(qStar * 100)} forecast: ${d.qv.toFixed(1)}\nCashiers: ${d.cash} (mean would give ${d.cashMean})\nFloor assistants: ${d.floor}`}))]})}
+  ${Plot.plot({...msStyle, height: 230, width: 760, marginLeft: 50,
+    x: {label: "Hour →", tickFormat: d => d + ":00"}, y: {label: "↑ People on shift", grid: true},
+    color: {legend: true, domain: ["Cashiers", "Floor assistants"], range: [ms.teal, ms.amber]},
+    marks: [Plot.barY(long, {x: "hour", y: "n", fill: "role", rx: 2, inset: 2, tip: true,
+              title: d => `${d.hour}:00\n${d.role}: ${d.n}`}), Plot.ruleY([0])]})}
+  </div>`;
+}
+```
+
+## 💾 8. Saving the model
+
+A saved model is more than its weights. Six months later someone must be able to answer: **what is this, what data trained it, how good was it, and what inputs does it expect?** A good artifact therefore contains:
+
+| Part | Contents | Why |
+|---|---|---|
+| 🧮 Parameters | $\boldsymbol\beta$, $\phi_1$, $\phi_{16}$, $\sigma$ | The model itself |
+| 🧾 Feature contract | ordered feature names, units, the opening hours, the transform $\log(1+y)$ | Inputs built the same way in training and serving |
+| 🗓️ Lineage | training window, data snapshot hash, code version | Reproducibility and audits |
+| 📏 Validation | backtest MAE, MASE, coverage | The bar a retrained model must clear |
+| 🔐 Integrity | SHA-256 checksum of the parameters | Detects a corrupted or edited file |
+
+For linear and statistical models, **store parameters as JSON**. It is readable, diff-able, language-neutral and safe to load. For tree ensembles use `joblib` or `skops`, and never unpickle files from untrusted sources, because pickle can run arbitrary code.
+
+```{python}
+#| label: save
+#| code-summary: "Show the code: save a versioned, checksummed model artifact"
+art_dir = pathlib.Path(tempfile.mkdtemp()) / "models" / "footfall-arimax" / "v2025.12.18"
+art_dir.mkdir(parents=True)
+params = {"beta": [round(float(b_), 6) for b_ in champion.beta], "phi": [round(float(p_), 6) for p_ in champion.phi], "sigma": round(champion.sigma, 6)}
+artifact = {
+    "model": "footfall-arimax", "version": "2025.12.18", "store_id": "FC-001",
+    "target": {"name": "customers_per_hour", "transform": "log1p"},
+    "schedule": {"open_hour": OPEN, "close_hour": CLOSE, "hours_per_day": H},
+    "features": ARIMAX_FEATURES,
+    "feature_spec": {"temp": "(forecast_high_c - 20) / 10", "trend": "hour_index / (365.25 * 16)", "yr_*": "Fourier of day-of-year, period 365.25"},
+    "parameters": params,
+    "training": {"from": str(df.ts.min().date()), "to": "2025-12-17", "rows": int((df.ts < pd.Timestamp('2025-12-18')).sum()),
+                 "data_sha256": hashlib.sha256(df[df.ts < pd.Timestamp('2025-12-18')].y.values.tobytes()).hexdigest()[:16]},
+    "validation": {"scheme": "rolling origin, 6 x 28 days", "mae": round(float(r_.loc["ARIMAX", "MAE"]), 3),
+                   "mase": round(float(r_.loc["ARIMAX", "MASE"]), 3), "coverage80": round(float(r_.loc["ARIMAX", "Coverage80"]), 3)},
+}
+artifact["checksum"] = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
+(art_dir / "model.json").write_text(json.dumps(artifact, indent=2))
+(art_dir / "MODEL_CARD.md").write_text(f"# footfall-arimax {artifact['version']}\nIntended use: next-day hourly staffing for store FC-001.\n"
+                                       f"Not for: stores without 12 months of history, or forecasting beyond 2 days.\n")
+size = (art_dir / "model.json").stat().st_size
+print(f"Saved {art_dir.relative_to(art_dir.parents[2])}/model.json  ({size/1024:.1f} KB, {len(params['beta'])} coefficients)")
+print(json.dumps({k: artifact[k] for k in ("model", "version", "training", "validation")}, indent=2))
+```
+
+```text
+models/
+└── footfall-arimax/
+    ├── v2025.12.18/          ← immutable: never edited after release
+    │   ├── model.json        ← parameters + feature contract + lineage + checksum
+    │   └── MODEL_CARD.md     ← intended use, limits, owner
+    └── production -> v2025.12.18   ← a pointer; rollback = move the pointer
+```
+
+Each release gets a new folder; promoting or rolling back a model is just moving the `production` pointer. The [model versioning article](/deployment/update/model-versioning-rollouts.qmd) covers registries and safe rollouts in more depth.
+
+## 🚚 9. Shipped: loading the model and forecasting
+
+Now switch roles. You are the developer of FreshCart's scheduling app. You did not train the model; you received `model.json`. Your service must **load it, verify it, build features exactly as specified, and predict**.
+
+```{python}
+#| label: load
+#| code-summary: "Show the code: the inference service, which knows nothing about training"
+class FootfallService:
+    """Loads a released model.json and produces staffing-ready forecasts. No training code needed."""
+    def __init__(self, path):
+        self.a = json.loads(pathlib.Path(path).read_text())
+        p = self.a["parameters"]
+        if hashlib.sha256(json.dumps(p, sort_keys=True).encode()).hexdigest() != self.a["checksum"]:
+            raise ValueError("Checksum mismatch: model file is corrupted or was edited")
+        if self.a["features"] != ARIMAX_FEATURES:
+            raise ValueError("Feature contract changed: refuse to serve")
+        self.beta, self.phi, self.sigma = np.array(p["beta"]), np.array(p["phi"]), p["sigma"]
+    def forecast(self, yesterday, tomorrow, q=0.8):
+        e_prev = np.log1p(yesterday.y.values) - arimax_features(yesterday) @ self.beta
+        mu = arimax_features(tomorrow) @ self.beta; eta, v, out = e_prev[-1], 0.0, []
+        zq = {0.1: -1.2816, 0.5: 0.0, 0.8: 0.8416, 0.9: 1.2816}[q]
+        for j in range(len(tomorrow)):
+            eta = self.phi[0]*eta + self.phi[1]*e_prev[j]; v = self.phi[0]**2*v + self.sigma**2; s = np.sqrt(v)
+            out.append((mu[j] + eta, s))
+        m, s = np.array(out).T
+        return pd.DataFrame({"hour": tomorrow.hour.values, "mean": np.expm1(m + s**2/2), "p10": np.expm1(m - 1.2816*s),
+                             "p90": np.expm1(m + 1.2816*s), f"p{int(q*100)}": np.expm1(m + zq*s)})
+
+svc = FootfallService(art_dir / "model.json")
+print(f"Loaded {svc.a['model']} v{svc.a['version']} · checksum OK · {len(svc.beta)} coefficients")
+
+# forecast the 14 held-out days: 18-31 December 2025 (never seen in training)
+hold = []
+for dd in sorted(df[df.ts >= pd.Timestamp("2025-12-18")].day.unique()):
+    tom, yday = df[df.day == dd], df[df.day == dd - 1]
+    f = svc.forecast(yday, tom); f["actual"] = tom.y.values; f["lam"] = tom.lam.values; f["date"] = f"{tom.ts.iloc[0]:%a %d %b}"
+    f["need_actual"] = need(f.actual); f["plan"] = need(f.p80)
+    hold.append(f)
+hold = pd.concat(hold, ignore_index=True)
+e = hold["mean"] - hold.actual
+print("Held-out 18-31 Dec 2025 (14 days, never seen in training)")
+print(f"  MAE               {np.mean(np.abs(e)):.2f} customers/hour")
+print(f"  Bias              {e.mean():+.2f} customers/hour")
+print(f"  80% coverage      {np.mean((hold.actual >= hold.p10) & (hold.actual <= hold.p90)):.0%}")
+print(f"  Understaffed hrs  {np.mean(hold.plan < hold.need_actual):.1%}")
+```
+
+### 🎛️ The production console
+
+This console runs the **same `model.json` in your browser**: it reads the coefficients, rebuilds the features from the inputs and computes the forecast. Press **Play** to step through the 14 held-out days, including Christmas. Watch the inputs change, the forecast respond, and the actual arrivals land inside or outside the band. Switch to **What-if** to set the inputs yourself.
+
+```{python}
+#| label: console-data
+#| code-summary: "Show the code: hand the artifact and held-out days to the browser"
+days_out = []
+for dd in sorted(df[df.ts >= pd.Timestamp("2025-12-18")].day.unique()):
+    tom, yday = df[df.day == dd], df[df.day == dd - 1]
+    e_prev = np.log1p(yday.y.values) - arimax_features(yday) @ svc.beta
+    r0 = tom.iloc[0]
+    days_out.append({"date": f"{r0.ts:%a %d %b}", "dow": int(r0.dow), "doy": int(r0.doy), "t0": int(r0.t), "temp": round(float(r0.temp), 1),
+                     "rain": int(r0.rain), "promo": int(r0.promo), "event": int(r0.event), "payday": int(r0.payday), "holiday": int(r0.holiday),
+                     "pre_holiday": int(r0.pre_holiday), "competitor": int(r0.competitor),
+                     "e_prev": [round(float(x), 4) for x in e_prev], "actual": [int(x) for x in tom.y.values]})
+ojs_define(model_json=json.loads((art_dir / "model.json").read_text()), held_days=days_out)
+```
+
+```{ojs}
+//| echo: false
+viewof mode = Inputs.radio(["▶ Replay held-out days", "🧪 What-if"], {value: "▶ Replay held-out days", label: "Mode"})
+viewof playCon = Inputs.toggle({label: "Play", value: true})
+```
+
+```{ojs}
+//| echo: false
+viewof wi = Inputs.form({
+  dow: Inputs.select(new Map([["Monday", 0], ["Tuesday", 1], ["Wednesday", 2], ["Thursday", 3], ["Friday", 4], ["Saturday", 5], ["Sunday", 6]]), {value: 4, label: "📅 Day"}),
+  temp: Inputs.range([-5, 40], {step: 1, value: 22, label: "🌡️ Forecast high (°C)"}),
+  rain: Inputs.toggle({label: "🌧️ Rain", value: false}),
+  promo: Inputs.toggle({label: "🏷️ Promotion", value: false}),
+  event: Inputs.toggle({label: "🏟️ Event in town", value: false}),
+  payday: Inputs.toggle({label: "💵 Payday", value: false}),
+  holiday: Inputs.toggle({label: "🎄 Public holiday", value: false}),
+  pre: Inputs.toggle({label: "🛍️ Day before a holiday", value: false})
+}, {template: inputs => htl.html`<details style="margin:6px 0 4px"><summary style="cursor:pointer;font-weight:600">🧪 What-if inputs (open, then choose What-if mode)</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px 18px;margin-top:6px">${Object.values(inputs)}</div></details>`})
+```
+
+```{ojs}
+//| echo: false
+conState = ({i: 0})
+conTick = { while (true) { yield conState.i; if (!playCon || mode !== "▶ Replay held-out days") return; conState.i = (conState.i + 1) % held_days.length; await Promises.delay(2200); } }
+featuresFor = (day, h) => {
+  const w = day.dow >= 5 ? 1 : 0, tz = (day.temp - 20) / 10, hot = Math.max(tz, 0), t = (day.t0 + (h - 7)) / (365.25 * 16);
+  const f = {};
+  for (let hh = 7; hh < 23; hh++) for (const ww of [0, 1]) f[`hw_${hh}_${ww}`] = (h === hh && w === ww) ? 1 : 0;
+  for (let k = 1; k <= 2; k++) { f[`yr_s${k}`] = Math.sin(2 * Math.PI * k * day.doy / 365.25); f[`yr_c${k}`] = Math.cos(2 * Math.PI * k * day.doy / 365.25); }
+  Object.assign(f, {dow_fri: +(day.dow === 4), dow_sat: +(day.dow === 5), dow_sun: +(day.dow === 6), trend: t, temp: tz, temp2: tz * tz,
+    rain: day.rain, rain_eve: day.rain * (h >= 16), promo: day.promo, promo_we: day.promo * w, promo_eve: day.promo * (h >= 17),
+    heat_aft: hot * (h >= 13 && h <= 16), heat_eve: hot * (h >= 19), event_pm: day.event * (h >= 16 && h <= 19), event_late: day.event * (h >= 20),
+    payday: day.payday, holiday: day.holiday, prehol_pm: day.pre_holiday * (h >= 14), comp_wd: day.competitor * (day.dow < 5)});
+  return model_json.features.map(n => f[n]);
+}
+forecastDay = day => {
+  const b = model_json.parameters.beta, [p1, p16] = model_json.parameters.phi, s2 = model_json.parameters.sigma ** 2;
+  let eta = day.e_prev[15], v = 0;
+  return d3.range(7, 23).map((h, j) => {
+    const x = featuresFor(day, h), mu = d3.sum(x, (xi, i) => xi * b[i]);
+    eta = p1 * eta + p16 * day.e_prev[j]; v = p1 * p1 * v + s2; const s = Math.sqrt(v), m = mu + eta;
+    return {hour: h, mean: Math.expm1(m + v / 2), p10: Math.expm1(m - 1.2816 * s), p80: Math.expm1(m + 0.8416 * s), p90: Math.expm1(m + 1.2816 * s),
+            actual: day.actual ? day.actual[j] : null};
+  });
+}
+conDay = {
+  if (mode === "▶ Replay held-out days") return held_days[conTick];
+  const ref = held_days[0];
+  return {date: "What-if scenario", dow: wi.dow, doy: ref.doy, t0: ref.t0, temp: wi.temp, rain: +wi.rain, promo: +wi.promo, event: +wi.event,
+          payday: +wi.payday, holiday: +wi.holiday, pre_holiday: +wi.pre, competitor: 1, e_prev: Array(16).fill(0), actual: null};
+}
+{
+  const fc = forecastDay(conDay), hasA = conDay.actual !== null;
+  const err = hasA ? fc.map(d => d.mean - d.actual) : [];
+  const mae = hasA ? d3.mean(err, Math.abs) : null, bias = hasA ? d3.mean(err) : null;
+  const cov = hasA ? d3.mean(fc, d => +(d.actual >= d.p10 && d.actual <= d.p90)) : null;
+  const plan = fc.map(d => ({hour: d.hour, plan: needC(d.p80, 4, 3), need: hasA ? needC(d.actual, 4, 3) : null}));
+  const under = hasA ? d3.sum(plan, d => +(d.plan < d.need)) : null;
+  const chip = (k, v, on) => htl.html`<span style="display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px;font-size:.82rem;font-weight:600;border:1px solid rgba(127,127,127,.3);background:${on ? "rgba(99,102,241,.14)" : "transparent"};opacity:${on ? 1 : .55};transition:all .4s">${k} ${v}</span>`;
+  const dname = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][conDay.dow];
+  return htl.html`<div style="border:1px solid rgba(127,127,127,.25);border-radius:16px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <b style="font-size:1.05rem">📆 ${conDay.date}</b>
+      <span style="font-size:.8rem;opacity:.7">model ${model_json.model} v${model_json.version} · checksum ${model_json.checksum.slice(0, 10)}…</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">
+      ${chip("📅", dname, true)}${chip("🌡️", conDay.temp + "°C", true)}${chip("🌧️", conDay.rain ? "rain" : "dry", conDay.rain)}${chip("🏷️", "promo", conDay.promo)}
+      ${chip("🏟️", "event", conDay.event)}${chip("💵", "payday", conDay.payday)}${chip("🎄", "holiday", conDay.holiday)}${chip("🛍️", "pre-holiday", conDay.pre_holiday)}
+    </div>
+    ${Plot.plot({...msStyle, height: 280, width: 760, marginLeft: 50,
+      x: {label: "Hour →", domain: [7, 22], tickFormat: d => d + ":00"}, y: {label: "↑ Customers per hour", domain: [0, 160], grid: true},
+      marks: [Plot.areaY(fc, {x: "hour", y1: "p10", y2: "p90", fill: ms.indigo, fillOpacity: 0.16, curve: "monotone-x"}),
+              Plot.lineY(fc, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.8, curve: "monotone-x"}),
+              Plot.lineY(fc, {x: "hour", y: "p80", stroke: ms.violet, strokeDasharray: "5,4", curve: "monotone-x"}),
+              hasA ? Plot.dot(fc, {x: "hour", y: "actual", r: 4.5, fill: d => (d.actual >= d.p10 && d.actual <= d.p90) ? ms.teal : ms.rose, stroke: "white"}) : null,
+              hasA ? Plot.ruleX(fc, {x: "hour", y1: "mean", y2: "actual", stroke: ms.rose, strokeOpacity: 0.5}) : null,
+              Plot.ruleX(fc, Plot.pointerX({x: "hour", stroke: ms.slate, strokeOpacity: 0.4})),
+              Plot.tip(fc, Plot.pointerX({x: "hour", y: "mean",
+                title: d => `${d.hour}:00\nMean forecast: ${d.mean.toFixed(1)}\n80% interval: ${d.p10.toFixed(0)} – ${d.p90.toFixed(0)}\nP80 (staffing): ${d.p80.toFixed(1)}` +
+                  (d.actual !== null ? `\nActual: ${d.actual}\nError: ${(d.mean - d.actual) > 0 ? "+" : ""}${(d.mean - d.actual).toFixed(1)}` + ((d.actual >= d.p10 && d.actual <= d.p90) ? " (inside band)" : " (outside band)") : "")}))]})}
+    <div style="font-size:.8rem;opacity:.75">Band: 80% interval (P10–P90) · solid: mean · dashed: P80 used for staffing ${hasA ? "· dots: actual (teal inside band, rose outside)" : ""}</div>
+    ${Plot.plot({...msStyle, height: 170, width: 760, marginLeft: 50,
+      x: {label: null, domain: d3.range(7, 23), tickFormat: d => d + ":00"}, y: {label: "↑ Cashiers", grid: true},
+      marks: [Plot.barY(plan, {x: "hour", y: "plan", fill: ms.teal, fillOpacity: 0.8, rx: 3, inset: 3, tip: true,
+                title: d => `${d.hour}:00\nCashiers scheduled: ${d.plan}` + (d.need !== null ? `\nNeeded by actual traffic: ${d.need}` + (d.plan < d.need ? "  ⚠️ understaffed" : d.plan > d.need ? "  (1+ spare)" : "  ✅ exact") : "")}),
+              hasA ? Plot.tickY(plan, {x: "hour", y: "need", stroke: ms.rose, strokeWidth: 3}) : null]})}
+    <div style="font-size:.8rem;opacity:.75">Bars: cashiers scheduled from the P80 forecast ${hasA ? "· red ticks: cashiers the actual traffic needed" : ""}</div>
+    ${hasA ? htl.html`<div class="ms-readout"><span>MAE</span><b>${mae.toFixed(1)}</b><span>Bias</span><b>${bias > 0 ? "+" : ""}${bias.toFixed(1)}</b><span>In 80% band</span><b>${Math.round(cov * 100)}%</b><span>Understaffed hours</span><b>${under} / 16</b></div>`
+           : htl.html`<div class="ms-readout"><span>Customers expected</span><b>${Math.round(d3.sum(fc, d => d.mean))}</b><span>Peak hour</span><b>${fc.reduce((a, b) => b.mean > a.mean ? b : a).hour}:00</b><span>Cashier-hours</span><b>${d3.sum(plan, d => d.plan)}</b></div>`}
+  </div>`;
+}
+```
+
+### 🔍 Understanding the error of the shipped model
+
+A shipped forecast is judged on fresh data. Three questions matter: **how big** is the error, **is it biased**, and **where does it come from**?
+
+```{python}
+#| label: fig-errors
+#| fig-cap: "Held-out error analysis. Left: MAE by hour versus the noise floor. Right: distribution of forecast errors (forecast − actual); a centred, symmetric shape means no systematic bias."
+by_h = hold.groupby("hour").apply(lambda g: pd.Series({"mae": np.mean(np.abs(g["mean"] - g.actual)), "floor": np.mean(np.abs(g.actual - g.lam))}), include_groups=False).reset_index()
+fig = make_subplots(rows=1, cols=2, subplot_titles=("MAE by hour (held-out)", "Error distribution"), column_widths=[.58, .42])
+fig.add_trace(go.Bar(x=by_h.hour, y=by_h.mae, name="Model MAE", marker_color=COLORS["indigo"], hovertemplate="%{x}:00<br>model MAE %{y:.1f}<extra></extra>"), 1, 1)
+fig.add_trace(go.Scatter(x=by_h.hour, y=by_h.floor, name="Noise floor", mode="lines+markers", line=dict(color=COLORS["rose"], dash="dash"),
+                         hovertemplate="%{x}:00<br>noise floor %{y:.1f}<extra></extra>"), 1, 1)
+fig.add_trace(go.Histogram(x=hold["mean"] - hold.actual, nbinsx=30, marker_color=COLORS["teal"], name="Errors", showlegend=False,
+                           hovertemplate="error %{x}<br>%{y} hours<extra></extra>"), 1, 2)
+fig.add_vline(x=0, line=dict(color=COLORS["slate"], dash="dot"), row=1, col=2)
+fig.update_xaxes(title_text="Hour", row=1, col=1); fig.update_xaxes(title_text="Forecast − actual", row=1, col=2)
+fig.update_yaxes(title_text="Customers", row=1, col=1)
+fig.update_layout(height=360, margin=dict(l=60, r=20, t=50, b=50), legend=dict(orientation="h", y=1.18))
+fig.show(config=PLOTLY_CONFIG)
+xmas = hold[hold.date.str.contains("24 Dec|25 Dec")].groupby("date").apply(lambda g: np.mean(np.abs(g["mean"] - g.actual)), include_groups=False)
+print("MAE on 24 and 25 December:", xmas.round(1).to_dict())
+```
+
+The error has three sources, and each calls for a different response:
+
+1. **Irreducible randomness** 🎲. Even with the true rate known, counts scatter by roughly $\sqrt{\lambda}$. Error grows in busy hours for this reason, and it is why we staff to P80 rather than to the mean.
+2. **Model error** 🧮. The gap between the bars and the dashed floor. This is what better features or models can still win.
+3. **Rare events** 🎄. Days like Christmas Eve have few examples in two years of history, so their effects are estimated from only one or two occurrences each. For such days, planners should review the forecast and add a manual adjustment.
+
+Errors are also **correlated within a day**: a cold, quiet morning usually means a quiet afternoon. That is the AR term at work. In production, re-forecasting at noon with the morning's actual counts tightens the afternoon interval.
+
+## 📡 10. After launch: monitor and retrain
+
+Shipping is the start, not the end. The [monitoring article](/deployment/monitoring/model-monitoring-drift.qmd) covers this in depth; for this model the essentials are:
+
+| Check | Rule | Action |
+|---|---|---|
+| 📏 Weekly MAE vs. backtest | Alert if 4-week MAE > 1.2 × the artifact's `validation.mae` | Investigate, then retrain |
+| ⚖️ Bias | Alert if mean error stays beyond ±2 customers/hour for 2 weeks | A level shift, such as a new competitor or a road closure |
+| 🎯 Coverage | Alert if 80% band coverage falls below 70% | Intervals too narrow; refit σ |
+| 🧾 Input contract | Reject requests with missing or out-of-range drivers | Fix the upstream feed |
+| 🔄 Retraining | Monthly on a rolling 2-year window, and only promote if the backtest is not worse | New version folder, move the pointer |
+
+## 🧩 Summary
+
+- **Frame the forecast around the decision**: horizon, granularity, available inputs and the cost of being wrong come before any model.
+- **Ordinary regression with random splits fails** on time series: autocorrelated errors, leakage from the future, count data and structural breaks.
+- **ARIMAX** adds memory to regression, **Prophet** decomposes trend, seasonality and holidays, and **gradient boosting** learns interactions from lag features. Each has a clean mathematical core.
+- **Validate with rolling origins**, report MASE against a seasonal naive baseline, check interval coverage and measure the **business metric**.
+- **Compare against the noise floor** to know when to stop modelling and start managing uncertainty.
+- **Turn forecasts into staff** with Erlang C and the newsvendor quantile $q^\star = c_u/(c_u + c_o)$.
+- **Save a contract, not just weights**: parameters, feature spec, lineage, validation and checksum, in an immutable version folder.
+- **Serve and monitor**: the scheduling app loads the artifact, verifies it, forecasts, and alerts when error, bias or coverage drift.

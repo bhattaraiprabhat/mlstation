@@ -1,0 +1,1369 @@
+---
+title: "Bayesian Thinking: Statistical Philosophy & Rational Updating"
+description: "Probability as rational uncertainty: Bayesian reasoning, frequentist contrast, sparse evidence, zero-event risk, cognition, corporate decision systems and the frontier of statistical inference."
+author: "MLStation"
+date: 2026-10-03
+categories: [Statistics, Bayesian, Probability, Philosophy, Decision Science]
+draft: false
+---
+
+<style>
+.bt-hero{
+  padding:1.5rem 1.6rem;border-radius:24px;margin:1rem 0 1.4rem;
+  background:
+    radial-gradient(circle at 85% 10%,rgba(251,191,36,.30),transparent 28%),
+    linear-gradient(135deg,#172554,#312e81 48%,#4c1d95);
+  color:#fff;
+  box-shadow:0 14px 34px rgba(30,27,75,.16)
+}
+.bt-kicker{font-size:.77rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fde68a}
+.bt-big{font-size:1.45rem;font-weight:820;line-height:1.25;margin:.35rem 0 .65rem}
+.bt-flow{
+  padding:.9rem 1rem;border-radius:14px;background:#111827;color:#fef3c7;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto
+}
+.bt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.8rem;margin:1rem 0}
+.bt-card{padding:.95rem 1rem;border-radius:16px;border:1px solid #e5e7eb;background:#fff}
+.bt-card b{color:#4338ca}
+.bt-paper{
+  margin:1.4rem auto;padding:1.3rem 1.5rem;max-width:900px;
+  background:#f2e5c4;color:#44351f;border:1px solid #d2bd8e;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 27px,rgba(102,77,38,.08) 28px);
+  box-shadow:6px 8px 0 rgba(68,53,31,.12);
+  transform:rotate(.25deg);
+  font-family:"Bradley Hand","Segoe Print","Comic Sans MS",cursive;
+  line-height:1.72
+}
+.bt-paper .label{font-family:system-ui,sans-serif;font-size:.74rem;font-weight:850;letter-spacing:.1em;text-transform:uppercase;color:#92400e}
+.bt-duel{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0}
+.bt-duel>div{padding:1rem 1.05rem;border-radius:17px}
+.bt-freq{background:#ecfeff;border:1px solid #a5f3fc}
+.bt-bayes{background:#f5f3ff;border:1px solid #ddd6fe}
+.bt-frontier{
+  padding:1rem 1.1rem;border-radius:18px;
+  background:linear-gradient(135deg,#fffbeb,#fff7ed);
+  border:1px solid #fed7aa
+}
+.bt-code-fold{
+  margin:.55rem 0 .85rem;border:1px solid #e5e7eb;
+  border-radius:10px;background:#fafafa
+}
+.bt-code-fold>summary{
+  cursor:pointer;padding:.48rem .72rem;font-size:.86rem;
+  font-weight:700;color:#52525b;user-select:none
+}
+.bt-code-fold[open]>summary{border-bottom:1px solid #e5e7eb}
+.bt-code-fold pre{margin:.5rem .7rem .75rem}
+@media(max-width:760px){.bt-duel{grid-template-columns:1fr}}
+</style>
+
+<div class="bt-hero">
+<div class="bt-kicker">Probability before certainty</div>
+<div class="bt-big">✦ What should a rational decision-maker believe when the data are incomplete?</div>
+
+In the previous chapter, a positive cancer test changed a prior probability into a posterior probability.
+
+That calculation contained a much larger idea:
+
+> **Inference is not only about what the data say. It is about how the data should change what was reasonable to believe before seeing them.**
+
+This chapter explores that idea as a philosophy of statistical reasoning—and as a practical architecture for decisions when information is scarce, delayed, noisy or continuously arriving.
+</div>
+
+::: {.callout-note}
+## Connection to the previous chapter
+
+*Bayesian Statistics: Evidence, Belief & Learning by Updating* developed the mechanics:
+
+$$
+p(\theta\mid D)\propto p(D\mid\theta)p(\theta).
+$$
+
+Here we ask the deeper questions:
+
+- What does probability mean?
+- Why should beliefs update this way?
+- What happens when we have almost no data?
+- How does this differ from frequentist reasoning?
+- Why is this increasingly useful for modern decision systems?
+:::
+
+# 1. Three Worlds: Known, Unknown, Uncertain
+
+Deductive logic is comfortable with statements such as:
+
+```text
+All mammals are warm-blooded.
+A whale is a mammal.
+Therefore a whale is warm-blooded.
+```
+
+But corporate and scientific decisions rarely arrive in that form.
+
+A product leader asks:
+
+> “Will this new feature improve retention?”
+
+An airline safety team asks:
+
+> “What is the risk of catastrophic failure in a new aircraft subsystem?”
+
+A security team asks:
+
+> “Is this previously unseen behavior an attack?”
+
+A pharmaceutical team asks:
+
+> “How likely is this treatment to outperform standard care?”
+
+The answer is not known with certainty.
+
+Yet a decision cannot always wait for infinite data.
+
+<div class="bt-flow">
+INCOMPLETE INFORMATION → QUANTIFY UNCERTAINTY → OBSERVE EVIDENCE → UPDATE → ACT
+</div>
+
+Bayesian thinking treats uncertainty itself as something we can reason about mathematically.
+
+# 2. Probability as a State of Information
+
+One interpretation of probability is long-run frequency.
+
+Another is that probability represents **uncertainty conditional on available information**.
+
+Under the second view,
+
+$$
+P(H\mid I)
+$$
+
+means:
+
+> the plausibility of hypothesis $H$ given information $I$.
+
+If new evidence $D$ arrives, our information changes from $I$ to $(I,D)$:
+
+$$
+P(H\mid I)
+\longrightarrow
+P(H\mid D,I).
+$$
+
+The physical world may not have changed.
+
+Our **state of knowledge** did.
+
+This “probability as extended logic” perspective has a long intellectual lineage and was strongly developed in modern form by E. T. Jaynes. It treats probability as a disciplined way to reason when deductive certainty is unavailable.
+
+# 3. Why Bayes' Rule Is Rational Updating
+
+Start from the product rule:
+
+$$
+P(H,D)=P(D\mid H)P(H).
+$$
+
+But also:
+
+$$
+P(H,D)=P(H\mid D)P(D).
+$$
+
+Therefore:
+
+$$
+P(H\mid D)P(D)
+=
+P(D\mid H)P(H).
+$$
+
+So:
+
+$$
+\boxed{
+P(H\mid D)
+=
+\frac{P(D\mid H)P(H)}
+{P(D)}
+}
+$$
+
+The equation is elementary.
+
+Its philosophical force comes from the interpretation:
+
+<div class="bt-grid">
+<div class="bt-card"><b>Prior</b><br>What was plausible before this evidence?</div>
+<div class="bt-card"><b>Likelihood</b><br>How expected is this evidence if the hypothesis is true?</div>
+<div class="bt-card"><b>Posterior</b><br>What is plausible after incorporating the evidence?</div>
+<div class="bt-card"><b>Decision</b><br>What should we do given uncertainty and consequences?</div>
+</div>
+
+# 4. An Evidence Dial: Watch Belief Move
+
+Suppose two hypotheses compete:
+
+$$
+H_1:\text{new process is safer}
+$$
+
+$$
+H_0:\text{no safety improvement}.
+$$
+
+Posterior odds are:
+
+$$
+\boxed{
+\frac{P(H_1\mid D)}{P(H_0\mid D)}
+=
+\frac{P(H_1)}{P(H_0)}
+\times
+\frac{P(D\mid H_1)}{P(D\mid H_0)}
+}
+$$
+
+The second ratio is the **Bayes factor**.
+
+<details class="bt-code-fold">
+<summary>＋ View Interactive Code</summary>
+
+```javascript
+viewof priorH1 = Inputs.range([.01,.99], {
+  value:.25, step:.01, label:"Prior probability of H₁"
+})
+
+viewof bayesFactor = Inputs.range([.05,30], {
+  value:5, step:.05, label:"Evidence strength: Bayes factor BF₁₀"
+})
+
+priorOdds = priorH1/(1-priorH1)
+posteriorOdds = priorOdds*bayesFactor
+posteriorH1 = posteriorOdds/(1+posteriorOdds)
+```
+
+</details>
+
+```{ojs}
+//| echo: false
+viewof priorH1 = Inputs.range([.01,.99], {
+  value:.25, step:.01, label:"Prior probability of H₁"
+})
+
+viewof bayesFactor = Inputs.range([.05,30], {
+  value:5, step:.05, label:"Evidence strength: Bayes factor BF₁₀"
+})
+
+priorOdds = priorH1/(1-priorH1)
+posteriorOdds = priorOdds*bayesFactor
+posteriorH1 = posteriorOdds/(1+posteriorOdds)
+
+html`<div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+<div style="padding:.9rem;border-radius:15px;background:#ecfeff">
+<div>Before evidence</div><b style="font-size:1.6rem">${(100*priorH1).toFixed(1)}%</b>
+</div>
+<div style="padding:.9rem;border-radius:15px;background:#f5f3ff">
+<div>After evidence</div><b style="font-size:1.6rem">${(100*posteriorH1).toFixed(1)}%</b>
+</div>
+</div>`
+```
+
+Strong evidence can overcome a skeptical prior.
+
+Weak evidence should not.
+
+That is a feature, not an inconvenience.
+
+# 5. Human Cognition: A Useful Parallel, Not an Identity
+
+Human reasoning often has a Bayesian-looking structure:
+
+```text
+expectation → observation → surprise → revised expectation
+```
+
+Examples:
+
+- You expect your commute to take 30 minutes.
+- You learn that a major road is closed.
+- You revise the expected travel time.
+
+Or:
+
+- A manager believes a campaign has a moderate chance of succeeding.
+- Early conversion data arrive.
+- Confidence moves upward or downward.
+
+Cognitive science has used Bayesian models to explain aspects of perception, learning and decision-making.
+
+But humans are **not perfect Bayesian machines**.
+
+We show:
+
+- base-rate neglect;
+- confirmation bias;
+- anchoring;
+- availability effects;
+- overconfidence.
+
+<div class="bt-paper">
+<div class="label">✎ Notebook thought</div>
+
+Bayesian reasoning is most useful here as a <b>normative comparison</b>:
+
+“How should evidence change belief if we want the update to be internally coherent?”
+
+It need not claim:
+
+“This is exactly how every human brain actually computes.”
+</div>
+
+# 6. Surprise Is Evidence
+
+Suppose a hypothesis predicts an observation very well.
+
+Then observing it is not especially surprising.
+
+But if an observation is much more likely under $H_1$ than $H_0$, it favors $H_1$.
+
+The Bayes factor is:
+
+$$
+BF_{10}
+=
+\frac{P(D\mid H_1)}
+{P(D\mid H_0)}.
+$$
+
+- $BF_{10}>1$: evidence favors $H_1$;
+- $BF_{10}<1$: evidence favors $H_0$;
+- $BF_{10}\approx1$: evidence barely distinguishes them.
+
+Notice what is being compared:
+
+> **How well did the competing explanations predict what we actually saw?**
+
+# 7. Animate Sequential Learning
+
+Suppose a product experiment produces binary conversions.
+
+True conversion probability is unknown.
+
+Start with:
+
+$$
+p\sim Beta(2,2).
+$$
+
+As outcomes arrive, the posterior becomes:
+
+$$
+p\mid D
+\sim
+Beta(2+s,2+f).
+$$
+
+<details class="bt-code-fold">
+<summary>＋ View Data Simulator</summary>
+
+```python
+import numpy as np
+import pandas as pd
+from scipy.stats import beta
+
+rng=np.random.default_rng(22)
+true_p=.34
+obs=rng.binomial(1,true_p,300)
+
+rows=[]
+for n in [0,5,10,25,50,100,200,300]:
+    s=obs[:n].sum()
+    a=2+s
+    b=2+n-s
+
+    for p in np.linspace(.001,.999,350):
+        rows.append({
+            "observations":n,
+            "p":p,
+            "density":beta.pdf(p,a,b)
+        })
+
+learning=pd.DataFrame(rows)
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
+import numpy as np
+import pandas as pd
+from scipy.stats import beta
+
+rng=np.random.default_rng(22)
+true_p=.34
+obs=rng.binomial(1,true_p,300)
+
+rows=[]
+for n in [0,5,10,25,50,100,200,300]:
+    s=obs[:n].sum()
+    a=2+s
+    b=2+n-s
+
+    for p in np.linspace(.001,.999,350):
+        rows.append({
+            "observations":n,
+            "p":p,
+            "density":beta.pdf(p,a,b)
+        })
+
+learning=pd.DataFrame(rows)
+```
+
+<details class="bt-code-fold">
+<summary>＋ View Animated Plot Code</summary>
+
+```python
+import plotly.express as px
+
+fig=px.line(
+    learning,
+    x="p",y="density",
+    animation_frame="observations",
+    range_x=[0,1],
+    range_y=[0,14],
+    title="From Uncertainty to Concentration: Evidence Arrives Sequentially"
+)
+
+fig.add_vline(
+    x=true_p,
+    line_dash="dash",
+    annotation_text="simulated truth"
+)
+
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
+import plotly.express as px
+
+fig=px.line(
+    learning,
+    x="p",y="density",
+    animation_frame="observations",
+    range_x=[0,1],
+    range_y=[0,14],
+    title="From Uncertainty to Concentration: Evidence Arrives Sequentially"
+)
+
+fig.add_vline(
+    x=true_p,
+    line_dash="dash",
+    annotation_text="simulated truth"
+)
+
+fig.update_layout(height=450)
+fig.show()
+```
+
+The posterior does not merely move.
+
+It usually **concentrates** as information accumulates.
+
+# 8. The Zero-Crash Problem
+
+Now consider a more difficult question.
+
+A new aircraft family has completed:
+
+$$
+N=100{,}000
+$$
+
+relevant flights with:
+
+$$
+0
+$$
+
+catastrophic crashes.
+
+What is the probability of a crash on the next flight?
+
+A naive frequency estimate is:
+
+$$
+\hat p=\frac{0}{100{,}000}=0.
+$$
+
+But does zero observed crashes justify:
+
+$$
+P(\text{next flight crashes})=0?
+$$
+
+Clearly not.
+
+Zero observations of a rare event do not prove impossibility.
+
+# 9. Why Sparse-Risk Problems Expose the Philosophical Difference
+
+A frequentist framework is not helpless here.
+
+It can construct an upper confidence bound for the unknown event rate. For zero events in $N$ independent trials, a useful approximation to a 95% upper bound is the **rule of three**:
+
+$$
+p\lesssim\frac{3}{N}.
+$$
+
+For $N=100{,}000$:
+
+$$
+p\lesssim3\times10^{-5}.
+$$
+
+So the frequentist can say:
+
+> Event rates above roughly 3 per 100,000 flights would be inconsistent with seeing zero events this often at the chosen confidence level.
+
+That is meaningful.
+
+But it is not the same statement as:
+
+> “There is a 95% probability that the crash rate is below $3\times10^{-5}$.”
+
+The latter is naturally a Bayesian posterior statement.
+
+# 10. Bayesian Zero-Event Inference
+
+Let the unknown crash probability per flight be $p$.
+
+Use:
+
+$$
+p\sim Beta(\alpha,\beta).
+$$
+
+After observing $x$ crashes in $N$ flights:
+
+$$
+p\mid D
+\sim
+Beta(\alpha+x,\beta+N-x).
+$$
+
+For zero crashes:
+
+$$
+\boxed{
+p\mid D
+\sim
+Beta(\alpha,\beta+N).
+}
+$$
+
+The posterior moves toward zero—but does not collapse to zero.
+
+This is exactly what we want:
+
+> **No observed failures is evidence of safety, not proof of impossibility.**
+
+# 11. Interactive Zero-Event Risk Lab
+
+This visualization compares a raw observed frequency of zero with a Bayesian posterior estimate as exposure grows.
+
+<details class="bt-code-fold">
+<summary>＋ View Interactive Code</summary>
+
+```javascript
+viewof flights = Inputs.range([10,1000000], {
+  value:100000,
+  step:10,
+  transform:Math.log,
+  label:"Failure-free flights"
+})
+
+viewof priorEquivalent = Inputs.range([10,100000], {
+  value:1000,
+  step:10,
+  transform:Math.log,
+  label:"Prior equivalent exposure"
+})
+
+priorCrashMean = 1/100000
+aCrash = priorCrashMean*priorEquivalent
+bCrash = (1-priorCrashMean)*priorEquivalent
+
+postMeanCrash = aCrash/(aCrash+bCrash+flights)
+ruleThree = 3/flights
+```
+
+</details>
+
+```{ojs}
+//| echo: false
+viewof flights = Inputs.range([10,1000000], {
+  value:100000,
+  step:10,
+  transform:Math.log,
+  label:"Failure-free flights"
+})
+
+viewof priorEquivalent = Inputs.range([10,100000], {
+  value:1000,
+  step:10,
+  transform:Math.log,
+  label:"Prior equivalent exposure"
+})
+
+priorCrashMean = 1/100000
+aCrash = priorCrashMean*priorEquivalent
+bCrash = (1-priorCrashMean)*priorEquivalent
+
+postMeanCrash = aCrash/(aCrash+bCrash+flights)
+ruleThree = 3/flights
+
+html`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem">
+<div style="padding:.8rem;background:#f8fafc;border-radius:14px">
+Observed frequency<br><b>0</b>
+</div>
+<div style="padding:.8rem;background:#f5f3ff;border-radius:14px">
+Bayesian posterior mean<br><b>${postMeanCrash.toExponential(2)}</b>
+</div>
+<div style="padding:.8rem;background:#ecfeff;border-radius:14px">
+Frequentist ~95% upper bound<br><b>${ruleThree.toExponential(2)}</b>
+</div>
+</div>`
+```
+
+The two approaches answer different questions.
+
+The frequentist bound controls a repeated-sampling procedure.
+
+The Bayesian posterior quantifies uncertainty about $p$ conditional on the model and prior.
+
+# 12. “But Where Did the Prior Come From?”
+
+This is the right objection.
+
+For a new aircraft, prior information might come from:
+
+- predecessor aircraft;
+- component reliability tests;
+- engine-family experience;
+- simulations;
+- physics and engineering constraints;
+- expert elicitation;
+- comparable systems.
+
+A prior should not be invented merely to obtain a desired conclusion.
+
+A mature Bayesian analysis asks:
+
+1. What information existed before these data?
+2. How should it be encoded?
+3. How strong is that information?
+4. What happens under alternative reasonable priors?
+
+# 13. Prior Sensitivity: Make Assumptions Move
+
+<details class="bt-code-fold">
+<summary>＋ View Interactive Prior-Sensitivity Code</summary>
+
+```javascript
+viewof priorBelief = Inputs.range([.05,.95], {
+  value:.50,step:.01,label:"Prior P(H)"
+})
+
+viewof evidenceLR = Inputs.range([.1,20], {
+  value:3,step:.1,label:"Likelihood ratio"
+})
+
+priorO = priorBelief/(1-priorBelief)
+postO = priorO*evidenceLR
+postP = postO/(1+postO)
+
+sensitivityPoints = d3.range(.02,.981,.02).map(pr => {
+  const po = pr/(1-pr)
+  const posterior = po*evidenceLR/(1+po*evidenceLR)
+  return {prior:pr,posterior}
+})
+```
+
+</details>
+
+```{ojs}
+//| echo: false
+viewof priorBelief = Inputs.range([.05,.95], {
+  value:.50,step:.01,label:"Prior P(H)"
+})
+
+viewof evidenceLR = Inputs.range([.1,20], {
+  value:3,step:.1,label:"Likelihood ratio"
+})
+
+priorO = priorBelief/(1-priorBelief)
+postO = priorO*evidenceLR
+postP = postO/(1+postO)
+
+sensitivityPoints = d3.range(.02,.981,.02).map(pr => {
+  const po = pr/(1-pr)
+  const posterior = po*evidenceLR/(1+po*evidenceLR)
+  return {prior:pr,posterior}
+})
+```
+
+<details class="bt-code-fold">
+<summary>＋ View Sensitivity Plot Code</summary>
+
+```javascript
+Plot.plot({
+  height:340,
+  x:{domain:[0,1],label:"Prior probability"},
+  y:{domain:[0,1],label:"Posterior probability"},
+  marks:[
+    Plot.line(sensitivityPoints,{
+      x:"prior",y:"posterior",
+      stroke:"#7c3aed",strokeWidth:3
+    }),
+    Plot.dot([{prior:priorBelief,posterior:postP}],{
+      x:"prior",y:"posterior",r:7,fill:"#f59e0b",tip:true
+    }),
+    Plot.line([{prior:0,posterior:0},{prior:1,posterior:1}],{
+      x:"prior",y:"posterior",stroke:"#94a3b8",strokeDasharray:"4,4"
+    })
+  ]
+})
+```
+
+</details>
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  height:340,
+  x:{domain:[0,1],label:"Prior probability"},
+  y:{domain:[0,1],label:"Posterior probability"},
+  marks:[
+    Plot.line(sensitivityPoints,{
+      x:"prior",y:"posterior",
+      stroke:"#7c3aed",strokeWidth:3
+    }),
+    Plot.dot([{prior:priorBelief,posterior:postP}],{
+      x:"prior",y:"posterior",r:7,fill:"#f59e0b",tip:true
+    }),
+    Plot.line([{prior:0,posterior:0},{prior:1,posterior:1}],{
+      x:"prior",y:"posterior",stroke:"#94a3b8",strokeDasharray:"4,4"
+    })
+  ]
+})
+```
+
+If reasonable priors all lead to essentially the same posterior, the conclusion is robust.
+
+If they do not, the honest conclusion is:
+
+> **We do not yet have enough information to be confident.**
+
+# 14. Aubrey Clayton and *Bernoulli's Fallacy*
+
+In *Bernoulli's Fallacy: Statistical Illogic and the Crisis of Modern Science*, mathematician Aubrey Clayton presents a forceful critique of orthodox statistical practice.
+
+His broad argument is that modern statistics inherited a problematic separation between probability and rational inference, and that routine null-hypothesis significance testing can encourage researchers to answer the wrong conditional question.
+
+A central logical warning can be written schematically as:
+
+$$
+P(D\mid H)
+\neq
+P(H\mid D).
+$$
+
+A small p-value concerns the probability of data—or more extreme data—under a specified null model.
+
+It is **not** automatically:
+
+$$
+P(H_0\mid D).
+$$
+
+Clayton argues for restoring prior information and Bayesian reasoning to inference under incomplete information.
+
+# 15. The Strongest Version of the Frequentist Reply
+
+A fair comparison should not caricature frequentist statistics.
+
+A careful frequentist can respond:
+
+- p-values are not supposed to be posterior probabilities;
+- confidence intervals have precise repeated-sampling guarantees;
+- likelihood methods can be highly informative;
+- preregistration and well-designed experiments reduce researcher flexibility;
+- frequentist error control can be crucial in regulated decisions;
+- objective or weakly informative priors are themselves modeling choices;
+- a badly chosen Bayesian model can produce a badly wrong posterior.
+
+The philosophical disagreement is therefore deeper than:
+
+```text
+Bayesian = correct
+Frequentist = incorrect
+```
+
+It concerns **what probability is allowed to mean** and **what inferential statement we want to make**.
+
+# 16. The Conditional-Reversal Trap
+
+This mistake appears everywhere.
+
+Medical testing:
+
+$$
+P(+\mid disease)
+\neq
+P(disease\mid +).
+$$
+
+Fraud:
+
+$$
+P(alert\mid fraud)
+\neq
+P(fraud\mid alert).
+$$
+
+Scientific testing:
+
+$$
+P(data\mid H_0)
+\neq
+P(H_0\mid data).
+$$
+
+Security:
+
+$$
+P(anomaly\mid attack)
+\neq
+P(attack\mid anomaly).
+$$
+
+Bayes' theorem is the mathematical bridge between these reversed conditionals.
+
+# 17. Corporate Case: Launching with Almost No Data
+
+Imagine a company launches a new subscription tier.
+
+After only 40 users:
+
+- 15 convert;
+- historical comparable launches converted around 25–35%.
+
+A purely raw estimate is:
+
+$$
+15/40=37.5\%.
+$$
+
+But 40 users are noisy.
+
+A Bayesian model can combine historical knowledge with the new evidence and produce a posterior distribution rather than pretending the early percentage is precise.
+
+This is useful for:
+
+- staged product launches;
+- pricing experiments;
+- regional rollouts;
+- new-market entry;
+- early churn estimates;
+- low-volume enterprise funnels.
+
+# 18. Corporate Case: Fraud and Rare Events
+
+Fraud systems face a base-rate problem.
+
+Even a detector with excellent sensitivity can create many false positives when fraud is rare.
+
+Bayesian thinking forces the modeler to ask:
+
+$$
+P(fraud\mid evidence),
+$$
+
+not merely:
+
+$$
+P(evidence\mid fraud).
+$$
+
+It naturally connects:
+
+```text
+base rate
+  +
+evidence strength
+  +
+cost of false positive / false negative
+  ↓
+posterior risk
+  ↓
+decision
+```
+
+# 19. Corporate Case: Hierarchical Learning
+
+Suppose a company operates in 200 markets.
+
+Some markets have millions of observations.
+
+Others have only a few hundred.
+
+Estimating each market independently creates unstable estimates in small markets.
+
+Pooling everything ignores genuine local differences.
+
+Hierarchical Bayesian models offer a middle path:
+
+$$
+\theta_j\sim N(\mu,\tau^2)
+$$
+
+for market $j$.
+
+Each market learns from:
+
+- its own data;
+- the population of markets.
+
+This creates **partial pooling**.
+
+Sparse groups borrow strength without being forced to be identical.
+
+# 20. Visualize Partial Pooling
+
+### Data Simulator
+
+<details class="bt-code-fold">
+<summary>＋ View Data Simulator</summary>
+
+```python
+import numpy as np
+import pandas as pd
+
+rng=np.random.default_rng(81)
+
+markets=18
+n=rng.integers(8,350,markets)
+true_rate=rng.normal(.30,.055,markets).clip(.12,.48)
+success=rng.binomial(n,true_rate)
+
+raw=success/n
+
+global_rate=success.sum()/n.sum()
+prior_strength=60
+
+shrunk=(success+prior_strength*global_rate)/(n+prior_strength)
+
+pool=pd.DataFrame({
+    "market":[f"M{i+1}" for i in range(markets)],
+    "n":n,
+    "raw_rate":raw,
+    "partial_pool":shrunk,
+    "global_rate":global_rate
+}).sort_values("n")
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
+import numpy as np
+import pandas as pd
+
+rng=np.random.default_rng(81)
+
+markets=18
+n=rng.integers(8,350,markets)
+true_rate=rng.normal(.30,.055,markets).clip(.12,.48)
+success=rng.binomial(n,true_rate)
+
+raw=success/n
+
+global_rate=success.sum()/n.sum()
+prior_strength=60
+
+shrunk=(success+prior_strength*global_rate)/(n+prior_strength)
+
+pool=pd.DataFrame({
+    "market":[f"M{i+1}" for i in range(markets)],
+    "n":n,
+    "raw_rate":raw,
+    "partial_pool":shrunk,
+    "global_rate":global_rate
+}).sort_values("n")
+```
+
+<details class="bt-code-fold">
+<summary>＋ View Plot Code</summary>
+
+```python
+import plotly.graph_objects as go
+
+fig=go.Figure()
+
+for _,r in pool.iterrows():
+    fig.add_trace(go.Scatter(
+        x=[r["raw_rate"],r["partial_pool"]],
+        y=[r["market"],r["market"]],
+        mode="lines+markers",
+        showlegend=False,
+        hovertemplate=(
+            f'{r["market"]}<br>'
+            f'n={r["n"]}<br>'
+            'rate=%{x:.3f}<extra></extra>'
+        )
+    ))
+
+fig.add_vline(
+    x=global_rate,
+    line_dash="dash",
+    annotation_text="overall rate"
+)
+
+fig.show()
+```
+
+</details>
+
+```{python}
+#| echo: false
+#| warning: false
+import plotly.graph_objects as go
+
+fig=go.Figure()
+
+for _,r in pool.iterrows():
+    fig.add_trace(go.Scatter(
+        x=[r["raw_rate"],r["partial_pool"]],
+        y=[r["market"],r["market"]],
+        mode="lines+markers",
+        showlegend=False,
+        hovertemplate=(
+            f'{r["market"]}<br>'
+            f'n={r["n"]}<br>'
+            'rate=%{x:.3f}<extra></extra>'
+        )
+    ))
+
+fig.add_vline(
+    x=global_rate,
+    line_dash="dash",
+    annotation_text="overall rate"
+)
+
+fig.update_layout(
+    title="Partial Pooling: Small Markets Shrink More, Large Markets Less",
+    xaxis_title="Estimated conversion rate",
+    yaxis_title="Market",
+    height=570
+)
+fig.show()
+```
+
+Small-sample markets move more toward the shared population information.
+
+Large markets retain more of their local estimate.
+
+This is one of the most practically important Bayesian ideas at corporate scale.
+
+# 21. Decision Theory: Prediction Is Not the Decision
+
+Suppose two actions are available:
+
+$$
+a_1=\text{launch}
+$$
+
+$$
+a_0=\text{do not launch}.
+$$
+
+Bayesian inference gives uncertainty about outcomes.
+
+Decision theory adds utility:
+
+$$
+\boxed{
+a^*
+=
+\arg\max_a
+E[U(a,\theta)\mid D]
+}
+$$
+
+The best action is the one with the highest **posterior expected utility**.
+
+That matters because:
+
+> The most probable hypothesis is not automatically the best business action.
+
+A 20% risk may be acceptable for a reversible UI experiment and unacceptable for aircraft safety.
+
+# 22. Interactive Decision Boundary
+
+Suppose launching earns \$1M if a hypothesis is true but loses \$300k if false.
+
+<details class="bt-code-fold">
+<summary>＋ View Decision Code</summary>
+
+```javascript
+viewof decisionPosterior = Inputs.range([0,1], {
+  value:.55,step:.01,label:"Posterior P(success)"
+})
+
+viewof upside = Inputs.range([100,2000], {
+  value:1000,step:50,label:"Upside if successful ($000)"
+})
+
+viewof downside = Inputs.range([50,1500], {
+  value:300,step:50,label:"Loss if unsuccessful ($000)"
+})
+
+expectedLaunch =
+  decisionPosterior*upside
+  -(1-decisionPosterior)*downside
+
+breakEven = downside/(upside+downside)
+```
+
+</details>
+
+```{ojs}
+//| echo: false
+viewof decisionPosterior = Inputs.range([0,1], {
+  value:.55,step:.01,label:"Posterior P(success)"
+})
+
+viewof upside = Inputs.range([100,2000], {
+  value:1000,step:50,label:"Upside if successful ($000)"
+})
+
+viewof downside = Inputs.range([50,1500], {
+  value:300,step:50,label:"Loss if unsuccessful ($000)"
+})
+
+expectedLaunch =
+  decisionPosterior*upside
+  -(1-decisionPosterior)*downside
+
+breakEven = downside/(upside+downside)
+
+html`<div style="padding:1rem;border-radius:16px;background:${expectedLaunch>=0 ? '#ecfdf5' : '#fff1f2'}">
+<div>Posterior success probability: <b>${(100*decisionPosterior).toFixed(0)}%</b></div>
+<div>Break-even probability: <b>${(100*breakEven).toFixed(1)}%</b></div>
+<div style="font-size:1.55rem;font-weight:800;margin-top:.35rem">
+${expectedLaunch>=0 ? '✓ Launch has positive expected value' : '✕ Do not launch under these utilities'}
+</div>
+</div>`
+```
+
+Probability alone does not choose the action.
+
+Probability + consequences does.
+
+# 23. Why Bayesian Thinking Is a Frontier Philosophy
+
+“Frontier” does not mean that Bayesian statistics is new—its roots are centuries old.
+
+The frontier is that modern computation has made previously difficult Bayesian models operational at scale.
+
+Today we can combine:
+
+- hierarchical models;
+- probabilistic programming;
+- MCMC;
+- variational inference;
+- Bayesian optimization;
+- state-space models;
+- sequential experimentation;
+- causal models;
+- uncertainty-aware ML;
+- decision theory.
+
+This matters in environments where the question is not merely:
+
+> “What parameter estimate best fits the historical data?”
+
+but:
+
+> **“Given everything known now, what uncertainty remains, what will we learn next, and what action should we take?”**
+
+# 24. Modern Frontiers
+
+<div class="bt-grid">
+<div class="bt-card"><b>🧪 Adaptive experiments</b><br>Update treatment or product beliefs continuously as observations arrive.</div>
+<div class="bt-card"><b>🏢 Hierarchical enterprise analytics</b><br>Borrow strength across stores, countries, products or customers.</div>
+<div class="bt-card"><b>🤖 Bayesian optimization</b><br>Choose expensive experiments intelligently using uncertainty.</div>
+<div class="bt-card"><b>🛡 Rare-event risk</b><br>Combine sparse observations with engineering/domain information.</div>
+<div class="bt-card"><b>📈 Forecasting</b><br>Propagate parameter and future uncertainty rather than returning one line.</div>
+<div class="bt-card"><b>🧬 Scientific inference</b><br>Compare models and update uncertain mechanisms as evidence accumulates.</div>
+</div>
+
+# 25. Where Bayesian Thinking Can Go Wrong
+
+Bayesian coherence does not guarantee real-world truth.
+
+A posterior can be wrong because:
+
+- the likelihood is misspecified;
+- important variables are omitted;
+- the prior is inappropriate;
+- the data are biased;
+- selection effects are ignored;
+- causal assumptions are wrong;
+- computation has not converged;
+- the decision utility is badly specified.
+
+<div class="bt-paper">
+<div class="label">✎ The discipline</div>
+
+A posterior is not “the truth after data.”
+
+It is:
+
+<strong>the uncertainty implied by this prior + this likelihood + these data + these modeling assumptions.</strong>
+
+Bayesian transparency is powerful precisely because those ingredients can be inspected.
+</div>
+
+# 26. Bayesian vs Frequentist: The Productive Contrast
+
+<div class="bt-duel">
+<div class="bt-freq">
+
+### Frequentist strength
+
+Excellent tools for procedures with controlled long-run error rates.
+
+Especially natural when:
+
+- repeated sampling is meaningful;
+- standardized decision rules are needed;
+- regulatory error guarantees matter;
+- priors are difficult to justify.
+
+</div>
+<div class="bt-bayes">
+
+### Bayesian strength
+
+Direct probability statements about unknown quantities conditional on a model.
+
+Especially natural when:
+
+- prior information exists;
+- data arrive sequentially;
+- samples are sparse;
+- hierarchical sharing matters;
+- decisions depend on posterior uncertainty.
+
+</div>
+</div>
+
+The strongest statistical practice often begins by asking:
+
+> **What inferential statement do we actually need?**
+
+Then choose the framework and model that can legitimately produce it.
+
+# 27. A Compact Philosophy of Rational Updating
+
+Bayesian thinking can be summarized in six moves:
+
+```text
+1. State what is uncertain.
+2. Represent what is known before the new data.
+3. Specify what observations each hypothesis predicts.
+4. Observe evidence.
+5. Update—not reset—uncertainty.
+6. Choose actions using posterior uncertainty and consequences.
+```
+
+That is why Bayesian reasoning feels close to rational learning.
+
+The past is not discarded every time a new observation arrives.
+
+Nor is the past allowed to overpower overwhelming new evidence.
+
+# 28. The MLStation Mental Model
+
+<div class="bt-hero">
+<div class="bt-kicker">From statistics to reasoning</div>
+<div class="bt-big">Bayesian inference is not merely a formula for reversing conditional probability.</div>
+
+It is a framework for asking:
+
+**What did I know?**
+
+**What did I observe?**
+
+**How diagnostic was that observation?**
+
+**What should I believe now?**
+
+**How uncertain am I?**
+
+**What action has the best consequences under that uncertainty?**
+</div>
+
+# Summary
+
+Bayesian thinking treats probability as a language for uncertainty under incomplete information.
+
+Its central update is:
+
+$$
+\boxed{
+P(H\mid D)
+\propto
+P(D\mid H)P(H)
+}
+$$
+
+and in odds form:
+
+$$
+\boxed{
+\text{Posterior odds}
+=
+\text{Prior odds}
+\times
+\text{Bayes factor}.
+}
+$$
+
+The larger lessons are:
+
+- inference begins before the new dataset—with assumptions and existing information;
+- new evidence should update uncertainty rather than erase previous knowledge;
+- zero observed rare events do not imply zero risk;
+- frequentist and Bayesian statements often answer different probability questions;
+- a p-value is not a posterior probability of a hypothesis;
+- priors should be defensible and sensitivity-tested;
+- hierarchical Bayesian models can stabilize sparse corporate segments through partial pooling;
+- Bayesian inference connects naturally to sequential learning and decision theory;
+- human cognition provides an illuminating analogy, but people are not literally ideal Bayesian reasoners;
+- modern computation has turned Bayesian ideas into practical tools for experimentation, risk, forecasting, optimization and uncertainty-aware AI;
+- every posterior remains conditional on its model, prior and data.
+
+The deepest Bayesian habit is simple:
+
+> **When evidence arrives, ask not only whether it is surprising. Ask how much it should change what was reasonable to believe before.**
+
+**Next:** *Bayesian Decision Theory — From Posterior Probability to Action*
