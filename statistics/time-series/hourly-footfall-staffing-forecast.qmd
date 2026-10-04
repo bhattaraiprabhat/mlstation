@@ -9,6 +9,46 @@ code-fold: true
 code-summary: "Show the code"
 ---
 
+<style>
+.ts-intuition{
+  padding:.9rem 1rem;margin:1rem 0;border-radius:16px;
+  background:linear-gradient(135deg,#eef2ff,#f8fafc);
+  border:1px solid #c7d2fe
+}
+.ts-symbols{
+  padding:.85rem 1rem;margin:.9rem 0;border-left:4px solid #6366f1;
+  background:#f8fafc;border-radius:0 12px 12px 0
+}
+.ts-symbols code{font-size:.9em}
+.ts-compare{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:.75rem;margin:1rem 0
+}
+.ts-compare>div{
+  padding:.9rem 1rem;border:1px solid #e5e7eb;border-radius:15px;background:#fff
+}
+.shipped-zone{
+  margin:2rem -.6rem 1.5rem;padding:1.35rem 1.25rem 1.5rem;
+  border-radius:22px;border:1px solid #334155;
+  background:
+    radial-gradient(circle at 95% 0%,rgba(56,189,248,.13),transparent 28%),
+    linear-gradient(180deg,#0f172a,#111827);
+  color:#e5e7eb;box-shadow:0 16px 40px rgba(15,23,42,.18)
+}
+.shipped-zone h2,.shipped-zone h3{color:#f8fafc}
+.shipped-zone a{color:#7dd3fc}
+.shipped-zone code{color:#e0e7ff}
+.shipped-zone table{background:#f8fafc;color:#111827}
+.shipped-zone .callout{color:#111827}
+.shipped-badge{
+  display:inline-block;padding:.25rem .65rem;border-radius:999px;
+  background:#0ea5e9;color:white;font-size:.76rem;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:.45rem
+}
+@media(max-width:760px){.shipped-zone{margin-left:0;margin-right:0}}
+</style>
+
+
 Every evening at 18:00, the manager of a mid-sized grocery store publishes tomorrow's shift plan. Put too few people on the tills and queues grow, baskets are abandoned and loyal customers drift away. Put too many on and the store pays for idle hours. The whole decision rests on one number per hour: **how many customers will walk in?**
 
 That makes it a **time series forecasting** problem with money attached. In this article we solve it end to end: from the business question, through the math of three forecasting models, to a saved model that a scheduling app loads and runs. 🚀
@@ -128,8 +168,8 @@ simDay = {
     y: {label: "↑ Customers", domain: [0, Math.max(80, d3.max(friday, d => d.arrivals) + 10)]},
     color: {legend: true, domain: ["Arrivals", "Waiting at end of hour"], range: [ms.indigo, ms.rose]},
     marks: [
-      Plot.barY(shown, {x: "hour", y: "arrivals", fill: () => "Arrivals", rx: 3, inset: 4}),
-      Plot.barY(shown, {x: "hour", y: "queue", fill: () => "Waiting at end of hour", rx: 3, inset: 12}),
+      Plot.barY(shown, {x: "hour", y: "arrivals", fill: () => "Arrivals", rx: 3, inset: 4, title: d => `${d.hour}:00\nArrivals: ${d.arrivals}`}),
+      Plot.barY(shown, {x: "hour", y: "queue", fill: () => "Waiting at end of hour", rx: 3, inset: 12, title: d => `${d.hour}:00\nWaiting after service: ${d.queue}\nWalked away: ${d.walk}`}),
       Plot.ruleY([cashiers * 15], {stroke: ms.amber, strokeWidth: 2.5, strokeDasharray: "6,4"}),
       Plot.text([{x: 8, y: cashiers * 15}], {x: "x", y: "y", text: () => `Till capacity: ${cashiers * 15}/hour`, dy: -8, fill: ms.amber, fontWeight: 700, textAnchor: "start"}),
       Plot.ruleY([0])
@@ -183,10 +223,10 @@ A forecaster's first job is to understand the **structure** of the series. Use t
 daily = df.groupby(df.ts.dt.date).agg(y=("y", "sum"), holiday=("holiday", "max")).reset_index()
 daily["ts"] = pd.to_datetime(daily.ts); daily["ma7"] = daily.y.rolling(7, center=True).mean()
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=daily.ts, y=daily.y, name="Daily customers", line=dict(color=COLORS["indigo"], width=1), opacity=.55))
-fig.add_trace(go.Scatter(x=daily.ts, y=daily.ma7, name="7-day average", line=dict(color=COLORS["rose"], width=2.5)))
+fig.add_trace(go.Scatter(x=daily.ts, y=daily.y, name="Daily customers", line=dict(color=COLORS["indigo"], width=1), opacity=.55, hovertemplate="%{x|%a %d %b %Y}<br>Daily customers: %{y:.0f}<extra></extra>"))
+fig.add_trace(go.Scatter(x=daily.ts, y=daily.ma7, name="7-day average", line=dict(color=COLORS["rose"], width=2.5), hovertemplate="%{x|%a %d %b %Y}<br>7-day average: %{y:.1f}<extra></extra>"))
 hd = daily[daily.holiday == 1]
-fig.add_trace(go.Scatter(x=hd.ts, y=hd.y, mode="markers", name="Public holiday", marker=dict(color=COLORS["amber"], size=9, symbol="diamond")))
+fig.add_trace(go.Scatter(x=hd.ts, y=hd.y, mode="markers", name="Public holiday", marker=dict(color=COLORS["amber"], size=9, symbol="diamond"), hovertemplate="%{x|%a %d %b %Y}<br>Holiday traffic: %{y:.0f}<extra></extra>"))
 fig.add_vline(x=pd.Timestamp("2025-03-15").timestamp()*1000, line=dict(color=COLORS["slate"], dash="dot"))
 fig.add_annotation(x=pd.Timestamp("2025-03-15"), y=daily.y.max(), text="Competitor opens", showarrow=False, yshift=10, font=dict(color=COLORS["slate"]))
 fig.update_layout(height=400, margin=dict(l=60, r=20, t=30, b=40), yaxis_title="Customers per day",
@@ -224,7 +264,7 @@ pre = 100*(df[df.pre_holiday == 1].y.mean()/base[base.pre_holiday == 0].y.mean()
 eff.loc[len(eff)] = ["🎄 Day before holiday", pre]
 eff = eff.sort_values("lift")
 fig = go.Figure(go.Bar(x=eff.lift, y=eff.driver, orientation="h", marker_color=[COLORS["rose"] if v < 0 else COLORS["teal"] for v in eff.lift],
-                       text=[f"{v:+.0f}%" for v in eff.lift], textposition="outside", cliponaxis=False))
+                       text=[f"{v:+.0f}%" for v in eff.lift], textposition="outside", cliponaxis=False, hovertemplate="%{y}<br>Raw average lift: %{x:+.1f}%<extra></extra>"))
 fig.update_layout(height=320, margin=dict(l=170, r=50, t=20, b=40), xaxis_title="Change in average customers per hour (%)",
                   xaxis=dict(range=[min(eff.lift.min(), 0) - 12, eff.lift.max() + 12]))
 fig.show(config=PLOTLY_CONFIG)
@@ -237,14 +277,53 @@ The competitor bar mixes two things: the competitor effect and the store's own g
 
 ### 🔁 Autocorrelation: the fingerprint of a time series
 
-The **autocorrelation function** (ACF) measures how similar the series is to itself $k$ steps earlier:
+A time series has **memory** when knowing the past helps us anticipate the present. Autocorrelation measures that memory.
+
+Start with one concrete question:
+
+> If the store was unusually busy at 18:00 yesterday, is 18:00 today also likely to be unusually busy?
+
+Let $y_t$ mean the number of customers in the current opening hour $t$. Then $y_{t-k}$ is the observation **$k$ opening-hours earlier**. The autocorrelation at lag $k$ is
 
 $$
-\rho_k = \frac{\operatorname{Cov}(y_t, y_{t-k})}{\operatorname{Var}(y_t)}, \qquad
-\hat\rho_k = \frac{\sum_{t=k+1}^{n}(y_t-\bar y)(y_{t-k}-\bar y)}{\sum_{t=1}^{n}(y_t-\bar y)^2}.
+\rho_k
+=
+\operatorname{Corr}(y_t,y_{t-k})
+=
+\frac{\operatorname{Cov}(y_t,y_{t-k})}
+{\sqrt{\operatorname{Var}(y_t)\operatorname{Var}(y_{t-k})}}.
 $$
 
-With 16 opening hours per day, spikes at lag 16 (same hour yesterday) and lag 112 (same hour last week) reveal the daily and weekly seasonality.
+For a stable series, the two variances are approximately the same, giving the familiar simplified form
+
+$$
+\rho_k \approx
+\frac{\operatorname{Cov}(y_t,y_{t-k})}{\operatorname{Var}(y_t)}.
+$$
+
+The sample ACF replaces the unknown population quantities with what we can calculate from the observed data:
+
+$$
+\hat\rho_k =
+\frac{\sum_{t=k+1}^{n}(y_t-\bar y)(y_{t-k}-\bar y)}
+{\sum_{t=1}^{n}(y_t-\bar y)^2}.
+$$
+
+<div class="ts-symbols">
+
+**Read the symbols before the chart**
+
+- $t$: the current time index.
+- $k$: the lag — how far backward we look.
+- $y_t$: customers observed at time $t$.
+- $\bar y$: average hourly customer count.
+- $n$: number of observations.
+- $\rho_k$: true autocorrelation at lag $k$; $\hat\rho_k$ is its estimate from our data.
+- $\rho_k\approx 1$: strong positive memory; $\rho_k\approx0$: little linear memory; $\rho_k<0$: high values tend to be followed by low values at that lag.
+
+</div>
+
+FreshCart is open for **16 hourly slots per day**. Therefore lag 16 compares an hour with the **same store hour yesterday**, while lag 112 = $16\times7$ compares it with the **same hour last week**. Peaks there are the statistical fingerprint of daily and weekly repetition.
 
 ```{python}
 #| label: fig-acf
@@ -264,16 +343,114 @@ fig.show(config=PLOTLY_CONFIG)
 
 ## ⚠️ 3. Why ordinary regression is the wrong tool
 
-A natural first idea is: "regress customers on hour, day and the drivers, and split the rows randomly into train and test." This fails for four reasons, each of which follows from the math.
+The title needs one important qualification:
 
-1. **The errors are not independent.** Ordinary least squares assumes $\operatorname{Cov}(\varepsilon_t, \varepsilon_s) = 0$. In a time series a busy hour is usually followed by another busy hour, so $\operatorname{Cov}(\varepsilon_t,\varepsilon_{t-1}) > 0$. The estimates $\hat\beta = (X^\top X)^{-1}X^\top y$ stay unbiased, but their true variance becomes
-   $$\operatorname{Var}(\hat\beta) = (X^\top X)^{-1} X^\top \Omega X (X^\top X)^{-1} \neq \sigma^2 (X^\top X)^{-1},$$
-   so standard errors, p-values and prediction intervals are **too optimistic**. It also throws away information: the last few hours tell you something about the next one.
-2. **Random splits leak the future.** With a random split, the model trains on Tuesday and Thursday and is "tested" on Wednesday. It interpolates between known neighbours, which it can never do in production, where tomorrow is always beyond the edge of the data.
-3. **Counts are not Gaussian.** Arrivals are non-negative integers whose variance grows with the mean. A linear model on raw counts can predict negative customers at 07:00 and gives intervals of the same width at 07:00 and 18:00.
-4. **Trends and breaks.** A straight time trend extrapolates forever. A competitor opening is a level shift that an i.i.d. model cannot adapt to.
+> **Linear regression itself is not forbidden for time series.**  
+> The problem is using an ordinary regression *as if rows were independent, exchangeable observations* and then validating it with a random split.
 
-The checks below make problems 1 and 2 concrete.
+Suppose we begin with a perfectly reasonable model:
+
+$$
+y_t = \beta_0+\beta_1\,\text{hour}_t+\beta_2\,\text{promo}_t+\cdots+\varepsilon_t.
+$$
+
+Here:
+
+- $y_t$ is customer traffic in hour $t$;
+- $\beta_0$ is the baseline level;
+- each $\beta_j$ describes how a feature changes the expected traffic;
+- $\varepsilon_t$ is everything the features did not explain — the **residual** or surprise.
+
+If those surprises were independent and had roughly constant variance, ordinary regression could work well. FreshCart violates those conditions.
+
+<div class="ts-compare">
+<div>
+
+**Ordinary tabular regression thinks**
+
+Row 101 and row 102 are simply two observations.
+
+Once their feature columns are known, the leftover errors are unrelated.
+
+</div>
+<div>
+
+**A time series says**
+
+Row 102 happened **after** row 101.
+
+A surprise at 17:00 can persist into 18:00, and the same hour yesterday or last week can still carry information.
+
+</div>
+</div>
+
+### Why this matters — four concrete failure modes
+
+**1. The residuals remember the past.**  
+Ordinary least squares commonly uses the working assumption
+
+$$
+\operatorname{Cov}(\varepsilon_t,\varepsilon_s)=0
+\qquad(t\neq s),
+$$
+
+meaning the unexplained part of one hour tells us nothing about another. But if an unrecorded local event makes 17:00 unusually busy, 18:00 may also be busy. Then
+
+$$
+\operatorname{Cov}(\varepsilon_t,\varepsilon_{t-1})>0.
+$$
+
+The coefficient estimate can still be useful, but the familiar OLS uncertainty formula
+
+$$
+\operatorname{Var}(\hat{\boldsymbol\beta})
+=
+\sigma^2(X^\top X)^{-1}
+$$
+
+is no longer the correct variance formula. With correlated errors it becomes
+
+$$
+\operatorname{Var}(\hat{\boldsymbol\beta})
+=
+(X^\top X)^{-1}X^\top\Omega X(X^\top X)^{-1},
+$$
+
+where $\Omega$ records the covariance among residuals. The practical consequence is more important than memorizing the matrix: **ordinary standard errors and prediction intervals can look more confident than they should, and we are throwing away useful temporal memory.**
+
+**2. Random train/test splitting lets the future surround the test row.**  
+In ordinary machine learning, random splitting is often excellent. In forecasting it changes the task. The model might train on Tuesday and Thursday while Wednesday is in the test set. That asks, “Can I reconstruct a missing point between known points?” Production asks, “Can I predict a point beyond everything I have seen?”
+
+<div class="ts-intuition">
+
+**Production rule:** if the forecast is created Tuesday at 18:00, every feature used for Wednesday must already be available Tuesday at 18:00.
+
+This is why a centered moving average is dangerous: it can quietly include Wednesday information while pretending to be a Tuesday feature.
+
+</div>
+
+**3. Customer arrivals are counts.**  
+Hourly arrivals are non-negative integers. Busy hours also tend to have more variability than quiet hours. A Gaussian linear model on raw counts does not naturally enforce either fact. It can produce negative predictions and constant-width uncertainty bands. We can repair this with transformations, Poisson/count models, or other suitable likelihoods.
+
+**4. Time can change the data-generating process.**  
+Traffic grows, seasons repeat, and structural breaks happen. When a competitor opens, the relationship before March may not be identical to the relationship afterward. A model must represent those changes or be retrained/adapted.
+
+So the lesson is not “do not use regression.” It is:
+
+$$
+\boxed{
+\text{Respect time dependence}
++
+\text{respect forecast availability}
++
+\text{use an appropriate response model}
++
+\text{validate forward in time}.
+}
+$$
+
+The next diagnostic makes the first two problems visible.
+
 
 ```{python}
 #| label: naive-regression
@@ -324,7 +501,27 @@ fig.update_layout(height=360, margin=dict(l=60, r=20, t=50, b=50))
 fig.show(config=PLOTLY_CONFIG)
 ```
 
-The Durbin–Watson statistic is $d = \sum_t (e_t - e_{t-1})^2 / \sum_t e_t^2 \approx 2(1-\hat\rho_1)$. Here $d$ = `{python} f"{dw:.2f}"`, far below 2, which signals strong positive autocorrelation. On the right, the random split alone already flatters the model (`{python} f"{rand_mae:.2f}"` vs `{python} f"{time_mae:.2f}"`). Add an innocent-looking "smoothed traffic" column, a centred 3-hour average that secretly contains the next hour, and the random split reports an MAE of `{python} f"{leak_mae:.2f}"`, about `{python} f"{100*(1-leak_mae/time_mae):.0f}"`% better than the model can ever do in production. A time-ordered test exposes the leak at once, because the future column does not exist yet. A planner trusting the leaky number would understaff.
+### How to read the diagnostic
+
+The **Durbin–Watson statistic**
+
+$$
+d=
+\frac{\sum_t(e_t-e_{t-1})^2}{\sum_t e_t^2}
+\approx2(1-\hat\rho_1)
+$$
+
+compresses lag-1 residual dependence into one number. Here $e_t$ is the residual at hour $t$, and $\hat\rho_1$ is residual autocorrelation one hour apart.
+
+- $d\approx2$: little lag-1 autocorrelation.
+- $d<2$: positive autocorrelation — positive errors tend to follow positive errors.
+- $d>2$: negative autocorrelation.
+
+For FreshCart, $d=$ `{python} f"{dw:.2f}"`, so the naive regression leaves strong temporal structure unexplained.
+
+The right panel answers a different question: **did our validation imitate production?** Random splitting reports MAE `{python} f"{rand_mae:.2f}"`, while the honest past→future test reports `{python} f"{time_mae:.2f}"`. The centered “smoothed traffic” feature looks even better under random CV (`{python} f"{leak_mae:.2f}"`) because it secretly contains future information.
+
+That is **data leakage**: information unavailable at forecast time enters training or evaluation and makes the model look better than it can be after deployment.
 
 ::: {.callout-important}
 ## ✅ The fix is not "never use regression"
@@ -335,38 +532,107 @@ All three models below **are** regressions in a broad sense. What changes is tha
 
 We give all three models the same information: the calendar, tomorrow's weather forecast, promotions, events, paydays and the competitor flag. They differ in how they turn it into a forecast. Each model works on $z_t = \log(1+y_t)$ or uses a count loss, which handles the "variance grows with the mean" problem.
 
+::: {.callout-tip}
+## 🧭 One notation rule for this section
+Whenever you see a subscript $t$, read it as **“at time $t$.”** A hat, as in $\hat y_t$, means **a model estimate or forecast**. Bold symbols such as $\mathbf{x}_t$ are vectors (several feature values together), while ordinary symbols such as $y_t$ are single numbers.
+:::
+
+
 ::: {.panel-tabset}
 ## 📐 ARIMAX
 
-**Regression with ARIMA errors** (often called ARIMAX or dynamic regression) splits the series into a part explained by known drivers and a part that remembers recent surprises:
+Think of ARIMAX as **regression + memory**.
+
+First explain the predictable part using tomorrow's known features:
 
 $$
-z_t = \mathbf{x}_t^\top \boldsymbol\beta + \eta_t,
+z_t=\mathbf{x}_t^\top\boldsymbol\beta+\eta_t,
 \qquad
-\phi(B)\,\Phi(B^{s})\,(1-B)^d \eta_t = \theta(B)\,\Theta(B^{s})\,\varepsilon_t,
-\quad \varepsilon_t \sim \mathcal{N}(0,\sigma^2).
+z_t=\log(1+y_t).
 $$
 
-$B$ is the backshift operator ($B\eta_t = \eta_{t-1}$), $s = 16$ is one day of opening hours, $\phi,\theta$ are short-term polynomials and $\Phi,\Theta$ seasonal ones. Our data needs only
+<div class="ts-symbols">
+
+- $y_t$: customers in hour $t$.
+- $z_t=\log(1+y_t)$: a transformed count; the log compresses large peaks and guarantees positive forecasts after transforming back.
+- $\mathbf{x}_t$: the feature vector known for hour $t$ — hour, weekday, weather forecast, promotion, holiday, event, etc.
+- $\boldsymbol\beta$: learned feature effects.
+- $\eta_t$: the remaining time-dependent surprise after those features are explained.
+
+</div>
+
+Now give the surprise memory. For this store, the useful version is deliberately simple:
 
 $$
-\eta_t = \phi_1 \eta_{t-1} + \phi_{16}\,\eta_{t-16} + \varepsilon_t .
+\boxed{
+\eta_t
+=
+\phi_1\eta_{t-1}
++
+\phi_{16}\eta_{t-16}
++
+\varepsilon_t
+}
 $$
 
-**Features $\mathbf{x}_t$:** hour × weekend dummies, day-of-week, yearly Fourier terms, trend, temperature and its square, rain, promotion, event, payday, holiday, competitor, plus a few interactions spotted in the exploration (promo on weekends and evenings, heat in the afternoon and evening).
+Read it in English:
 
-**Estimation.** We use two-step feasible generalised least squares: fit $\boldsymbol\beta$ by OLS, estimate $\phi$ from the residuals, filter both sides with $\phi(B)$ and refit. Libraries such as `statsmodels` maximise the exact Gaussian likelihood instead.
+> today's unexplained traffic = some of the previous-hour surprise + some of the same-hour-yesterday surprise + a new random shock.
 
-**Forecast and uncertainty.** The $h$-step forecast of $\eta$ decays towards zero, and its variance grows:
+$\phi_1$ controls one-hour memory, $\phi_{16}$ controls same-hour-yesterday memory, and $\varepsilon_t$ is a new unpredictable innovation with standard deviation $\sigma$.
+
+That is the main ARIMAX idea used in this article.
+
+::: {.callout-note collapse="true"}
+## 📐 The general ARIMA notation
+
+Textbooks often compress the same idea into
 
 $$
-\hat\eta_{t+h} = \phi_1\hat\eta_{t+h-1} + \phi_{16}\eta_{t+h-16}, \qquad
-v_h = \phi_1^2 v_{h-1} + \sigma^2 .
+\phi(B)\Phi(B^s)(1-B)^d\eta_t
+=
+\theta(B)\Theta(B^s)\varepsilon_t.
 $$
 
-On the original scale the mean is $\mathbb{E}[1+y] = \exp(\hat z + v_h/2)$ (the log-normal correction), and the $q$-quantile is $\exp(\hat z + z_q\sqrt{v_h}) - 1$.
+Here $B$ is the **backshift operator**: $B\eta_t=\eta_{t-1}$. $s$ is a seasonal period, $d$ is the number of differences, $\phi$ and $\Phi$ describe non-seasonal and seasonal autoregressive memory, while $\theta$ and $\Theta$ describe moving-average error terms.
 
-✅ Interpretable effects, honest intervals, cheap. ⚠️ Interactions must be engineered by hand.
+You do **not** need this compact polynomial notation to follow our FreshCart model; it is included so the implementation connects to standard ARIMA literature.
+:::
+
+**Features $\mathbf{x}_t$.** We include hour × weekend indicators, day of week, smooth yearly seasonality, trend, temperature, rain, promotion, event, payday, holiday and competitor status, plus a few business-motivated interactions.
+
+**How it is fitted.** Conceptually we alternate between two jobs: estimate the feature effects, then estimate how the remaining residuals depend on recent residuals. Production libraries such as `statsmodels` can estimate the full model by maximum likelihood.
+
+**Forecast uncertainty.** For future hour $t+h$, let $\hat\eta_{t+h}$ be the predicted residual and let $v_h$ be its variance. As the horizon $h$ grows, more unknown future shocks can accumulate, so uncertainty usually widens. On the log scale,
+
+$$
+\hat z_{t+h}
+=
+\mathbf{x}_{t+h}^{\top}\hat{\boldsymbol\beta}
++
+\hat\eta_{t+h}.
+$$
+
+Transforming back gives an approximate mean
+
+$$
+E[1+y_{t+h}]
+=
+\exp\!\left(\hat z_{t+h}+\frac{v_h}{2}\right),
+$$
+
+and a forecast quantile
+
+$$
+Q_q(y_{t+h})
+\approx
+\exp\!\left(\hat z_{t+h}+z_q\sqrt{v_h}\right)-1,
+$$
+
+where $q$ is the desired probability level and $z_q$ is the corresponding standard-normal quantile.
+
+**Why use it here?** ✅ Feature effects are interpretable; temporal memory is explicit; uncertainty is inexpensive to compute.  
+**Limitation:** ⚠️ complex interactions usually need to be designed by hand.
 
 ## 📈 Prophet
 
@@ -376,7 +642,21 @@ $$
 z_t = g(t) + s(t) + h(t) + \mathbf{x}_t^\top\boldsymbol\beta + \varepsilon_t .
 $$
 
-**Trend** $g(t)$ is piecewise linear with changepoints $c_1,\dots,c_S$:
+<div class="ts-symbols">
+
+Read this as a sum of components:
+
+- $g(t)$: long-term trend — the slowly changing baseline.
+- $s(t)$: repeating seasonality such as weekly or yearly cycles.
+- $h(t)$: holiday/event effects.
+- $\mathbf{x}_t^\top\boldsymbol\beta$: effects of extra regressors such as rain or promotions.
+- $\varepsilon_t$: unexplained noise.
+
+The symbol $t$ is time; it is not a fitted coefficient.
+
+</div>
+
+**Trend** $g(t)$ is piecewise linear. A **changepoint** $c_j$ is simply a candidate time where the slope is allowed to change. Prophet does not force a bend at every candidate; regularization keeps most changes small:
 
 $$
 g(t) = \big(k + \mathbf{a}(t)^\top\boldsymbol\delta\big)\,t + \big(m + \mathbf{a}(t)^\top\boldsymbol\gamma\big),
@@ -397,16 +677,43 @@ $$
 
 ## 🌲 Gradient boosting
 
-**Gradient-boosted trees** (LightGBM, XGBoost, scikit-learn's `HistGradientBoostingRegressor`) turn forecasting into supervised learning on **lag features**. They have a strong record in forecasting competitions such as M5. The model is an additive ensemble of $M$ small trees:
+**Gradient-boosted trees** (LightGBM, XGBoost, scikit-learn's `HistGradientBoostingRegressor`) turn forecasting into supervised learning by adding **time-safe lag features**.
+
+The beginner's picture is:
+
+```text
+small tree 1 fixes the biggest mistakes
+       ↓
+small tree 2 focuses on what remains
+       ↓
+small tree 3 corrects the remaining pattern
+       ↓
+many small corrections → final forecast
+```
+
+Mathematically the final score is an additive model:
 
 $$
-F_M(\mathbf{x}) = F_0 + \nu\sum_{m=1}^{M} f_m(\mathbf{x}),
-\qquad
-f_m = \arg\min_{f}\sum_t \Big(g_t^{(m)} - f(\mathbf{x}_t)\Big)^2,
-\quad g_t^{(m)} = -\frac{\partial \ell(y_t, F)}{\partial F}\Big|_{F_{m-1}} .
+\boxed{
+F_M(\mathbf{x})
+=
+F_0+\nu\sum_{m=1}^{M}f_m(\mathbf{x})
+}
 $$
 
-Each tree fits the negative gradient of the loss, and $\nu$ is the learning rate. For counts we use the **Poisson deviance**, which models $\log\lambda_t = F(\mathbf{x}_t)$:
+where $F_0$ is the starting prediction, $f_m$ is tree $m$, $M$ is the number of trees and $\nu$ is the **learning rate** controlling how much each new tree is allowed to change the model.
+
+For readers who want the optimization connection, boosting chooses each new tree to approximate the direction that most reduces the current loss:
+
+$$
+g_t^{(m)}
+=
+-\frac{\partial \ell(y_t,F)}{\partial F}\Big|_{F_{m-1}}.
+$$
+
+So $g_t^{(m)}$ is not another observed feature; it is the **negative loss gradient** for training example $t$ at boosting step $m$.
+
+For counts we use the **Poisson deviance**, which models $\log\lambda_t = F(\mathbf{x}_t)$:
 
 $$
 \ell(y,F) = e^{F} - yF .
@@ -556,13 +863,33 @@ mean_model.fit(train[features], train.y)
 
 ### Rolling-origin evaluation
 
-The honest test copies production: **stand at a date, train on everything before it, forecast the next period, move forward, repeat.** This is rolling-origin (or time-series) cross-validation. With origins $o_1 < o_2 < \dots < o_K$:
+The honest test copies production: **stand at a date, train on everything before it, forecast the next period, move forward, repeat.** This is rolling-origin (or time-series) cross-validation.
+
+The animation below is the idea. Each amber block is genuinely in the future relative to its indigo training block.
+
+If we write the average score compactly,
 
 $$
-\text{Score} = \frac{1}{K}\sum_{k=1}^{K} \frac{1}{|T_k|}\sum_{t\in T_k} L\big(y_t, \hat y_{t \mid \mathcal{F}_{t-h}}\big),
+\text{Score}
+=
+\frac{1}{K}
+\sum_{k=1}^{K}
+\frac{1}{|T_k|}
+\sum_{t\in T_k}
+L\!\left(y_t,\hat y_{t\mid\mathcal F_{t-h}}\right),
 $$
 
-where $T_k$ is the test window after $o_k$ and $\hat y_{t\mid\mathcal{F}_{t-h}}$ uses only information available $h$ hours earlier. We use six 28-day folds from July to December 2025, with day-ahead forecasts inside each fold.
+the notation means:
+
+- $K$: number of rolling folds;
+- $T_k$: test timestamps in fold $k$;
+- $|T_k|$: number of forecasted observations in that test window;
+- $L(\cdot)$: the error/loss function, such as absolute error;
+- $y_t$: what actually happened;
+- $\hat y_{t\mid\mathcal F_{t-h}}$: the forecast for time $t$ made using only information $\mathcal F$ that was available at forecast time $t-h$;
+- $h$: forecast horizon.
+
+We use six 28-day folds from July to December 2025 and reproduce the real day-ahead forecasting process inside every fold.
 
 ```{ojs}
 //| echo: false
@@ -604,6 +931,15 @@ cvTick = { while (true) { yield cvState.k; if (!playCV) return; cvState.k = (cvS
 | 👥 **Understaffed hours** | share of hours with fewer cashiers than the actual traffic needed | The business metric |
 
 We skip MAPE: early-morning hours with very few customers make percentage errors explode.
+
+<div class="ts-intuition">
+
+**How to read the table:** MAE answers “how many customers off are we, typically?” MASE answers “are we better than simply copying the same hour last week?” Coverage asks whether our uncertainty band is believable. The staffing metrics ask the question the business actually cares about.
+
+A model can therefore have the smallest MAE and still be a poor staffing model if its upper quantiles are badly calibrated.
+
+</div>
+
 
 ```{python}
 #| label: erlang
@@ -681,7 +1017,7 @@ Markdown("\n".join(lines))
 fig = go.Figure()
 for m, c in zip(MODELS, [COLORS["slate"], COLORS["indigo"], COLORS["amber"], COLORS["teal"]]):
     vals = [np.mean(np.abs(store[m]["mean"][fold_bt == k] - y_bt[fold_bt == k])) for k in range(1, 7)]
-    fig.add_trace(go.Scatter(x=[f"Fold {k}" for k in range(1, 7)], y=vals, name=m, mode="lines+markers", line=dict(color=c, width=3), marker=dict(size=9)))
+    fig.add_trace(go.Scatter(x=[f"Fold {k}" for k in range(1, 7)], y=vals, name=m, mode="lines+markers", line=dict(color=c, width=3), marker=dict(size=9), hovertemplate="%{x}<br>MAE: %{y:.2f} customers/hour<extra>" + m + "</extra>"))
 fig.add_hline(y=oracle_mae, line=dict(dash="dash", color=COLORS["rose"]), annotation_text="Noise floor (true rate known)", annotation_position="bottom right")
 fig.update_layout(height=360, margin=dict(l=60, r=20, t=20, b=40), yaxis_title="MAE (customers per hour)", legend=dict(orientation="h", y=1.12))
 fig.show(config=PLOTLY_CONFIG)
@@ -766,7 +1102,19 @@ print(f"sigma  = {champion.sigma:.3f}  innovation s.d. on the log scale")
 
 ## 👥 7. From forecast to staff: queueing math
 
-A forecast of "42 customers" does not say how many cashiers to schedule. Queueing theory does. Treat the tills as an **M/M/c queue**: arrivals at rate $\lambda$ per hour, each cashier serves $\mu = 60/\bar s$ customers per hour ($\bar s$ = average checkout minutes), and $c$ cashiers. With offered load $a = \lambda/\mu$, the **Erlang C** probability that a customer must wait is
+A forecast of "42 customers" does not say how many cashiers to schedule. Queueing theory translates **demand** into **capacity**.
+
+We approximate the checkout area as an **M/M/c queue**. You do not need queueing theory beforehand; the notation means:
+
+- $\lambda$ (“lambda”): arriving customers per hour;
+- $\bar s$: average checkout time in minutes;
+- $\mu=60/\bar s$: customers one cashier can serve per hour;
+- $c$: number of cashiers working in parallel;
+- $a=\lambda/\mu$: offered workload, measured in cashier-equivalents.
+
+For example, if checkout takes 4 minutes, one cashier can serve $\mu=60/4=15$ customers/hour. If $\lambda=42$, the offered load is $a=42/15=2.8$: fewer than 3 cashiers cannot even keep up on average.
+
+The **Erlang C** formula then estimates the probability that an arriving customer must wait:
 
 $$
 C(c, a) = \frac{\dfrac{a^c}{c!}\dfrac{c}{c-a}}{\displaystyle\sum_{k=0}^{c-1}\frac{a^k}{k!} + \frac{a^c}{c!}\frac{c}{c-a}}, \qquad c > a,
@@ -848,14 +1196,14 @@ planRows = plan.map(r => {
   <div style="font-size:.85rem;opacity:.75;margin:6px 0">${plan_label} · forecast from the ARIMAX model</div>
   ${Plot.plot({...msStyle, height: 260, width: 760, marginLeft: 50,
     x: {label: "Hour →", tickFormat: d => d + ":00"}, y: {label: "↑ Customers per hour", grid: true},
-    marks: [Plot.lineY(planRows, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.5}),
-            Plot.lineY(planRows, {x: "hour", y: "qv", stroke: ms.rose, strokeWidth: 2.5, strokeDasharray: "6,4"}),
+    marks: [Plot.lineY(planRows, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.5, title: d => `${d.hour}:00\nMean forecast: ${d.mean.toFixed(1)}`}),
+            Plot.lineY(planRows, {x: "hour", y: "qv", stroke: ms.rose, strokeWidth: 2.5, strokeDasharray: "6,4", title: d => `${d.hour}:00\nStaffing quantile: ${d.qv.toFixed(1)}\nCashiers: ${d.cash}`}),
             Plot.text(planRows.slice(-1), {x: "hour", y: "qv", text: () => `P${Math.round(qStar * 100)}`, dx: 18, dy: -8, fill: ms.rose, fontWeight: 700}),
             Plot.text(planRows.slice(-1), {x: "hour", y: "mean", text: () => "mean", dx: 20, dy: 8, fill: ms.indigo, fontWeight: 700})]})}
   ${Plot.plot({...msStyle, height: 230, width: 760, marginLeft: 50,
     x: {label: "Hour →", tickFormat: d => d + ":00"}, y: {label: "↑ People on shift", grid: true},
     color: {legend: true, domain: ["Cashiers", "Floor assistants"], range: [ms.teal, ms.amber]},
-    marks: [Plot.barY(long, {x: "hour", y: "n", fill: "role", rx: 2, inset: 2}), Plot.ruleY([0])]})}
+    marks: [Plot.barY(long, {x: "hour", y: "n", fill: "role", rx: 2, inset: 2, title: d => `${d.hour}:00\n${d.role}: ${d.n}`}), Plot.ruleY([0])]})}
   </div>`;
 }
 ```
@@ -912,9 +1260,25 @@ models/
 
 Each release gets a new folder; promoting or rolling back a model is just moving the `production` pointer. The [model versioning article](/deployment/update/model-versioning-rollouts.qmd) covers registries and safe rollouts in more depth.
 
+::: {.shipped-zone}
+<div class="shipped-badge">Production handoff · different role</div>
+
 ## 🚚 9. Shipped: loading the model and forecasting
 
 Now switch roles. You are the developer of FreshCart's scheduling app. You did not train the model; you received `model.json`. Your service must **load it, verify it, build features exactly as specified, and predict**.
+
+
+::: {.callout-note}
+## 🧑‍💻 Role change: training team → serving team
+Everything above this point was about **learning a model**. This section is intentionally styled differently because production inference has a different responsibility.
+
+The serving application should not know how ARIMAX was trained. It should know only the **artifact contract**:
+
+`inputs → feature builder → released parameters → forecast → staffing output`
+
+This separation prevents accidental retraining, hidden notebook state and training-only features from leaking into production.
+:::
+
 
 ```{python}
 #| label: load
@@ -1049,15 +1413,15 @@ conDay = {
     </div>
     ${Plot.plot({...msStyle, height: 280, width: 760, marginLeft: 50,
       x: {label: "Hour →", domain: [7, 22], tickFormat: d => d + ":00"}, y: {label: "↑ Customers per hour", domain: [0, 160], grid: true},
-      marks: [Plot.areaY(fc, {x: "hour", y1: "p10", y2: "p90", fill: ms.indigo, fillOpacity: 0.16, curve: "monotone-x"}),
-              Plot.lineY(fc, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.8, curve: "monotone-x"}),
-              Plot.lineY(fc, {x: "hour", y: "p80", stroke: ms.violet, strokeDasharray: "5,4", curve: "monotone-x"}),
-              hasA ? Plot.dot(fc, {x: "hour", y: "actual", r: 4.5, fill: d => (d.actual >= d.p10 && d.actual <= d.p90) ? ms.teal : ms.rose, stroke: "white"}) : null,
+      marks: [Plot.areaY(fc, {x: "hour", y1: "p10", y2: "p90", fill: ms.indigo, fillOpacity: 0.16, curve: "monotone-x", title: d => `${d.hour}:00\n80% interval: ${d.p10.toFixed(1)}–${d.p90.toFixed(1)}`}),
+              Plot.lineY(fc, {x: "hour", y: "mean", stroke: ms.indigo, strokeWidth: 2.8, curve: "monotone-x", title: d => `${d.hour}:00\nMean forecast: ${d.mean.toFixed(1)}`}),
+              Plot.lineY(fc, {x: "hour", y: "p80", stroke: ms.violet, strokeDasharray: "5,4", curve: "monotone-x", title: d => `${d.hour}:00\nP80 staffing forecast: ${d.p80.toFixed(1)}`}),
+              hasA ? Plot.dot(fc, {x: "hour", y: "actual", r: 4.5, fill: d => (d.actual >= d.p10 && d.actual <= d.p90) ? ms.teal : ms.rose, stroke: "white", title: d => `${d.hour}:00\nActual: ${d.actual}\nForecast: ${d.mean.toFixed(1)}\nError: ${(d.mean-d.actual).toFixed(1)}`}) : null,
               hasA ? Plot.ruleX(fc, {x: "hour", y1: "mean", y2: "actual", stroke: ms.rose, strokeOpacity: 0.5}) : null]})}
     <div style="font-size:.8rem;opacity:.75">Band: 80% interval (P10–P90) · solid: mean · dashed: P80 used for staffing ${hasA ? "· dots: actual (teal inside band, rose outside)" : ""}</div>
     ${Plot.plot({...msStyle, height: 170, width: 760, marginLeft: 50,
       x: {label: null, domain: d3.range(7, 23), tickFormat: d => d + ":00"}, y: {label: "↑ Cashiers", grid: true},
-      marks: [Plot.barY(plan, {x: "hour", y: "plan", fill: ms.teal, fillOpacity: 0.8, rx: 3, inset: 3}),
+      marks: [Plot.barY(plan, {x: "hour", y: "plan", fill: ms.teal, fillOpacity: 0.8, rx: 3, inset: 3, title: d => `${d.hour}:00\nScheduled cashiers: ${d.plan}${d.need !== null ? `\nActual need: ${d.need}` : ""}`}),
               hasA ? Plot.tickY(plan, {x: "hour", y: "need", stroke: ms.rose, strokeWidth: 3}) : null]})}
     <div style="font-size:.8rem;opacity:.75">Bars: cashiers scheduled from the P80 forecast ${hasA ? "· red ticks: cashiers the actual traffic needed" : ""}</div>
     ${hasA ? htl.html`<div class="ms-readout"><span>MAE</span><b>${mae.toFixed(1)}</b><span>Bias</span><b>${bias > 0 ? "+" : ""}${bias.toFixed(1)}</b><span>In 80% band</span><b>${Math.round(cov * 100)}%</b><span>Understaffed hours</span><b>${under} / 16</b></div>`
@@ -1075,9 +1439,9 @@ A shipped forecast is judged on fresh data. Three questions matter: **how big** 
 #| fig-cap: "Held-out error analysis. Left: MAE by hour versus the noise floor. Right: distribution of forecast errors (forecast − actual); a centred, symmetric shape means no systematic bias."
 by_h = hold.groupby("hour").apply(lambda g: pd.Series({"mae": np.mean(np.abs(g["mean"] - g.actual)), "floor": np.mean(np.abs(g.actual - g.lam))}), include_groups=False).reset_index()
 fig = make_subplots(rows=1, cols=2, subplot_titles=("MAE by hour (held-out)", "Error distribution"), column_widths=[.58, .42])
-fig.add_trace(go.Bar(x=by_h.hour, y=by_h.mae, name="Model MAE", marker_color=COLORS["indigo"]), 1, 1)
-fig.add_trace(go.Scatter(x=by_h.hour, y=by_h.floor, name="Noise floor", mode="lines+markers", line=dict(color=COLORS["rose"], dash="dash")), 1, 1)
-fig.add_trace(go.Histogram(x=hold["mean"] - hold.actual, nbinsx=30, marker_color=COLORS["teal"], name="Errors", showlegend=False), 1, 2)
+fig.add_trace(go.Bar(x=by_h.hour, y=by_h.mae, name="Model MAE", marker_color=COLORS["indigo"], hovertemplate="Hour %{x}:00<br>Model MAE: %{y:.2f}<extra></extra>"), 1, 1)
+fig.add_trace(go.Scatter(x=by_h.hour, y=by_h.floor, name="Noise floor", mode="lines+markers", line=dict(color=COLORS["rose"], dash="dash"), hovertemplate="Hour %{x}:00<br>Irreducible MAE: %{y:.2f}<extra></extra>"), 1, 1)
+fig.add_trace(go.Histogram(x=hold["mean"] - hold.actual, nbinsx=30, marker_color=COLORS["teal"], name="Errors", showlegend=False, hovertemplate="Forecast − actual: %{x:.1f}<br>Hours in bin: %{y}<extra></extra>"), 1, 2)
 fig.add_vline(x=0, line=dict(color=COLORS["slate"], dash="dot"), row=1, col=2)
 fig.update_xaxes(title_text="Hour", row=1, col=1); fig.update_xaxes(title_text="Forecast − actual", row=1, col=2)
 fig.update_yaxes(title_text="Customers", row=1, col=1)
@@ -1094,6 +1458,9 @@ The error has three sources, and each calls for a different response:
 3. **Rare events** 🎄. Days like Christmas Eve have few examples in two years of history, so their effects are estimated from only one or two occurrences each. For such days, planners should review the forecast and add a manual adjustment.
 
 Errors are also **correlated within a day**: a cold, quiet morning usually means a quiet afternoon. That is the AR term at work. In production, re-forecasting at noon with the morning's actual counts tightens the afternoon interval.
+
+
+:::
 
 ## 📡 10. After launch: monitor and retrain
 
