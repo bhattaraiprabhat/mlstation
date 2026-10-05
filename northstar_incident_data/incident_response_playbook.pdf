@@ -1,0 +1,153 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 13 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 540 >>
+stream
+BT
+/F1 11 Tf
+50 740 Td
+14 TL
+(Northstar Cloud Incident Response Playbook - Page 1) Tj
+T*
+(SEVERITY) Tj
+T*
+(SEV-1: broad customer impact, revenue path affected, or data integrity risk.) Tj
+T*
+(SEV-2: material degradation with workaround or limited blast radius.) Tj
+T*
+(SEV-3: minor degradation with low customer impact.) Tj
+T*
+(Two independent critical signals on a TIER_1 service are sufficient to open an incident.) Tj
+T*
+(Never infer customer impact from CPU alone; corroborate with errors, latency, queueing, or support evidence.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 13 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 586 >>
+stream
+BT
+/F1 11 Tf
+50 740 Td
+14 TL
+(Northstar Cloud Incident Response Playbook - Page 2) Tj
+T*
+(CONTAINMENT AND CHANGE SAFETY) Tj
+T*
+(If degradation begins within 15 minutes of a deployment, evaluate rollback as a candidate action.) Tj
+T*
+(Rollback requires evidence that the changed service is plausibly causal.) Tj
+T*
+(Database failover is a HIGH_RISK action and always requires human Incident Commander approval.) Tj
+T*
+(Do not restart a database solely because an application service has high latency.) Tj
+T*
+(Prefer reversible actions before destructive or state-changing actions.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 13 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 498 >>
+stream
+BT
+/F1 11 Tf
+50 740 Td
+14 TL
+(Northstar Cloud Incident Response Playbook - Page 3) Tj
+T*
+(ESCALATION) Tj
+T*
+(SEV-1 always requires Incident Commander escalation.) Tj
+T*
+(Any action touching a TIER_1 database requires platform on-call approval.) Tj
+T*
+(Contradictory evidence must be surfaced; do not hide it to make a recommendation look stronger.) Tj
+T*
+(If evidence confidence is below MEDIUM, gather more evidence before customer communication unless safety requires immediate escalation.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 13 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 490 >>
+stream
+BT
+/F1 11 Tf
+50 740 Td
+14 TL
+(Northstar Cloud Incident Response Playbook - Page 4) Tj
+T*
+(COMMUNICATION) Tj
+T*
+(Customer-facing status is required for confirmed SEV-1 and SEV-2 incidents with external impact.) Tj
+T*
+(State observed symptoms and mitigation; do not state an unverified root cause as fact.) Tj
+T*
+(Strategic customers receive a direct account update after public status is approved.) Tj
+T*
+(Internal updates must distinguish FACT, HYPOTHESIS, ACTION, and OPEN QUESTION.) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 13 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 412 >>
+stream
+BT
+/F1 11 Tf
+50 740 Td
+14 TL
+(Northstar Cloud Incident Response Playbook - Page 5) Tj
+T*
+(RECOVERY AND CLOSURE) Tj
+T*
+(Recovery requires two consecutive healthy observation windows for the primary SLO.) Tj
+T*
+(After mitigation, continue monitoring dependent services for at least 15 minutes.) Tj
+T*
+(Capture timeline, evidence, decisions, rejected hypotheses, and human approvals for post-incident review.) Tj
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000140 00000 n 
+0000000267 00000 n 
+0000000858 00000 n 
+0000000985 00000 n 
+0000001622 00000 n 
+0000001749 00000 n 
+0000002298 00000 n 
+0000002426 00000 n 
+0000002968 00000 n 
+0000003097 00000 n 
+0000003561 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+3632
+%%EOF

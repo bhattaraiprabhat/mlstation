@@ -1,0 +1,1031 @@
+---
+title: "Agentic AI with Multi-Agent Systems"
+subtitle: "A Practical Guide to Designing an AI Incident-Control Team"
+description: "Learn how to design tools, agents, state, routing, review, and human escalation with LangGraph—without requiring the article itself to execute."
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+    anchor-sections: true
+execute:
+  enabled: false
+---
+
+<style>
+.lesson-box {
+  padding: 1rem 1.1rem;
+  border-left: 4px solid #4f46e5;
+  background: #eef2ff;
+  border-radius: 0 12px 12px 0;
+  margin: 1rem 0;
+}
+.user-box {
+  padding: 1rem 1.1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+.flow {
+  padding: 1rem 1.2rem;
+  background: #f8fafc;
+  border-radius: 14px;
+  text-align: center;
+  font-weight: 600;
+  margin: 1rem 0;
+}
+</style>
+
+# 1. What are we building?
+
+Suppose **Northstar Cloud**, a fictional SaaS company, receives an alert:
+
+> Checkout latency has increased and some customers are receiving errors.
+
+The evidence is scattered across several systems:
+
+- `telemetry.csv` — latency and error measurements;
+- `operations.db` — services, deployments, ownership, and customer impact;
+- `incident_playbook.pdf` — approved response and escalation guidance.
+
+Our objective is not merely to generate text. We want an AI system that can **divide the work among specialists**, use the appropriate tools, share findings, review a proposed action, and escalate uncertain cases to a human.
+
+<div class="flow">
+
+Incident → Triage → Evidence → Response Plan → Review → Communication
+
+</div>
+
+This is a useful setting for learning **multi-agent Agentic AI**.
+
+::: {.callout-note}
+## This article does not execute the AI system
+
+The code is provided as **copyable implementation examples**. The page itself does not read API keys, call OpenAI, create databases, or run LangGraph.
+
+When you build the project locally, you can copy the examples into Python files or a notebook and run them there.
+:::
+
+# 2. The central idea: agent, tool, state, and orchestrator
+
+Before writing code, separate four ideas.
+
+| Component | Responsibility | Example |
+|---|---|---|
+| **Agent** | reasons about a specific responsibility | Evidence Analyst |
+| **Tool** | performs a bounded operation | query SQLite |
+| **State** | carries information through the workflow | incident + evidence + plan |
+| **Orchestrator** | decides what runs next | LangGraph |
+
+A useful mental model is:
+
+> **Agent = specialist · Tool = instrument · State = shared case file · Orchestrator = workflow coordinator**
+
+The LLM should not do everything. Python functions, databases, retrieval systems, schemas, and deterministic rules should handle tasks they can perform more reliably.
+
+# 3. Decide what *you* design and what the libraries provide
+
+This distinction makes Agentic AI much easier to understand.
+
+| You design | Libraries/frameworks provide |
+|---|---|
+| business objective | model API client |
+| agent responsibilities | LLM invocation |
+| prompts | graph execution engine |
+| tools and permissions | structured-output integration |
+| state fields | graph state passing |
+| routing conditions | vector-store operations |
+| escalation policy | tracing hooks |
+| evaluation cases | serialization/validation utilities |
+
+<div class="lesson-box">
+
+**LangGraph does not decide your workflow for you.**  
+You define the nodes, state, edges, and routing rules. LangGraph executes that design.
+
+Likewise, an LLM does not know your company policy unless you provide it through prompts, tools, retrieval, or deterministic rules.
+
+</div>
+
+# 4. Organize the project before building agents
+
+A real project does not need to live in one giant notebook.
+
+A clean structure might be:
+
+```text
+northstar_agentic_ai/
+│
+├── app.py
+├── config.json
+│
+├── agents/
+│   ├── triage.py
+│   ├── evidence.py
+│   ├── planner.py
+│   ├── critic.py
+│   └── communication.py
+│
+├── tools/
+│   ├── telemetry_tools.py
+│   ├── database_tools.py
+│   └── playbook_tools.py
+│
+├── workflow/
+│   ├── state.py
+│   ├── routing.py
+│   └── graph.py
+│
+├── data/
+│   ├── telemetry.csv
+│   ├── operations.db
+│   └── incident_playbook.pdf
+│
+└── tests/
+    └── test_cases.py
+```
+
+For learning, you can keep everything in one notebook. For a larger application, separating files makes each responsibility easier to test and replace.
+
+# 5. Install the main libraries
+
+A minimal implementation can use the same general stack as our reference architecture:
+
+```bash
+pip install langgraph langchain langchain-openai pydantic pandas
+pip install chromadb sentence-transformers pypdf
+```
+
+You do **not** need every library for every use case.
+
+For example:
+
+- no PDF knowledge → you may not need `pypdf`;
+- no semantic retrieval → you may not need Chroma or embeddings;
+- no SQLite data → you can remove database tools.
+
+The architecture should follow the problem rather than forcing every project into the same template.
+
+# 6. Configure the model locally
+
+Do this in your runnable project—not in the published teaching page.
+
+For example, keep `config.json` outside version control:
+
+```json
+{
+  "OPENAI_API_KEY": "your-key-here",
+  "GEN_MODEL": "gpt-4o-mini"
+}
+```
+
+Add it to `.gitignore`:
+
+```text
+config.json
+```
+
+A local application can load it:
+
+```python
+import json
+import os
+
+with open("config.json", "r") as f:
+    config = json.load(f)
+
+os.environ["OPENAI_API_KEY"] = config["OPENAI_API_KEY"]
+GEN_MODEL = config.get("GEN_MODEL", "gpt-4o-mini")
+```
+
+Then initialize the model:
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model=GEN_MODEL,
+    temperature=0
+)
+```
+
+::: {.callout-warning}
+Never place the real API key inside the `.qmd`, GitHub repository, prompt examples, or rendered HTML.
+:::
+
+# 7. Prepare only the data each agent needs
+
+We will use three kinds of evidence.
+
+## 7.1 Telemetry CSV
+
+A small example is enough to understand the schema:
+
+| timestamp | service | p95_latency_ms | error_rate |
+|---|---|---:|---:|
+| 10:00 | checkout-api | 210 | 0.01 |
+| 10:05 | checkout-api | 225 | 0.01 |
+| 10:10 | checkout-api | 980 | 0.08 |
+
+You might read it with:
+
+```python
+import pandas as pd
+
+telemetry = pd.read_csv("data/telemetry.csv")
+```
+
+## 7.2 Operations database
+
+The database might contain tables such as:
+
+```text
+services
+deployments
+customers
+on_call
+```
+
+For example:
+
+```python
+import sqlite3
+
+def get_recent_deployments(service_name):
+    with sqlite3.connect("data/operations.db") as conn:
+        query = """
+        SELECT service, version, deployed_at
+        FROM deployments
+        WHERE service = ?
+        ORDER BY deployed_at DESC
+        LIMIT 5
+        """
+        return conn.execute(query, (service_name,)).fetchall()
+```
+
+## 7.3 Incident playbook PDF
+
+The PDF contains unstructured operational guidance.
+
+A retrieval pipeline typically performs:
+
+<div class="flow">
+
+PDF → text → chunks → embeddings → vector store → relevant chunks
+
+</div>
+
+The retrieval library handles similarity search. **You** decide what document to index, chunking strategy, how many passages to retrieve, and which agent may use them.
+
+# 8. Turn capabilities into tools
+
+An agent should not receive unrestricted access to everything.
+
+Give it small, explicit tools.
+
+```python
+def get_service_metrics(service_name):
+    """Return recent metrics for one service."""
+    ...
+
+def get_recent_deployments(service_name):
+    """Return recent deployments for one service."""
+    ...
+
+def search_incident_playbook(question):
+    """Retrieve relevant incident-response guidance."""
+    ...
+
+def get_customer_impact(service_name):
+    """Return summarized customer impact."""
+    ...
+```
+
+This is an important design pattern:
+
+$$
+\text{Agent reasoning}
+\longrightarrow
+\text{bounded tool}
+\longrightarrow
+\text{data source}
+$$
+
+You can replace these functions for another use case without redesigning the entire agent concept.
+
+For example:
+
+| Incident system | Financial system | Manufacturing system |
+|---|---|---|
+| `get_service_metrics()` | `get_account_history()` | `get_sensor_readings()` |
+| `get_deployments()` | `get_transactions()` | `get_maintenance_history()` |
+| `search_playbook()` | `search_policy()` | `search_quality_manual()` |
+
+The **workflow pattern can stay similar while the functions change**.
+
+# 9. Define structured outputs
+
+Agents communicate more reliably when important outputs have a schema.
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class TriageOutput(BaseModel):
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    affected_service: str
+    summary: str
+    needs_investigation: bool
+    confidence: float = Field(ge=0, le=1)
+```
+
+Then LangChain can request structured output:
+
+```python
+triage_llm = llm.with_structured_output(TriageOutput)
+```
+
+The **library** validates the returned structure.
+
+**You** decide which fields matter and what values are allowed.
+
+# 10. Define the shared state
+
+The agents need a shared case file.
+
+```python
+from typing import TypedDict
+
+class IncidentState(TypedDict, total=False):
+    incident: dict
+    triage: dict
+    evidence: list
+    response_plan: dict
+    critique: dict
+    stakeholder_message: str
+    revision_count: int
+    needs_human: bool
+```
+
+Think of the state as:
+
+$$
+S =
+\{
+\text{incident},
+\text{triage},
+\text{evidence},
+\text{plan},
+\text{review}
+\}.
+$$
+
+Each node reads what it needs and adds its result.
+
+LangGraph carries the state between nodes. **You decide what belongs in it.**
+
+# 11. Agent 1 — Signal Triage
+
+The first agent answers:
+
+> Is there a meaningful incident, how serious does it appear, and what service is affected?
+
+Its prompt should deliberately prevent premature diagnosis.
+
+```python
+TRIAGE_PROMPT = """
+You are the Signal Triage Agent.
+
+Determine:
+1. affected service,
+2. apparent severity,
+3. whether investigation is required,
+4. confidence.
+
+Use only supplied evidence.
+Do not diagnose root cause.
+Do not propose remediation.
+"""
+```
+
+The node might look like:
+
+```python
+def triage_agent(state: IncidentState):
+    structured_llm = llm.with_structured_output(TriageOutput)
+
+    result = structured_llm.invoke([
+        ("system", TRIAGE_PROMPT),
+        ("user", str(state["incident"]))
+    ])
+
+    return {"triage": result.model_dump()}
+```
+
+Notice the separation:
+
+**You provide:** role, prompt, input, output schema.  
+**Library provides:** model call and structured-output handling.
+
+# 12. Agent 2 — Evidence Analyst
+
+The Evidence Agent asks a different question:
+
+> What facts support or contradict possible explanations?
+
+It can use tools such as:
+
+```python
+metrics = get_service_metrics("checkout-api")
+deployments = get_recent_deployments("checkout-api")
+policy = search_incident_playbook(
+    "checkout latency increase after deployment"
+)
+```
+
+Then it synthesizes an evidence bundle.
+
+A useful rule is:
+
+$$
+\boxed{\text{observation} \neq \text{hypothesis}}
+$$
+
+For example:
+
+```text
+Observation:
+Latency increased at 10:10.
+
+Observation:
+Version 4.8 was deployed at 10:06.
+
+Hypothesis:
+Version 4.8 may have contributed to the latency increase.
+```
+
+The first two are evidence. The third is an inference.
+
+# 13. Agent 3 — Response Planner
+
+The planner receives the incident, triage result, and evidence.
+
+Its responsibility is:
+
+> Given the available evidence and policy, what should happen next?
+
+A possible structured output:
+
+```python
+class ResponsePlan(BaseModel):
+    action: str
+    justification: str
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    requires_human_approval: bool
+```
+
+Prompt:
+
+```python
+PLANNER_PROMPT = """
+You are the Response Planner.
+
+Propose the safest next operational action.
+
+Base the recommendation on:
+- collected evidence,
+- retrieved playbook guidance,
+- stated constraints.
+
+Do not claim certainty unsupported by evidence.
+Flag high-impact actions for human approval.
+"""
+```
+
+Different applications can use entirely different planning functions.
+
+A finance agent might propose `APPROVE`, `REVIEW`, or `BLOCK`.  
+A manufacturing agent might propose `CONTINUE`, `INSPECT`, or `HOLD_BATCH`.
+
+# 14. Agent 4 — Risk Critic
+
+The critic does not investigate the incident again.
+
+It reviews the proposed plan.
+
+```python
+class CriticOutput(BaseModel):
+    decision: Literal["ACCEPT", "REVISE", "ESCALATE"]
+    reason: str
+```
+
+Its responsibility is narrow:
+
+```text
+Is the plan supported by evidence?
+Does it violate policy?
+Is the action too risky for autonomous execution?
+```
+
+Possible outcomes:
+
+<div class="flow">
+
+ACCEPT → continue  
+REVISE → return to planner  
+ESCALATE → human review
+
+</div>
+
+Do not allow unlimited planner–critic loops.
+
+```python
+MAX_REVISIONS = 1
+```
+
+After the limit:
+
+```python
+if state["revision_count"] >= MAX_REVISIONS:
+    return {"needs_human": True}
+```
+
+This is an example of a rule that is better handled by deterministic Python than by another LLM decision.
+
+# 15. Agent 5 — Communication Agent
+
+Only after the operational decision stabilizes do we create stakeholder communication.
+
+```python
+COMMUNICATION_PROMPT = """
+You are the Stakeholder Communication Agent.
+
+Write a concise incident update.
+
+Include:
+- what is known,
+- customer impact,
+- approved next action,
+- uncertainty that still remains.
+
+Do not expose internal secrets.
+Do not invent technical details.
+"""
+```
+
+This agent could be replaced by several communication functions:
+
+```text
+create_customer_message()
+create_engineering_handoff()
+create_executive_summary()
+create_support_update()
+```
+
+One use case may need one communication agent; another may need several.
+
+# 16. Connect the agents with LangGraph
+
+Now we have individual capabilities. Agentic behavior appears when we connect them.
+
+```python
+from langgraph.graph import StateGraph, START, END
+
+graph = StateGraph(IncidentState)
+
+graph.add_node("triage", triage_agent)
+graph.add_node("evidence", evidence_agent)
+graph.add_node("planner", planner_agent)
+graph.add_node("critic", critic_agent)
+graph.add_node("communication", communication_agent)
+
+graph.add_edge(START, "triage")
+graph.add_edge("triage", "evidence")
+graph.add_edge("evidence", "planner")
+graph.add_edge("planner", "critic")
+```
+
+LangGraph provides the graph engine.
+
+You still have to define **routing**.
+
+# 17. Add conditional routing
+
+After critique, the next node depends on the critic's decision.
+
+```python
+def route_after_critic(state):
+    decision = state["critique"]["decision"]
+
+    if decision == "ACCEPT":
+        return "communication"
+
+    if decision == "REVISE":
+        if state.get("revision_count", 0) < 1:
+            return "planner"
+        return END
+
+    return END
+```
+
+Register it:
+
+```python
+graph.add_conditional_edges(
+    "critic",
+    route_after_critic
+)
+
+graph.add_edge("communication", END)
+
+app = graph.compile()
+```
+
+The resulting logic is:
+
+```text
+START
+  ↓
+TRIAGE
+  ↓
+EVIDENCE
+  ↓
+PLANNER
+  ↓
+CRITIC
+  ├──────── ACCEPT ────────→ COMMUNICATION → END
+  ├──────── REVISE ────────→ PLANNER
+  └──────── ESCALATE ──────→ HUMAN / END
+```
+
+This graph is the orchestration layer.
+
+# 18. Follow one incident through the system
+
+Suppose the incoming state is:
+
+```python
+incident = {
+    "incident_id": "INC-1042",
+    "service": "checkout-api",
+    "description": "Latency and errors increased after 10:10."
+}
+```
+
+Conceptually, the state evolves like this:
+
+### After Triage
+
+```text
+severity = HIGH
+affected_service = checkout-api
+needs_investigation = true
+```
+
+### After Evidence
+
+```text
+latency spike observed
+error-rate spike observed
+recent deployment found
+relevant rollback policy retrieved
+```
+
+### After Planning
+
+```text
+proposed action:
+pause rollout and prepare rollback
+```
+
+### After Critic
+
+```text
+ACCEPT
+```
+
+### After Communication
+
+```text
+Stakeholder update created.
+```
+
+The important idea is not the exact wording. It is the **controlled transformation of shared state**.
+
+# 19. What should remain deterministic?
+
+Do not ask an LLM to decide everything.
+
+Use ordinary code for rules such as:
+
+```python
+if error_rate > 0.20:
+    mandatory_human_escalation = True
+```
+
+or:
+
+```python
+if revision_count >= MAX_REVISIONS:
+    needs_human = True
+```
+
+Good candidates for deterministic logic include:
+
+- numerical thresholds;
+- permission checks;
+- retry limits;
+- required approvals;
+- schema validation;
+- duplicate detection;
+- security restrictions.
+
+Use LLM reasoning where interpretation is actually useful:
+
+- summarizing ambiguous evidence;
+- comparing competing explanations;
+- synthesizing retrieved knowledge;
+- drafting a response;
+- explaining a recommendation.
+
+# 20. Human-in-the-loop is a feature
+
+A useful Agentic AI system does not maximize autonomy at any cost.
+
+Escalate when:
+
+- evidence conflicts;
+- required information is missing;
+- the action is high impact;
+- policy requires approval;
+- critic and planner cannot agree;
+- confidence is too low.
+
+The objective is closer to:
+
+$$
+\text{useful automation}
+\quad\text{subject to acceptable risk}.
+$$
+
+# 21. Test the workflow with a few meaningful cases
+
+You do not need hundreds of rows to understand the design.
+
+Start with four cases:
+
+| Test | Situation | Expected behavior |
+|---|---|---|
+| 1 | obvious false alarm | stop early or low severity |
+| 2 | clear incident + strong evidence | plan and communicate |
+| 3 | ambiguous evidence | escalate |
+| 4 | malicious instruction inside input | ignore instruction and continue safely |
+
+A test object might look like:
+
+```python
+test_cases = [
+    {
+        "name": "Clear deployment incident",
+        "expected_severity": "HIGH",
+        "expected_human": False
+    },
+    {
+        "name": "Ambiguous root cause",
+        "expected_human": True
+    }
+]
+```
+
+Evaluate more than the final text.
+
+Useful dimensions include:
+
+```text
+task completion
+routing correctness
+tool correctness
+evidence grounding
+escalation correctness
+latency
+```
+
+# 22. Reuse the architecture for different problems
+
+The five agents in this article are **not universal**.
+
+For a document-review system you might use:
+
+```text
+Document Intake
+      ↓
+Clause Extractor
+      ↓
+Policy Checker
+      ↓
+Risk Reviewer
+      ↓
+Summary Agent
+```
+
+For manufacturing:
+
+```text
+Sensor Triage
+      ↓
+Evidence Collector
+      ↓
+Root-Cause Analyst
+      ↓
+Containment Planner
+      ↓
+Safety Reviewer
+```
+
+For customer support:
+
+```text
+Intent Agent
+      ↓
+Account Evidence
+      ↓
+Resolution Agent
+      ↓
+Policy Reviewer
+      ↓
+Response Agent
+```
+
+Similarly, the tools change:
+
+```python
+search_playbook()
+```
+
+can become:
+
+```python
+search_contract()
+search_medical_guideline()
+search_quality_manual()
+search_hr_policy()
+```
+
+The important skill is learning **how to decompose the problem**, not memorizing one fixed set of agents.
+
+# 23. When should functions live in separate files?
+
+For a small tutorial:
+
+```text
+one notebook or one Python file
+```
+
+is perfectly reasonable.
+
+As the system grows, separate by responsibility.
+
+For example:
+
+```python
+# tools/database_tools.py
+def get_recent_deployments(...):
+    ...
+
+# agents/evidence.py
+def evidence_agent(...):
+    ...
+
+# workflow/routing.py
+def route_after_critic(...):
+    ...
+
+# workflow/graph.py
+def build_graph(...):
+    ...
+```
+
+Then `app.py` can assemble them:
+
+```python
+from workflow.graph import build_graph
+
+app = build_graph()
+result = app.invoke(initial_state)
+```
+
+This makes individual agents, tools, and routing functions easier to test and replace.
+
+# 24. What LangGraph handles—and what it does not
+
+LangGraph can take care of:
+
+- executing nodes;
+- passing graph state;
+- following edges;
+- conditional routing;
+- cycles;
+- checkpointing when configured;
+- integration with LangChain components.
+
+It does **not** automatically determine:
+
+- how many agents you need;
+- what each agent should do;
+- what tools are safe;
+- what your state should contain;
+- what company policy means;
+- when humans must approve an action;
+- what constitutes a good answer.
+
+Those are **system-design decisions**.
+
+# 25. A practical development sequence
+
+When creating your own multi-agent system, follow this order:
+
+1. **Define the business objective.**
+2. **Identify the decisions required.**
+3. **Separate deterministic work from LLM reasoning.**
+4. **Define the tools.**
+5. **Define the shared state.**
+6. **Create agents with narrow responsibilities.**
+7. **Give each agent only the tools it needs.**
+8. **Define routing and stopping conditions.**
+9. **Add human escalation.**
+10. **Create representative tests.**
+11. **Observe both the final answer and the path taken.**
+12. **Only then add more agents if they solve a real problem.**
+
+<div class="lesson-box">
+
+### A useful rule
+
+Do not begin by asking, **“How many agents should I have?”**
+
+Begin by asking:
+
+**“What responsibilities need to be separated because they require different evidence, tools, permissions, or judgment?”**
+
+</div>
+
+# 26. Where MCP fits next
+
+In this article, tools are ordinary local Python functions:
+
+```text
+Agent
+  ↓
+Python tool
+  ↓
+CSV / SQLite / PDF
+```
+
+That is excellent for learning.
+
+But in a larger organization, the database tool, document search, ticketing system, and observability service may belong to different applications or teams.
+
+The next architecture can therefore be:
+
+```text
+CrewAI agents
+      ↓
+MCP clients
+      ↓
+MCP servers
+      ↓
+Database / documents / observability / tickets
+```
+
+The business problem can remain the same. That lets us compare the architecture rather than learning a new business problem at the same time.
+
+# 27. Summary
+
+A practical multi-agent Agentic AI system is not simply several LLMs talking to one another.
+
+It combines:
+
+$$
+\boxed{
+\text{Agents}
++
+\text{Tools}
++
+\text{Shared State}
++
+\text{Routing}
++
+\text{Deterministic Rules}
++
+\text{Human Oversight}
+}
+$$
+
+The developer's job is to design those boundaries.
+
+The libraries help execute the design.
+
+Once that distinction is clear, the same pattern can be adapted to incident response, manufacturing, finance, document review, customer support, research workflows, and many other use cases.
