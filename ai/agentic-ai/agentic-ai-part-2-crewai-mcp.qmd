@@ -1,0 +1,1630 @@
+---
+title: "Agentic AI with Multi-Agent Systems — Part II"
+subtitle: "CrewAI + MCP: The Same Incident-Control Problem, a Different Architecture"
+description: "Build the Northstar Cloud multi-agent incident-control system with CrewAI agents and MCP servers, and compare it with the LangGraph/local-tool architecture from Part I."
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+    anchor-sections: true
+execute:
+  enabled: false
+---
+
+<style>
+.hero {
+  padding: 1.3rem 1.5rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg,#eef2ff,#ecfeff);
+  border: 1px solid #c7d2fe;
+  margin: 1rem 0 1.5rem 0;
+}
+.hero h2 { margin-top: 0; }
+.compare {
+  padding: 1rem 1.2rem;
+  border-left: 4px solid #6366f1;
+  background: #f8fafc;
+  border-radius: 0 12px 12px 0;
+  margin: 1rem 0;
+}
+.flow-wrap {
+  overflow-x: auto;
+  padding: 1rem 0;
+}
+.flow-row {
+  display: flex;
+  min-width: 850px;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+}
+.flow-node {
+  padding: .7rem .9rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  animation: pulse 4s ease-in-out infinite;
+}
+.flow-node:nth-child(3){animation-delay:.5s}
+.flow-node:nth-child(5){animation-delay:1s}
+.flow-node:nth-child(7){animation-delay:1.5s}
+.flow-node:nth-child(9){animation-delay:2s}
+.arrow { font-size: 1.35rem; }
+@keyframes pulse {
+  0%,70%,100% { transform: translateY(0); box-shadow:0 2px 8px rgba(0,0,0,.05); }
+  82% { transform: translateY(-4px); box-shadow:0 7px 18px rgba(79,70,229,.18); }
+}
+.user-lib {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:1rem;
+  margin:1rem 0;
+}
+.user-lib > div {
+  padding:1rem;
+  border:1px solid #dbeafe;
+  border-radius:12px;
+  background:#fff;
+}
+@media(max-width:700px){.user-lib{grid-template-columns:1fr}}
+</style>
+
+<div class="hero">
+
+## **Part II: CrewAI + MCP**
+
+**Same Northstar Cloud incident. Same five specialist responsibilities. Different architecture.**
+
+**Part I:** LangGraph explicitly orchestrated Python nodes that called local tools.
+
+**Part II:** CrewAI organizes role-based agents and tasks, while **Model Context Protocol (MCP)** places data capabilities behind standardized servers.
+
+The architectural shift is:
+
+**from _“my application owns every tool function”_ → to _“agents consume capabilities exposed by MCP servers.”_**
+
+</div>
+
+::: {.callout-note}
+## Teaching article + copyable project
+
+This Quarto page does **not** execute the code while rendering. Every code block is intended to be copied into the named file and run locally.
+
+That keeps your published article independent of API keys, local databases, and running MCP processes.
+:::
+
+# 1. Start from the same business problem
+
+Northstar Cloud receives an incident:
+
+> Checkout latency and error rate increased shortly after a deployment.
+
+As in Part I, useful evidence lives in different places:
+
+- `telemetry.csv` — operational measurements;
+- `operations.db` — deployments, services, ownership, customer impact;
+- `incident_playbook.pdf` — response policy.
+
+We still want five responsibilities:
+
+1. **Signal Triage** — determine severity and affected service.
+2. **Evidence Analyst** — collect supporting and contradicting evidence.
+3. **Response Planner** — recommend a safe next action.
+4. **Risk Critic** — review evidence, policy, and plan.
+5. **Stakeholder Communication** — explain the approved outcome.
+
+The business task did not change. The **software boundary did**.
+
+# 2. Part I versus Part II
+
+| Question | Part I: LangGraph + local tools | Part II: CrewAI + MCP |
+|---|---|---|
+| Agent abstraction | graph node/function | CrewAI `Agent` |
+| Work assignment | node logic | CrewAI `Task` |
+| Orchestration | explicit graph edges | CrewAI process/tasks |
+| Tool interface | Python functions | MCP tools |
+| Data boundary | application process | MCP server boundary |
+| Tool discovery | developer wires functions | MCP client discovers server tools |
+| Reuse by other AI apps | requires adapter/code | MCP capability can be reused |
+| Control-flow visibility | very explicit | higher-level |
+| Best teaching strength | state + routing | roles + interoperable tools |
+
+<div class="compare">
+
+**Do not think of MCP as another agent framework.** CrewAI organizes the agents. MCP standardizes how those agents reach external capabilities.
+
+</div>
+
+# 3. The new architecture
+
+```{mermaid}
+flowchart LR
+    U[Incident] --> C[CrewAI Crew]
+
+    C --> A1[Signal Triage]
+    C --> A2[Evidence Analyst]
+    C --> A3[Response Planner]
+    C --> A4[Risk Critic]
+    C --> A5[Communication]
+
+    A1 --> M1[MCP Telemetry Server]
+    A2 --> M1
+    A2 --> M2[MCP Operations Server]
+    A2 --> M3[MCP Playbook Server]
+    A3 --> M2
+    A3 --> M3
+    A4 --> M3
+
+    M1 --> CSV[(telemetry.csv)]
+    M2 --> DB[(operations.db)]
+    M3 --> PDF[(incident_playbook.pdf)]
+```
+
+<div class="flow-wrap">
+<div class="flow-row">
+<div class="flow-node">Incident</div><div class="arrow">→</div>
+<div class="flow-node">Triage</div><div class="arrow">→</div>
+<div class="flow-node">Evidence</div><div class="arrow">→</div>
+<div class="flow-node">Plan</div><div class="arrow">→</div>
+<div class="flow-node">Critic</div><div class="arrow">→</div>
+<div class="flow-node">Communicate / Escalate</div>
+</div>
+</div>
+
+The small animation above is conceptual: it shows the **handoff of responsibility**, not background computation in the web page.
+
+# 4. What CrewAI does and what MCP does
+
+This distinction is the heart of Part II.
+
+## CrewAI
+
+CrewAI gives us abstractions for:
+
+- agents with roles and goals;
+- tasks with expected outputs;
+- task context;
+- crews;
+- sequential or other processes;
+- agent/tool collaboration.
+
+## MCP
+
+MCP gives us a standard boundary for:
+
+- publishing tools;
+- discovering tools;
+- describing tool inputs from Python types;
+- invoking tools through a client/server protocol;
+- separating an AI application from the system that owns the data.
+
+The official MCP Python SDK can expose **tools, resources, and prompts**. For this project we intentionally use **tools**, because the agents need bounded operations such as `get_service_metrics()` and `search_playbook()`.
+
+# 5. What you design versus what libraries handle
+
+<div class="user-lib">
+<div>
+
+### You design
+
+- business objective;
+- agent responsibilities;
+- task boundaries;
+- prompts and expected outputs;
+- MCP tool semantics;
+- permissions;
+- deterministic escalation rules;
+- evaluation cases.
+
+</div>
+<div>
+
+### Libraries handle
+
+- CrewAI agent/task execution;
+- model invocation;
+- passing task context;
+- MCP client/server communication;
+- tool discovery;
+- input schemas from type hints;
+- serialization and protocol details;
+- starting local stdio MCP subprocesses.
+
+</div>
+</div>
+
+**MCP does not decide what your tool should do.**  
+**CrewAI does not decide what your organization considers safe.**
+
+Those remain your engineering decisions.
+
+# 6. Project structure
+
+Create this project:
+
+```text
+northstar_crewai_mcp/
+│
+├── main.py
+├── config.json
+├── requirements.txt
+│
+├── data/
+│   ├── telemetry.csv
+│   ├── operations.db
+│   └── incident_playbook.pdf
+│
+├── servers/
+│   ├── telemetry_server.py
+│   ├── operations_server.py
+│   └── playbook_server.py
+│
+└── tests/
+    └── smoke_test.py
+```
+
+This separation is intentional.
+
+```text
+agents/tasks       → main.py
+tool contracts     → servers/*.py
+enterprise data    → data/*
+tests              → tests/*
+```
+
+In a production system, each MCP server could be owned and deployed by a different team.
+
+# 7. Install the project
+
+Create a virtual environment and install:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+pip install crewai crewai-tools "mcp[cli]" pandas pypdf
+```
+
+Create `requirements.txt`:
+
+```text
+crewai
+crewai-tools
+mcp[cli]
+pandas
+pypdf
+```
+
+For a reproducible production project, pin versions after validating the application in your environment.
+
+# 8. Keep the API key out of the article
+
+Create `config.json` locally:
+
+```json
+{
+  "OPENAI_API_KEY": "your-key-here",
+  "MODEL": "openai/gpt-4o-mini"
+}
+```
+
+Add it to `.gitignore`:
+
+```text
+config.json
+.venv/
+__pycache__/
+```
+
+`config.json` is used by `main.py`. The MCP data servers do not need the OpenAI key because they **serve data/tools; they do not reason with the LLM**.
+
+# 9. Understand an MCP server before building three
+
+A minimal current MCP Python server looks like:
+
+```python
+from mcp.server import MCPServer
+
+mcp = MCPServer("Example")
+
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+For local development, `mcp.run()` uses **stdio** by default.
+
+Conceptually:
+
+```text
+CrewAI host
+    │
+    ├── starts server.py as a subprocess
+    │
+    ├── discovers its tools
+    │
+    ├── sends a tool request
+    │
+    └── receives the result
+```
+
+You did not write JSON-RPC parsing, schema generation, or subprocess messaging. The MCP SDK and host integration handle those mechanics.
+
+# 10. MCP Server 1 — telemetry
+
+Create `servers/telemetry_server.py`:
+
+```python
+from pathlib import Path
+import json
+import pandas as pd
+
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+CSV_PATH = ROOT / "data" / "telemetry.csv"
+
+mcp = MCPServer(
+    "northstar-telemetry",
+    instructions="Read-only access to Northstar service telemetry."
+)
+
+
+def _load() -> pd.DataFrame:
+    return pd.read_csv(CSV_PATH)
+
+
+@mcp.tool()
+def get_service_metrics(service: str, last_n: int = 6) -> str:
+    """Return the most recent telemetry rows for one service."""
+    df = _load()
+    rows = (
+        df[df["service"] == service]
+        .tail(last_n)
+        .to_dict(orient="records")
+    )
+    return json.dumps(rows)
+
+
+@mcp.tool()
+def summarize_service_metrics(service: str) -> str:
+    """Return a compact numerical summary for one service."""
+    df = _load()
+    x = df[df["service"] == service]
+
+    if x.empty:
+        return json.dumps({"error": "service not found"})
+
+    result = {
+        "service": service,
+        "rows": int(len(x)),
+        "latest_p95_latency_ms": float(x.iloc[-1]["p95_latency_ms"]),
+        "latest_error_rate": float(x.iloc[-1]["error_rate"]),
+        "max_p95_latency_ms": float(x["p95_latency_ms"].max()),
+        "max_error_rate": float(x["error_rate"].max()),
+    }
+    return json.dumps(result)
+
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+### What is happening?
+
+You wrote ordinary Python functions.
+
+The `@mcp.tool()` decorator turns them into MCP capabilities. Type hints describe their inputs. The server exposes them; a compatible client discovers and invokes them.
+
+The agent does **not** receive direct unrestricted access to the CSV.
+
+# 11. MCP Server 2 — operations database
+
+Create `servers/operations_server.py`:
+
+```python
+from pathlib import Path
+import json
+import sqlite3
+
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+DB_PATH = ROOT / "data" / "operations.db"
+
+mcp = MCPServer(
+    "northstar-operations",
+    instructions="Read-only operational metadata and deployment history."
+)
+
+
+def _query(sql: str, params: tuple) -> list[dict]:
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+@mcp.tool()
+def get_recent_deployments(service: str, limit: int = 5) -> str:
+    """Return recent deployments for a service."""
+    rows = _query(
+        """
+        SELECT service, version, deployed_at, status
+        FROM deployments
+        WHERE service = ?
+        ORDER BY deployed_at DESC
+        LIMIT ?
+        """,
+        (service, limit),
+    )
+    return json.dumps(rows)
+
+
+@mcp.tool()
+def get_service_owner(service: str) -> str:
+    """Return ownership and on-call information for a service."""
+    rows = _query(
+        """
+        SELECT service, team, on_call
+        FROM services
+        WHERE service = ?
+        """,
+        (service,),
+    )
+    return json.dumps(rows)
+
+
+@mcp.tool()
+def get_customer_impact(service: str) -> str:
+    """Return summarized customer-impact records for a service."""
+    rows = _query(
+        """
+        SELECT service, impacted_customers, region, observed_at
+        FROM customer_impact
+        WHERE service = ?
+        ORDER BY observed_at DESC
+        LIMIT 5
+        """,
+        (service,),
+    )
+    return json.dumps(rows)
+
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+Notice what we did **not** expose:
+
+```text
+execute_arbitrary_sql(sql)
+```
+
+That is deliberate. Narrow tools are easier to secure and reason about.
+
+# 12. MCP Server 3 — incident playbook
+
+Create `servers/playbook_server.py`:
+
+```python
+from pathlib import Path
+import re
+
+from pypdf import PdfReader
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+PDF_PATH = ROOT / "data" / "incident_playbook.pdf"
+
+mcp = MCPServer(
+    "northstar-playbook",
+    instructions="Read-only access to approved incident-response guidance."
+)
+
+
+def _pages() -> list[tuple[int, str]]:
+    reader = PdfReader(PDF_PATH)
+    result = []
+
+    for number, page in enumerate(reader.pages, start=1):
+        text = page.extract_text() or ""
+        result.append((number, text))
+
+    return result
+
+
+def _terms(text: str) -> set[str]:
+    return {
+        word.lower()
+        for word in re.findall(r"[A-Za-z]{4,}", text)
+    }
+
+
+@mcp.tool()
+def search_playbook(query: str, top_k: int = 3) -> str:
+    """Return the most relevant playbook pages using simple keyword overlap."""
+    query_terms = _terms(query)
+    scored = []
+
+    for page_number, text in _pages():
+        score = len(query_terms & _terms(text))
+        if score:
+            scored.append((score, page_number, text))
+
+    scored.sort(reverse=True)
+
+    chunks = []
+    for score, page_number, text in scored[:top_k]:
+        compact = " ".join(text.split())
+        chunks.append(
+            f"PAGE {page_number} | score={score}\n{compact[:1800]}"
+        )
+
+    return "\n\n".join(chunks) or "No relevant playbook section found."
+
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+This uses a deliberately simple retrieval method so that MCP remains the focus.
+
+For a larger playbook, replace `_terms()` and page scoring with an embedding/vector retrieval implementation. The **MCP tool contract can remain the same**:
+
+```python
+def search_playbook(query: str, top_k: int = 3) -> str:
+    """Stable MCP tool contract; retrieval implementation can evolve."""
+    ...
+```
+
+That is one of the architectural benefits: implementation behind the server can evolve without forcing every agent application to understand the storage layer.
+
+# 13. Test each MCP server before involving agents
+
+Do not debug the LLM and MCP simultaneously.
+
+Run the MCP Inspector against each server:
+
+```bash
+mcp dev servers/telemetry_server.py
+```
+
+Then:
+
+```bash
+mcp dev servers/operations_server.py
+```
+
+and:
+
+```bash
+mcp dev servers/playbook_server.py
+```
+
+Check that the expected tools appear and return sensible data.
+
+The development sequence should be:
+
+```text
+Data works
+   ↓
+MCP server works
+   ↓
+MCP tools are discoverable
+   ↓
+CrewAI agent uses them
+   ↓
+Full crew works
+```
+
+# 14. Connect CrewAI to MCP
+
+CrewAI supports MCP tools directly. For local Python servers we can use stdio configuration.
+
+In `main.py`:
+
+```python
+import sys
+
+from crewai.mcp import MCPServerStdio
+
+telemetry_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=["servers/telemetry_server.py"],
+    cache_tools_list=True,
+)
+
+operations_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=["servers/operations_server.py"],
+    cache_tools_list=True,
+)
+
+playbook_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=["servers/playbook_server.py"],
+    cache_tools_list=True,
+)
+```
+
+CrewAI now knows **how to reach the servers**.
+
+You have not yet decided which agent gets which capability.
+
+# 15. Apply least privilege to agents
+
+Do not give every agent every server.
+
+```text
+Signal Triage
+   └── telemetry MCP
+
+Evidence Analyst
+   ├── telemetry MCP
+   ├── operations MCP
+   └── playbook MCP
+
+Response Planner
+   ├── operations MCP
+   └── playbook MCP
+
+Risk Critic
+   └── playbook MCP
+
+Communication
+   └── no MCP required
+```
+
+This is both an architectural and security decision.
+
+# 16. Build the CrewAI agents
+
+Continue `main.py`:
+
+```python
+from crewai import Agent, LLM
+
+llm = LLM(
+    model=MODEL,
+    temperature=0,
+)
+
+triage_agent = Agent(
+    role="Signal Triage Specialist",
+    goal=(
+        "Determine the affected service, severity, and whether "
+        "the incident requires deeper investigation."
+    ),
+    backstory=(
+        "You are an SRE triage specialist. You separate observed "
+        "signals from hypotheses and never invent telemetry."
+    ),
+    llm=llm,
+    mcps=[telemetry_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+evidence_agent = Agent(
+    role="Incident Evidence Analyst",
+    goal=(
+        "Collect evidence that supports or contradicts possible "
+        "incident explanations."
+    ),
+    backstory=(
+        "You investigate telemetry, deployment history, customer "
+        "impact, and approved operational guidance."
+    ),
+    llm=llm,
+    mcps=[telemetry_mcp, operations_mcp, playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+planner_agent = Agent(
+    role="Incident Response Planner",
+    goal=(
+        "Recommend the safest next action supported by evidence "
+        "and the incident playbook."
+    ),
+    backstory=(
+        "You design operational responses but do not confuse "
+        "correlation with proven root cause."
+    ),
+    llm=llm,
+    mcps=[operations_mcp, playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+critic_agent = Agent(
+    role="Risk and Policy Critic",
+    goal=(
+        "Challenge the proposed response for evidence gaps, "
+        "policy violations, and unacceptable operational risk."
+    ),
+    backstory=(
+        "You are an independent reviewer. You return ACCEPT, "
+        "REVISE, or ESCALATE with a concise reason."
+    ),
+    llm=llm,
+    mcps=[playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+communication_agent = Agent(
+    role="Stakeholder Communication Specialist",
+    goal=(
+        "Produce a concise incident update that communicates only "
+        "reviewed facts and the approved next step."
+    ),
+    backstory=(
+        "You communicate clearly without exposing internal secrets "
+        "or turning hypotheses into facts."
+    ),
+    llm=llm,
+    allow_delegation=False,
+    verbose=True,
+)
+```
+
+The `role`, `goal`, `backstory`, tool access, and permissions are **your design**.
+
+CrewAI takes care of executing the agent and presenting its available MCP tools.
+
+# 17. Define the five tasks
+
+An agent is a specialist. A task is the assignment given to that specialist.
+
+```python
+from crewai import Task
+
+triage_task = Task(
+    description="""
+    Analyze incident {incident_id} for service {service}.
+
+    Incident report:
+    {description}
+
+    Use telemetry tools when useful.
+
+    Report:
+    - observed signals,
+    - affected service,
+    - severity: LOW, MEDIUM, HIGH, or CRITICAL,
+    - whether deeper investigation is needed,
+    - confidence from 0 to 1.
+
+    Do not diagnose root cause.
+    """,
+    expected_output=(
+        "A compact triage report separating observations from hypotheses."
+    ),
+    agent=triage_agent,
+)
+
+evidence_task = Task(
+    description="""
+    Investigate the incident using available MCP tools.
+
+    Collect only evidence relevant to:
+    - recent telemetry,
+    - recent deployments,
+    - customer impact,
+    - incident playbook guidance.
+
+    Clearly label:
+    OBSERVATION
+    HYPOTHESIS
+    CONTRADICTING EVIDENCE
+    MISSING EVIDENCE
+    """,
+    expected_output="A grounded evidence bundle with tool-derived facts.",
+    agent=evidence_agent,
+    context=[triage_task],
+)
+
+planning_task = Task(
+    description="""
+    Using the triage and evidence reports, propose the safest next action.
+
+    Consult the operations and playbook tools when needed.
+
+    Return:
+    ACTION
+    JUSTIFICATION
+    RISK
+    HUMAN APPROVAL REQUIRED: YES/NO
+    UNCERTAINTY
+
+    Never claim that a recent deployment caused the incident unless
+    the evidence actually establishes causality.
+    """,
+    expected_output="A policy-grounded response plan.",
+    agent=planner_agent,
+    context=[triage_task, evidence_task],
+)
+
+critic_task = Task(
+    description="""
+    Independently review the response plan.
+
+    Check:
+    1. Is the action supported by evidence?
+    2. Is it consistent with the playbook?
+    3. Is uncertainty represented honestly?
+    4. Does the action require human approval?
+    5. Is important contradicting evidence ignored?
+
+    End with exactly one verdict:
+    VERDICT: ACCEPT
+    VERDICT: REVISE
+    or
+    VERDICT: ESCALATE
+    """,
+    expected_output="An independent review ending in one explicit verdict.",
+    agent=critic_agent,
+    context=[evidence_task, planning_task],
+)
+
+communication_task = Task(
+    description="""
+    Prepare the final stakeholder update using the reviewed context.
+
+    If the critic accepted the plan, communicate the approved next step.
+
+    If the critic requested revision or escalation, do NOT present the
+    proposed action as approved. State that human review is required.
+
+    Include:
+    - what is known,
+    - customer impact if known,
+    - current next step,
+    - remaining uncertainty.
+
+    Keep the message concise.
+    """,
+    expected_output="A concise and safe stakeholder incident update.",
+    agent=communication_agent,
+    context=[triage_task, evidence_task, planning_task, critic_task],
+)
+```
+
+Notice how `context=[...]` expresses which earlier task outputs matter to a later task.
+
+# 18. Assemble the Crew
+
+```python
+from crewai import Crew, Process
+
+incident_crew = Crew(
+    agents=[
+        triage_agent,
+        evidence_agent,
+        planner_agent,
+        critic_agent,
+        communication_agent,
+    ],
+    tasks=[
+        triage_task,
+        evidence_task,
+        planning_task,
+        critic_task,
+        communication_task,
+    ],
+    process=Process.sequential,
+    verbose=True,
+)
+```
+
+Our workflow is deliberately sequential because it is easy to teach and audit.
+
+```{mermaid}
+flowchart LR
+    T[Triage Task] --> E[Evidence Task]
+    E --> P[Planning Task]
+    P --> C[Critic Task]
+    C --> M[Communication Task]
+```
+
+# 19. Complete `main.py`
+
+Here is the complete application shell. It includes configuration, MCP connections, the crew, and a deterministic safety check.
+
+```python
+import json
+import os
+import sys
+from pathlib import Path
+
+from crewai import Agent, Crew, LLM, Process, Task
+from crewai.mcp import MCPServerStdio
+
+
+# ---------------------------------------------------------
+# 1. Configuration
+# ---------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parent
+
+with open(ROOT / "config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+os.environ["OPENAI_API_KEY"] = config["OPENAI_API_KEY"]
+MODEL = config.get("MODEL", "openai/gpt-4o-mini")
+
+llm = LLM(model=MODEL, temperature=0)
+
+
+# ---------------------------------------------------------
+# 2. MCP server connections
+# ---------------------------------------------------------
+
+telemetry_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=[str(ROOT / "servers" / "telemetry_server.py")],
+    cache_tools_list=True,
+)
+
+operations_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=[str(ROOT / "servers" / "operations_server.py")],
+    cache_tools_list=True,
+)
+
+playbook_mcp = MCPServerStdio(
+    command=sys.executable,
+    args=[str(ROOT / "servers" / "playbook_server.py")],
+    cache_tools_list=True,
+)
+
+
+# ---------------------------------------------------------
+# 3. Agents
+# ---------------------------------------------------------
+
+triage_agent = Agent(
+    role="Signal Triage Specialist",
+    goal="Determine severity and whether investigation is required.",
+    backstory=(
+        "You are an SRE triage specialist. Separate observations "
+        "from hypotheses and never invent telemetry."
+    ),
+    llm=llm,
+    mcps=[telemetry_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+evidence_agent = Agent(
+    role="Incident Evidence Analyst",
+    goal="Collect supporting and contradicting incident evidence.",
+    backstory=(
+        "You investigate telemetry, deployments, customer impact, "
+        "and approved operational guidance."
+    ),
+    llm=llm,
+    mcps=[telemetry_mcp, operations_mcp, playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+planner_agent = Agent(
+    role="Incident Response Planner",
+    goal="Recommend the safest evidence-grounded next action.",
+    backstory=(
+        "You design operational responses while respecting policy "
+        "and uncertainty."
+    ),
+    llm=llm,
+    mcps=[operations_mcp, playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+critic_agent = Agent(
+    role="Risk and Policy Critic",
+    goal="Independently validate the proposed response.",
+    backstory=(
+        "You return ACCEPT, REVISE, or ESCALATE after checking "
+        "evidence, risk, and policy."
+    ),
+    llm=llm,
+    mcps=[playbook_mcp],
+    allow_delegation=False,
+    verbose=True,
+)
+
+communication_agent = Agent(
+    role="Stakeholder Communication Specialist",
+    goal="Communicate reviewed facts and the approved next step.",
+    backstory=(
+        "You communicate clearly without exposing secrets or "
+        "presenting hypotheses as facts."
+    ),
+    llm=llm,
+    allow_delegation=False,
+    verbose=True,
+)
+
+
+# ---------------------------------------------------------
+# 4. Tasks
+# ---------------------------------------------------------
+
+triage_task = Task(
+    description="""
+    Analyze incident {incident_id} for service {service}.
+
+    Report:
+    - observed signals,
+    - severity: LOW/MEDIUM/HIGH/CRITICAL,
+    - investigation required: YES/NO,
+    - confidence: 0..1.
+
+    Do not diagnose root cause.
+    """,
+    expected_output="Compact evidence-based triage report.",
+    agent=triage_agent,
+)
+
+evidence_task = Task(
+    description="""
+    Investigate the incident with the available MCP tools.
+
+    Examine telemetry, deployments, customer impact, and playbook
+    guidance. Separate observations, hypotheses, contradicting
+    evidence, and missing evidence.
+    """,
+    expected_output="Grounded evidence bundle.",
+    agent=evidence_agent,
+    context=[triage_task],
+)
+
+planning_task = Task(
+    description="""
+    Propose the safest next action from the available evidence.
+
+    Return ACTION, JUSTIFICATION, RISK, HUMAN APPROVAL REQUIRED,
+    and UNCERTAINTY. Follow retrieved playbook guidance.
+    """,
+    expected_output="Policy-grounded response plan.",
+    agent=planner_agent,
+    context=[triage_task, evidence_task],
+)
+
+critic_task = Task(
+    description="""
+    Independently review the plan for evidence support, policy
+    compliance, uncertainty, and operational risk.
+
+    End with exactly one:
+    VERDICT: ACCEPT
+    VERDICT: REVISE
+    VERDICT: ESCALATE
+    """,
+    expected_output="Independent review with explicit verdict.",
+    agent=critic_agent,
+    context=[evidence_task, planning_task],
+)
+
+communication_task = Task(
+    description="""
+    Create a concise stakeholder update.
+
+    If the critic did not ACCEPT, do not present the proposed action
+    as approved. State that human review is required.
+    """,
+    expected_output="Safe stakeholder incident update.",
+    agent=communication_agent,
+    context=[triage_task, evidence_task, planning_task, critic_task],
+)
+
+
+# ---------------------------------------------------------
+# 5. Crew
+# ---------------------------------------------------------
+
+crew = Crew(
+    agents=[
+        triage_agent,
+        evidence_agent,
+        planner_agent,
+        critic_agent,
+        communication_agent,
+    ],
+    tasks=[
+        triage_task,
+        evidence_task,
+        planning_task,
+        critic_task,
+        communication_task,
+    ],
+    process=Process.sequential,
+    verbose=True,
+)
+
+
+# ---------------------------------------------------------
+# 6. Run one incident
+# ---------------------------------------------------------
+
+incident = {
+    "incident_id": "INC-1042",
+    "service": "checkout-api",
+    "description": (
+        "Checkout latency and error rate increased shortly "
+        "after 10:10."
+    ),
+}
+
+result = crew.kickoff(inputs=incident)
+
+print("\nFINAL CREW OUTPUT")
+print(result)
+
+
+# ---------------------------------------------------------
+# 7. Deterministic safety check
+# ---------------------------------------------------------
+
+critic_text = str(critic_task.output).upper()
+
+if "VERDICT: ACCEPT" not in critic_text:
+    print("\nHUMAN REVIEW REQUIRED")
+else:
+    print("\nPLAN ACCEPTED BY CRITIC")
+```
+
+The final safety check illustrates an important principle:
+
+> **Use agents for judgment; use deterministic code for hard control rules.**
+
+# 20. What happens when you run it?
+
+The runtime interaction is approximately:
+
+```text
+main.py
+   │
+   ├─ CrewAI starts/uses telemetry MCP
+   │      └─ get_service_metrics()
+   │
+   ├─ Triage Agent reasons
+   │
+   ├─ Evidence Agent
+   │      ├─ telemetry MCP
+   │      ├─ operations MCP
+   │      └─ playbook MCP
+   │
+   ├─ Planner
+   │      ├─ operations MCP
+   │      └─ playbook MCP
+   │
+   ├─ Critic
+   │      └─ playbook MCP
+   │
+   └─ Communication
+          └─ final stakeholder message
+```
+
+MCP is between the agents and the enterprise capabilities. It is **not** between every agent and every other agent.
+
+# 21. Why MCP matters
+
+Without MCP, the application may contain:
+
+```python
+def get_service_metrics(service: str):
+    ...
+
+def query_operations_db(service: str):
+    ...
+
+def search_playbook(query: str):
+    ...
+```
+
+and those functions are coupled to this application.
+
+With MCP:
+
+```text
+                   ┌─ CrewAI application
+MCP servers  ──────┼─ another AI host
+                   ├─ developer tool
+                   └─ future agent system
+```
+
+The tool provider and tool consumer can evolve more independently.
+
+That is especially useful when capabilities belong to different systems or teams.
+
+# 22. Local stdio versus remote HTTP
+
+For this tutorial we use **stdio**:
+
+```text
+CrewAI → starts local Python MCP server → stdin/stdout
+```
+
+It is ideal for learning and local development.
+
+For a deployed service, the same conceptual server can use Streamable HTTP:
+
+```python
+if __name__ == "__main__":
+    mcp.run(
+        transport="streamable-http",
+        host="127.0.0.1",
+        port=8000,
+    )
+```
+
+Then a CrewAI agent can be configured with an HTTP MCP connection rather than a local subprocess.
+
+The transport changes. The agent's business responsibility does not have to.
+
+# 23. Security: MCP is a boundary, not automatic safety
+
+MCP standardizes access; it does not make every exposed operation safe.
+
+Prefer:
+
+```python
+get_recent_deployments(service)
+get_customer_impact(service)
+search_playbook(query)
+```
+
+over:
+
+```python
+execute_sql(sql)
+read_any_file(path)
+run_shell(command)
+```
+
+For production, think about:
+
+- authentication;
+- authorization;
+- tool allowlists;
+- read versus write capabilities;
+- secret management;
+- audit logs;
+- timeouts;
+- rate limits;
+- prompt-injection exposure;
+- data returned to each agent.
+
+CrewAI's structured MCP configuration also supports tool filtering, which is useful when a server exposes more capabilities than one agent should receive.
+
+# 24. Failure modes to teach explicitly
+
+## MCP server unavailable
+
+The agent may lose a critical evidence source.
+
+**Design response:** fail safely or escalate rather than inventing evidence.
+
+## Tool returns valid but stale data
+
+Protocol success is not business correctness.
+
+**Design response:** include timestamps and freshness requirements.
+
+## Agent chooses the wrong tool
+
+Tool discovery does not guarantee good tool selection.
+
+**Design response:** improve tool names, docstrings, prompts, and evaluation.
+
+## Critic becomes overconfident
+
+A second LLM is not automatically a ground-truth oracle.
+
+**Design response:** keep deterministic escalation rules and human review.
+
+## Too many tools
+
+A large tool menu can increase confusion and risk.
+
+**Design response:** give each role only the tools it needs.
+
+# 25. Test the MCP layer separately
+
+Create `tests/smoke_test.py` to test one server directly with the MCP client:
+
+```python
+import anyio
+import sys
+from pathlib import Path
+
+from mcp import Client, StdioServerParameters
+
+ROOT = Path(__file__).resolve().parents[1]
+
+server = StdioServerParameters(
+    command=sys.executable,
+    args=[str(ROOT / "servers" / "telemetry_server.py")],
+)
+
+
+async def main():
+    async with Client(server) as client:
+        tools = await client.list_tools()
+        names = [tool.name for tool in tools.tools]
+
+        print("Tools:", names)
+
+        result = await client.call_tool(
+            "summarize_service_metrics",
+            {"service": "checkout-api"},
+        )
+
+        print("Result:", result)
+
+
+if __name__ == "__main__":
+    anyio.run(main)
+```
+
+Run:
+
+```bash
+python tests/smoke_test.py
+```
+
+This test contains **no CrewAI agent**. That is useful: if it fails, debug MCP/data rather than the LLM.
+
+# 26. Evaluate the complete system
+
+Use a small set of meaningful incidents.
+
+| Case | Situation | Expected behavior |
+|---|---|---|
+| A | clear latency spike + recent deployment | investigate and propose grounded action |
+| B | latency spike but no deployment evidence | do not invent deployment cause |
+| C | conflicting evidence | critic should question or escalate |
+| D | missing MCP server | fail safely / request human review |
+| E | suspicious text in incident description | tools and policy should remain authoritative |
+
+Measure at least:
+
+```text
+final task success
+tool-selection correctness
+evidence grounding
+policy compliance
+escalation correctness
+unsupported claims
+latency
+```
+
+The final answer alone is not enough. A correct-looking answer reached through the wrong tools or fabricated evidence is still a bad agentic trajectory.
+
+# 27. Where should different functions live?
+
+As the application grows, separate responsibilities.
+
+```text
+servers/
+    telemetry_server.py      → telemetry functions
+    operations_server.py     → database functions
+    playbook_server.py       → document/RAG functions
+
+agents/
+    incident_agents.py       → agent construction
+
+tasks/
+    incident_tasks.py        → CrewAI task definitions
+
+policy/
+    escalation.py            → deterministic safety rules
+
+evaluation/
+    cases.py                 → labeled test cases
+    metrics.py               → evaluation functions
+```
+
+Different business cases can replace functions without replacing the whole architecture.
+
+For example:
+
+```text
+Incident response       Finance              Manufacturing
+─────────────────       ───────              ─────────────
+telemetry server   →    transaction server   sensor server
+operations server  →    account server       maintenance server
+playbook server    →    policy server        quality-manual server
+```
+
+MCP makes those capability boundaries explicit.
+
+# 28. When would I add CrewAI Flow?
+
+The sequential Crew above is intentionally easy to understand.
+
+If the production requirement becomes:
+
+```text
+critic ACCEPT   → communication
+critic REVISE   → planner again
+critic ESCALATE → human
+```
+
+then use a more explicit orchestration layer.
+
+CrewAI provides **Flows** for event-driven state, branching, and more deterministic orchestration. A strong production design can therefore be:
+
+```text
+CrewAI Flow
+     │
+     ├── Crew/Agent reasoning
+     ├── deterministic branch
+     ├── Crew/Agent reasoning
+     └── human escalation
+             │
+             └── MCP capabilities underneath
+```
+
+This is conceptually close to what LangGraph gave us in Part I, but remains within the CrewAI ecosystem.
+
+# 29. Part I and Part II side by side
+
+```{mermaid}
+flowchart TB
+    subgraph P1["Part I — LangGraph"]
+      L1[Explicit graph] --> L2[Agent nodes]
+      L2 --> L3[Local Python tools]
+      L3 --> L4[CSV / DB / PDF]
+    end
+
+    subgraph P2["Part II — CrewAI + MCP"]
+      C1[Crew / Tasks] --> C2[Role-based Agents]
+      C2 --> C3[MCP clients]
+      C3 --> C4[MCP Servers]
+      C4 --> C5[CSV / DB / PDF]
+    end
+```
+
+Part I emphasizes:
+
+```text
+STATE + NODES + EDGES + ROUTING
+```
+
+Part II emphasizes:
+
+```text
+ROLES + TASKS + CREW + STANDARDIZED CAPABILITIES
+```
+
+Neither removes the need for good system design.
+
+# 30. Which approach is better?
+
+There is no universal winner.
+
+| Requirement | I would lean toward |
+|---|---|
+| very explicit branching/state machine | **LangGraph** |
+| complex deterministic retry loops | **LangGraph** or CrewAI Flow |
+| natural role/task mental model | **CrewAI** |
+| rapid team-of-agents prototype | **CrewAI** |
+| reusable tool layer across AI applications | **MCP** |
+| tools owned by independent teams/services | **MCP** |
+| small single-process prototype | local tools may be simpler |
+| enterprise capability interoperability | **MCP** becomes attractive |
+
+### My verdict for this Northstar example
+
+For **teaching orchestration itself**, Part I's LangGraph design is clearer because the reader can see every state transition and conditional edge.
+
+For a **modular enterprise version**, I prefer the direction of Part II:
+
+$$
+\boxed{\text{CrewAI/Flow for agent work} + \text{MCP for capability boundaries}}
+$$
+
+Why? The incident system naturally touches observability, operational databases, and policy documents that may be owned by different services. MCP prevents the agent application from becoming the permanent home of every integration.
+
+But there is an important nuance:
+
+> **MCP and LangGraph are not competitors.**
+
+You could also build:
+
+```text
+LangGraph orchestration
+        ↓
+agents/nodes
+        ↓
+MCP clients
+        ↓
+MCP servers
+```
+
+Likewise, CrewAI can use ordinary local tools without MCP.
+
+So the deeper architectural choices are really two separate questions:
+
+1. **How should reasoning/workflow be orchestrated?**
+2. **How should agents access external capabilities?**
+
+LangGraph versus CrewAI mainly addresses the first.  
+Local Python tools versus MCP mainly addresses the second.
+
+# 31. Final mental model
+
+Part I taught:
+
+$$
+\text{Agentic AI}
+=
+\text{LLM reasoning}
++
+\text{state}
++
+\text{tools}
++
+\text{routing}
++
+\text{guardrails}.
+$$
+
+Part II adds another boundary:
+
+$$
+\text{MCP}
+=
+\text{standard contract between AI applications and capabilities}.
+$$
+
+Put them together:
+
+<div class="flow-wrap">
+<div class="flow-row">
+<div class="flow-node">Business Goal</div><div class="arrow">→</div>
+<div class="flow-node">CrewAI Tasks</div><div class="arrow">→</div>
+<div class="flow-node">Specialist Agents</div><div class="arrow">→</div>
+<div class="flow-node">MCP Tools</div><div class="arrow">→</div>
+<div class="flow-node">Enterprise Systems</div>
+</div>
+</div>
+
+The framework handles mechanics.
+
+The protocol handles interoperability.
+
+**You still design the intelligence, boundaries, permissions, failure behavior, and definition of success.**
+
+# 32. Build checklist
+
+Before calling the project complete:
+
+- [ ] data sources work independently;
+- [ ] every MCP server works in the Inspector;
+- [ ] MCP tools have narrow names, types, and docstrings;
+- [ ] each agent receives only required MCP capabilities;
+- [ ] tasks clearly separate observation, hypothesis, decision, and communication;
+- [ ] critic output cannot silently authorize a risky action;
+- [ ] deterministic rules handle hard safety constraints;
+- [ ] missing tools/data cause safe failure;
+- [ ] representative incidents are evaluated;
+- [ ] secrets are excluded from Git;
+- [ ] production MCP servers use appropriate authentication and authorization.
+
+Once these are true, you have moved beyond “several prompts chained together” and built a real multi-agent architecture with explicit capability boundaries.
