@@ -1,0 +1,1279 @@
+---
+title: "Agentic AI with Multi-Agent Systems — Part III"
+subtitle: "LangGraph + MCP: Explicit Orchestration Meets Isolated Enterprise Tools"
+description: "The same Northstar Cloud incident-control problem, now combining LangGraph workflow control with MCP capability boundaries."
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+execute:
+  enabled: false
+---
+
+<style>
+.hero{padding:1.4rem;border-radius:18px;background:linear-gradient(135deg,#eef2ff,#ecfeff,#f0fdf4);border:1px solid #c7d2fe;margin:1rem 0}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin:1rem 0}
+.card{padding:1rem;border:1px solid #dbeafe;border-radius:14px;background:white;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.flow{overflow-x:auto;padding:1rem 0}
+.track{display:flex;min-width:900px;align-items:center;justify-content:center;gap:.45rem}
+.node{padding:.7rem .9rem;border:1px solid #cbd5e1;border-radius:12px;background:white;animation:pulse 5s ease-in-out infinite}
+.node:nth-child(3){animation-delay:.6s}.node:nth-child(5){animation-delay:1.2s}.node:nth-child(7){animation-delay:1.8s}.node:nth-child(9){animation-delay:2.4s}
+@keyframes pulse{0%,70%,100%{transform:translateY(0)}82%{transform:translateY(-5px);box-shadow:0 8px 20px rgba(37,99,235,.2)}}
+@media(max-width:800px){.cards{grid-template-columns:1fr}}
+
+.explain{border-radius:14px;padding:1rem 1.15rem;margin:.8rem 0 1rem;background:linear-gradient(135deg,#f8fafc,#eff6ff);border-left:5px solid #2563eb}
+.explain strong{color:#1e3a8a}
+.action{border-radius:14px;padding:.9rem 1.1rem;margin:.8rem 0;background:#f0fdf4;border-left:5px solid #16a34a}
+.architecture{display:grid;grid-template-columns:1fr auto 1.2fr auto 1fr;gap:.65rem;align-items:center;margin:1.2rem 0}
+.vbox{border-radius:18px;padding:1rem;text-align:center;font-weight:650;box-shadow:0 6px 20px rgba(15,23,42,.08);min-height:86px;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.blue{background:linear-gradient(135deg,#dbeafe,#eff6ff);border:2px solid #60a5fa;color:#1e3a8a}
+.purple{background:linear-gradient(135deg,#ede9fe,#faf5ff);border:2px solid #a78bfa;color:#581c87}
+.green{background:linear-gradient(135deg,#dcfce7,#f0fdf4);border:2px solid #4ade80;color:#14532d}
+.orange{background:linear-gradient(135deg,#ffedd5,#fff7ed);border:2px solid #fb923c;color:#7c2d12}
+.red{background:linear-gradient(135deg,#fee2e2,#fff1f2);border:2px solid #fb7185;color:#881337}
+.cyan{background:linear-gradient(135deg,#cffafe,#ecfeff);border:2px solid #22d3ee;color:#164e63}
+.arrow2{font-size:2rem;font-weight:800;color:#64748b;text-align:center}
+.stack{display:grid;gap:.55rem}
+.arch-label{font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;opacity:.75;margin-bottom:.25rem}
+.graph-stage{border-radius:20px;padding:1.1rem;background:linear-gradient(135deg,#f8fafc,#eef2ff);border:1px solid #c7d2fe;margin:1rem 0}
+.graph-row{display:flex;gap:.6rem;align-items:center;justify-content:center;flex-wrap:wrap}
+.graph-node{padding:.75rem 1rem;border-radius:14px;font-weight:700;min-width:120px;text-align:center;box-shadow:0 4px 14px rgba(15,23,42,.08)}
+.diamond{transform:rotate(45deg);width:95px;height:95px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:#fef3c7;border:2px solid #f59e0b;margin:1.2rem}
+.diamond span{transform:rotate(-45deg);font-weight:800;color:#78350f;text-align:center;font-size:.86rem}
+.branch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin:1rem 0}
+.branch{padding:1rem;border-radius:15px;text-align:center;border:1px solid #cbd5e1;background:white}
+.series{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:.75rem;align-items:stretch;margin:1.2rem 0}
+.series-card{border-radius:18px;padding:1.1rem;box-shadow:0 6px 18px rgba(15,23,42,.08);position:relative;overflow:hidden}
+.series-card h3{margin-top:0}
+.series-card .num{font-size:2rem;font-weight:900;opacity:.22;position:absolute;right:.7rem;top:.25rem}
+.pulse-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563eb;margin-right:.4rem;animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+details.codebox{margin:.7rem 0 1.3rem;border:1px solid #cbd5e1;border-radius:12px;background:#0f172a;overflow:hidden}
+details.codebox summary{cursor:pointer;padding:.72rem 1rem;background:#e2e8f0;color:#0f172a;font-weight:700}
+details.codebox pre{margin:0;border-radius:0}
+@media(max-width:850px){.architecture,.series{grid-template-columns:1fr}.arrow2{transform:rotate(90deg)}.branch-grid{grid-template-columns:1fr}}
+
+</style>
+
+<div class="hero">
+
+## **Part III — LangGraph + MCP**
+
+**Same question. Same Northstar Cloud incident. A third architecture.**
+
+**Part I:** LangGraph + local Python functions  
+**Part II:** CrewAI + MCP  
+**Part III:** **LangGraph + MCP**
+
+Part III keeps Part I's strongest property—**explicit state, edges, revision loops, and human escalation**—while moving enterprise capabilities behind **MCP servers** that can be owned by isolated teams and reused by other AI applications.
+
+> **LangGraph answers:** *What happens next?*  
+> **MCP answers:** *What capability can this node access, and through what contract?*
+
+</div>
+
+::: {.callout-note}
+This is a teaching article. Quarto does **not** execute these examples. Copy the code into the named project files and run it locally.
+:::
+
+# 1. One problem, three architectural answers
+
+Northstar Cloud receives the same incident used in Parts I and II:
+
+> Checkout latency and error rate increased shortly after 10:10.
+
+Evidence still comes from `telemetry.csv`, `operations.db`, and `incident_playbook.pdf`. The responsibilities remain:
+
+**Triage → Evidence → Response Plan → Risk Critic → Communication / Human**
+
+<div class="cards">
+<div class="card">
+
+### Part I
+**LangGraph + Python**
+
+Graph owns workflow. Application owns tool functions.
+
+**Best lesson:** state + nodes + routing.
+
+</div>
+<div class="card">
+
+### Part II
+**CrewAI + MCP**
+
+CrewAI owns role/task collaboration. MCP servers own capabilities.
+
+**Best lesson:** roles + tasks + interoperability.
+
+</div>
+<div class="card">
+
+### Part III
+**LangGraph + MCP**
+
+LangGraph owns workflow. MCP servers own capabilities.
+
+**Best lesson:** explicit control + interoperability.
+
+</div>
+</div>
+
+# 2. Why MCP matters when teams are isolated
+
+Imagine three teams:
+
+```text
+Observability Team  → telemetry
+Platform Team       → deployments and ownership
+SRE Governance Team → approved incident policy
+```
+
+Part I could place all access functions inside the LangGraph application:
+
+```text
+Graph node → Python function → data
+```
+
+Part III instead uses:
+
+```text
+Graph node → MCP client → team-owned MCP server → data
+```
+
+The graph team owns **workflow policy**. The service team owns **capability implementation**.
+
+That is a real architectural boundary—not simply another library.
+
+# 3. Architecture
+
+
+<div class="graph-stage">
+<div style="text-align:center;font-weight:800;font-size:1.05rem;margin-bottom:1rem">🏢 Northstar Incident-Control Architecture</div>
+<div class="architecture">
+  <div class="vbox red"><span class="arch-label">Input</span>🚨 Incident<br><small>INC-1042</small></div>
+  <div class="arrow2">→</div>
+  <div class="stack">
+    <div class="vbox purple"><span class="arch-label">LangGraph orchestration</span>🧠 Shared State + Routing</div>
+    <div class="graph-row">
+      <div class="graph-node blue">📡 Triage</div>
+      <div class="graph-node cyan">🔎 Evidence</div>
+      <div class="graph-node green">🧭 Planner</div>
+      <div class="graph-node orange">🛡️ Critic</div>
+      <div class="graph-node purple">📣 Communication</div>
+    </div>
+  </div>
+  <div class="arrow2">→</div>
+  <div class="stack">
+    <div class="vbox blue">📈 Telemetry MCP<br><small>→ telemetry.csv</small></div>
+    <div class="vbox green">🗄️ Operations MCP<br><small>→ operations.db</small></div>
+    <div class="vbox orange">📚 Playbook MCP<br><small>→ incident_playbook.pdf</small></div>
+  </div>
+</div>
+<div style="text-align:center"><span class="pulse-dot"></span><strong>LangGraph decides the path; MCP exposes the capabilities.</strong></div>
+</div>
+
+
+Two responsibilities must remain separate:
+
+$$
+\boxed{\text{LangGraph = workflow control}}
+\qquad
+\boxed{\text{MCP = capability boundary}}
+$$
+
+# 4. What you design vs. what libraries handle
+
+| Concern | You design | LangGraph/MCP handle |
+|---|---|---|
+| business objective | ✓ | |
+| state fields | ✓ | state transport |
+| node responsibilities | ✓ | node execution |
+| routing/escalation | ✓ | edge execution |
+| tool meaning | ✓ | MCP schema/protocol |
+| permissions | ✓ | enforcement mechanisms |
+| model prompts | ✓ | model invocation integration |
+| transport details | configure | MCP client/server mechanics |
+
+Neither framework nor protocol knows your organization's definition of a safe incident response.
+
+# 5. Project structure
+
+```text
+northstar_langgraph_mcp/
+├── app.py
+├── config.json
+├── requirements.txt
+├── data/
+│   ├── telemetry.csv
+│   ├── operations.db
+│   └── incident_playbook.pdf
+├── servers/
+│   ├── telemetry_server.py
+│   ├── operations_server.py
+│   └── playbook_server.py
+├── graph/
+│   ├── state.py
+│   ├── mcp_gateway.py
+│   ├── nodes.py
+│   ├── routing.py
+│   └── workflow.py
+└── tests/
+    ├── test_mcp.py
+    └── test_routing.py
+```
+
+`servers/` are capability providers. `graph/` is the orchestration consumer.
+
+# 6. Install
+
+<div class="explain"><strong>🧰 What this command does</strong><br>Creates an isolated Python 3.11 environment and installs the orchestration, LLM, data, PDF, and MCP dependencies used by the files that follow.</div>
+<div class="action"><strong>➡️ Your action:</strong> Run this once from the project root.</div>
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install langgraph langchain-openai pydantic pandas pypdf "mcp[cli]"
+```
+
+Create `config.json` locally. This is <b>runtime configuration</b>, not article content; it supplies the model and secret only when you run the project.
+
+<div class="action"><strong>➡️ Your action:</strong> Create this file locally and never commit the real key.</div>
+
+```json
+{
+  "OPENAI_API_KEY": "your-key-here",
+  "MODEL": "gpt-4o-mini"
+}
+```
+
+And `.gitignore`:
+
+```text
+config.json
+.venv/
+__pycache__/
+```
+
+# 7. MCP server 1 — telemetry
+
+Create `servers/telemetry_server.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Telemetry MCP server</strong><br>This file belongs to the <b>Observability capability layer</b>. It reads telemetry and exposes only two narrow, read-only operations. The next step is the Operations server; later, the Evidence node will call both through the MCP gateway.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>servers/telemetry_server.py</code>. Keep storage details here—not in LangGraph nodes.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from pathlib import Path
+import json
+import pandas as pd
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+CSV_PATH = ROOT / "data" / "telemetry.csv"
+
+mcp = MCPServer("northstar-telemetry",
+                instructions="Read-only Northstar telemetry.")
+
+def _load():
+    return pd.read_csv(CSV_PATH)
+
+@mcp.tool()
+def get_service_metrics(service: str, last_n: int = 6) -> str:
+    """Return recent telemetry for one service."""
+    df = _load()
+    rows = df[df["service"] == service].tail(last_n)
+    return json.dumps(rows.to_dict(orient="records"))
+
+@mcp.tool()
+def summarize_service_metrics(service: str) -> str:
+    """Return a compact telemetry summary."""
+    x = _load()
+    x = x[x["service"] == service]
+    if x.empty:
+        return json.dumps({"error": "service not found"})
+    return json.dumps({
+        "service": service,
+        "latest_latency_ms": float(x.iloc[-1]["p95_latency_ms"]),
+        "latest_error_rate": float(x.iloc[-1]["error_rate"]),
+        "max_latency_ms": float(x["p95_latency_ms"].max()),
+        "max_error_rate": float(x["error_rate"].max()),
+    })
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+</details>
+
+The owning team can later replace CSV with an observability API without changing the public tool contract.
+
+# 8. MCP server 2 — operations
+
+Create `servers/operations_server.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Operations MCP server</strong><br>This server isolates deployment and customer-impact access. The graph never receives arbitrary SQL access; it receives business-shaped functions such as <code>get_recent_deployments()</code>.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>servers/operations_server.py</code>. If the database changes later, preserve these contracts where possible.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from pathlib import Path
+import json
+import sqlite3
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+DB_PATH = ROOT / "data" / "operations.db"
+
+mcp = MCPServer("northstar-operations",
+                instructions="Read-only operational metadata.")
+
+def _query(sql: str, params: tuple):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+@mcp.tool()
+def get_recent_deployments(service: str, limit: int = 5) -> str:
+    """Return recent deployments."""
+    rows = _query(
+        """SELECT service, version, deployed_at, status
+           FROM deployments WHERE service = ?
+           ORDER BY deployed_at DESC LIMIT ?""",
+        (service, limit),
+    )
+    return json.dumps(rows)
+
+@mcp.tool()
+def get_customer_impact(service: str) -> str:
+    """Return recent customer-impact records."""
+    rows = _query(
+        """SELECT service, impacted_customers, region, observed_at
+           FROM customer_impact WHERE service = ?
+           ORDER BY observed_at DESC LIMIT 5""",
+        (service,),
+    )
+    return json.dumps(rows)
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+</details>
+
+Notice what we did **not** expose: `execute_arbitrary_sql(sql)`. Narrow capabilities are easier to secure and audit.
+
+# 9. MCP server 3 — playbook
+
+Create `servers/playbook_server.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Playbook MCP server</strong><br>This is the policy/retrieval boundary. It turns the PDF into a searchable capability. The simple keyword retrieval is intentionally replaceable by vector/RAG retrieval without changing the graph.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>servers/playbook_server.py</code>, then test all three MCP servers before building agents.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from pathlib import Path
+import re
+from pypdf import PdfReader
+from mcp.server import MCPServer
+
+ROOT = Path(__file__).resolve().parents[1]
+PDF_PATH = ROOT / "data" / "incident_playbook.pdf"
+
+mcp = MCPServer("northstar-playbook",
+                instructions="Approved incident-response guidance.")
+
+def _terms(text: str):
+    return {w.lower() for w in re.findall(r"[A-Za-z]{4,}", text)}
+
+@mcp.tool()
+def search_playbook(query: str, top_k: int = 3) -> str:
+    """Return relevant playbook passages."""
+    q = _terms(query)
+    scored = []
+    for page_no, page in enumerate(PdfReader(PDF_PATH).pages, start=1):
+        text = page.extract_text() or ""
+        score = len(q & _terms(text))
+        if score:
+            scored.append((score, page_no, text))
+    scored.sort(reverse=True)
+    parts = []
+    for score, page_no, text in scored[:top_k]:
+        parts.append(
+            f"PAGE {page_no} | score={score}\n"
+            + " ".join(text.split())[:1800]
+        )
+    return "\n\n".join(parts) or "No relevant guidance found."
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+</details>
+
+For production, the retrieval implementation can become vector/RAG search while the MCP function name and inputs remain stable.
+
+# 10. Test MCP before LangGraph
+
+Run each server with the MCP Inspector. This validates the capability layer <b>before</b> LangGraph is involved.
+
+<div class="action"><strong>➡️ Your action:</strong> Confirm that each tool is discoverable and returns sensible data. Only then continue to the graph.</div>
+
+```bash
+mcp dev servers/telemetry_server.py
+mcp dev servers/operations_server.py
+mcp dev servers/playbook_server.py
+```
+
+<div class="flow"><div class="track">
+<div class="node">Data</div>→<div class="node">MCP Tool</div>→
+<div class="node">MCP Test</div>→<div class="node">Graph Node</div>→
+<div class="node">Routing</div>
+</div></div>
+
+Debug one layer at a time.
+
+# 11. Create the MCP gateway
+
+Create `graph/mcp_gateway.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — MCP gateway</strong><br>The three servers now exist, but LangGraph should not repeat connection code in every node. This gateway is the adapter: nodes ask for a server, tool, and arguments; the gateway handles the MCP client call.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>graph/mcp_gateway.py</code>. All later graph nodes call this one adapter.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+import sys
+from pathlib import Path
+from mcp import Client, StdioServerParameters
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def _server(filename: str):
+    return StdioServerParameters(
+        command=sys.executable,
+        args=[str(ROOT / "servers" / filename)],
+    )
+
+SERVERS = {
+    "telemetry": _server("telemetry_server.py"),
+    "operations": _server("operations_server.py"),
+    "playbook": _server("playbook_server.py"),
+}
+
+async def call_mcp_tool(server_name: str,
+                        tool_name: str,
+                        arguments: dict) -> str:
+    async with Client(SERVERS[server_name]) as client:
+        result = await client.call_tool(tool_name, arguments)
+        pieces = []
+        for item in result.content:
+            value = getattr(item, "text", None)
+            if value:
+                pieces.append(value)
+        return "\n".join(pieces)
+```
+
+</details>
+
+Graph nodes now need to know only:
+
+
+<div class="explain"><strong>🧩 What this code is — One example MCP call</strong><br>This tiny example shows the contract that graph code will use. Notice that the caller knows the capability name and inputs, but not SQLite, CSV parsing, or server internals.</div>
+<div class="action"><strong>➡️ Your action:</strong> Use this pattern inside nodes; do not scatter raw database/file access through the graph.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+async def example_call():
+    return await call_mcp_tool(
+        "operations",
+        "get_recent_deployments",
+        {"service": "checkout-api"},
+    )
+```
+
+</details>
+
+# 12. Define outputs and shared state
+
+Create `graph/state.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — State and structured outputs</strong><br>Before writing nodes, define the shared case file and the model outputs. This prevents each agent from inventing a different data shape and makes routing fields such as <code>decision</code> predictable.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>graph/state.py</code>. The next section's nodes will read and update these fields.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from typing import Literal, TypedDict
+from pydantic import BaseModel, Field
+
+class TriageOutput(BaseModel):
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    affected_service: str
+    summary: str
+    confidence: float = Field(ge=0, le=1)
+
+class PlanOutput(BaseModel):
+    action: str
+    justification: str
+    risk: Literal["LOW", "MEDIUM", "HIGH"]
+    requires_human_approval: bool
+
+class CriticOutput(BaseModel):
+    decision: Literal["ACCEPT", "REVISE", "ESCALATE"]
+    reason: str
+
+class IncidentState(TypedDict, total=False):
+    incident: dict
+    triage: dict
+    evidence: dict
+    plan: dict
+    critique: dict
+    stakeholder_message: str
+    revision_count: int
+    needs_human: bool
+    trajectory: list[str]
+```
+
+</details>
+
+This explicit shared case file is one of LangGraph's strongest teaching features.
+
+# 13. Build the nodes
+
+Create `graph/nodes.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — LangGraph nodes</strong><br>These functions implement the five responsibilities. Triage interprets telemetry; Evidence gathers facts deterministically; Planner proposes; Critic reviews; Communication writes the approved message. Each node returns only the state updates it owns.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>graph/nodes.py</code>. Notice how MCP calls connect the orchestration layer to the servers created earlier.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+import json
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from graph.mcp_gateway import call_mcp_tool
+from graph.state import CriticOutput, IncidentState, PlanOutput, TriageOutput
+
+async def triage_node(state: IncidentState, llm):
+    service = state["incident"]["service"]
+    metrics = await call_mcp_tool(
+        "telemetry", "summarize_service_metrics", {"service": service}
+    )
+    model = llm.with_structured_output(TriageOutput)
+    result = await model.ainvoke([
+        SystemMessage(content=(
+            "You are Signal Triage. Classify severity from supplied "
+            "evidence. Do not diagnose root cause."
+        )),
+        HumanMessage(content=f"Incident: {state['incident']}\nMetrics: {metrics}")
+    ])
+    return {
+        "triage": result.model_dump(),
+        "trajectory": state.get("trajectory", []) + ["triage"],
+    }
+
+async def evidence_node(state: IncidentState, llm):
+    service = state["incident"]["service"]
+    metrics = await call_mcp_tool(
+        "telemetry", "get_service_metrics",
+        {"service": service, "last_n": 6}
+    )
+    deployments = await call_mcp_tool(
+        "operations", "get_recent_deployments",
+        {"service": service, "limit": 5}
+    )
+    impact = await call_mcp_tool(
+        "operations", "get_customer_impact", {"service": service}
+    )
+    policy = await call_mcp_tool(
+        "playbook", "search_playbook",
+        {"query": f"{service} latency errors deployment"}
+    )
+    return {
+        "evidence": {
+            "metrics": metrics,
+            "deployments": deployments,
+            "customer_impact": impact,
+            "playbook": policy,
+        },
+        "trajectory": state.get("trajectory", []) + ["evidence"],
+    }
+
+async def planner_node(state: IncidentState, llm):
+    model = llm.with_structured_output(PlanOutput)
+    result = await model.ainvoke([
+        SystemMessage(content=(
+            "You are the Response Planner. Recommend the safest next "
+            "action grounded in evidence and policy. Correlation is not causation."
+        )),
+        HumanMessage(content=(
+            f"Evidence: {json.dumps(state['evidence'])}\n"
+            f"Critic feedback: {json.dumps(state.get('critique', {}))}"
+        )),
+    ])
+    return {
+        "plan": result.model_dump(),
+        "trajectory": state.get("trajectory", []) + ["planner"],
+    }
+
+async def critic_node(state: IncidentState, llm):
+    policy = await call_mcp_tool(
+        "playbook", "search_playbook",
+        {"query": f"approval escalation {state['plan']['action']}"}
+    )
+    model = llm.with_structured_output(CriticOutput)
+    result = await model.ainvoke([
+        SystemMessage(content=(
+            "You are the Risk Critic. Check evidence support, policy, "
+            "uncertainty and operational risk. Return ACCEPT, REVISE or ESCALATE."
+        )),
+        HumanMessage(content=(
+            f"Evidence: {json.dumps(state['evidence'])}\n"
+            f"Plan: {json.dumps(state['plan'])}\nPolicy: {policy}"
+        )),
+    ])
+    revisions = state.get("revision_count", 0)
+    if result.decision == "REVISE":
+        revisions += 1
+    return {
+        "critique": result.model_dump(),
+        "revision_count": revisions,
+        "trajectory": state.get("trajectory", [])
+                      + [f"critic:{result.decision}"],
+    }
+
+async def communication_node(state: IncidentState, llm):
+    response = await llm.ainvoke([
+        SystemMessage(content=(
+            "Write a concise stakeholder update using reviewed facts only. "
+            "Do not expose secrets or present hypotheses as facts."
+        )),
+        HumanMessage(content=(
+            f"Incident: {state['incident']}\n"
+            f"Plan: {state['plan']}\nCritic: {state['critique']}"
+        )),
+    ])
+    return {
+        "stakeholder_message": response.content,
+        "trajectory": state.get("trajectory", []) + ["communication"],
+    }
+
+async def human_escalation_node(state: IncidentState):
+    return {
+        "needs_human": True,
+        "trajectory": state.get("trajectory", []) + ["human_escalation"],
+    }
+```
+
+</details>
+
+The key division is:
+
+```text
+LangGraph node → WHEN this work happens
+MCP server     → HOW enterprise data is accessed
+LLM            → WHERE interpretation is useful
+Python rule    → WHAT must be deterministic
+```
+
+# 14. Make safety routing deterministic
+
+Create `graph/routing.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Deterministic routing</strong><br>The Critic produces a judgment, but it does not get unrestricted control of the workflow. This pure Python function converts the judgment into an allowed next step and caps revision loops.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>graph/routing.py</code>. This is the safety/control bridge between the Critic and the graph.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+MAX_REVISIONS = 1
+
+def route_after_critic(state):
+    decision = state["critique"]["decision"]
+
+    if decision == "ACCEPT":
+        if state["plan"]["requires_human_approval"]:
+            return "human_escalation"
+        return "communication"
+
+    if decision == "REVISE":
+        if state.get("revision_count", 0) <= MAX_REVISIONS:
+            return "planner"
+        return "human_escalation"
+
+    return "human_escalation"
+```
+
+</details>
+
+The LLM can recommend. **Python owns the hard safety boundary.**
+
+# 15. Build the graph
+
+Create `graph/workflow.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Workflow construction</strong><br>Now we connect previously defined pieces: state → nodes → fixed edges → conditional edge after the Critic. The graph contains no database logic; it only describes execution order.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>graph/workflow.py</code>. This is where the architecture becomes an executable state machine.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from langgraph.graph import END, START, StateGraph
+from graph.routing import route_after_critic
+from graph.state import IncidentState
+
+def build_workflow(triage, evidence, planner, critic,
+                   communication, human_escalation):
+    graph = StateGraph(IncidentState)
+
+    graph.add_node("triage", triage)
+    graph.add_node("evidence", evidence)
+    graph.add_node("planner", planner)
+    graph.add_node("critic", critic)
+    graph.add_node("communication", communication)
+    graph.add_node("human_escalation", human_escalation)
+
+    graph.add_edge(START, "triage")
+    graph.add_edge("triage", "evidence")
+    graph.add_edge("evidence", "planner")
+    graph.add_edge("planner", "critic")
+
+    graph.add_conditional_edges(
+        "critic",
+        route_after_critic,
+        {
+            "planner": "planner",
+            "communication": "communication",
+            "human_escalation": "human_escalation",
+        },
+    )
+
+    graph.add_edge("communication", END)
+    graph.add_edge("human_escalation", END)
+    return graph.compile()
+```
+
+</details>
+
+
+<div class="graph-stage">
+<div style="text-align:center;font-weight:800;font-size:1.05rem">🔁 LangGraph Decision Loop</div>
+<div class="graph-row" style="margin-top:1rem">
+  <div class="graph-node blue">🚦 START</div><div class="arrow2">→</div>
+  <div class="graph-node blue">📡 Triage</div><div class="arrow2">→</div>
+  <div class="graph-node cyan">🔎 Evidence</div><div class="arrow2">→</div>
+  <div class="graph-node green">🧭 Planner</div><div class="arrow2">→</div>
+  <div class="diamond"><span>🛡️ Critic<br>Decision?</span></div>
+</div>
+<div class="branch-grid">
+  <div class="branch" style="border-top:5px solid #22c55e"><strong>✅ ACCEPT</strong><br>Low-risk approved plan<br>↓<br><b>📣 Communication → END</b></div>
+  <div class="branch" style="border-top:5px solid #f59e0b"><strong>🔄 REVISE</strong><br>Retry still available<br>↓<br><b>🧭 Back to Planner</b></div>
+  <div class="branch" style="border-top:5px solid #ef4444"><strong>🧑‍💼 ESCALATE</strong><br>High risk / retry exhausted<br>↓<br><b>Human Review → END</b></div>
+</div>
+</div>
+
+
+# 16. Complete `app.py`
+
+
+<div class="explain"><strong>🧩 What this code is — Application assembly</strong><br>This is the composition root. It loads configuration, creates one LLM, injects it into node wrappers, compiles the workflow, creates the initial incident state, and invokes the graph.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>app.py</code>. At this point all earlier files finally connect end to end.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+import asyncio
+import json
+import os
+from pathlib import Path
+from langchain_openai import ChatOpenAI
+
+from graph.nodes import (
+    triage_node, evidence_node, planner_node, critic_node,
+    communication_node, human_escalation_node,
+)
+from graph.workflow import build_workflow
+
+ROOT = Path(__file__).resolve().parent
+with open(ROOT / "config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+os.environ["OPENAI_API_KEY"] = config["OPENAI_API_KEY"]
+llm = ChatOpenAI(
+    model=config.get("MODEL", "gpt-4o-mini"),
+    temperature=0,
+)
+
+async def triage(s): return await triage_node(s, llm)
+async def evidence(s): return await evidence_node(s, llm)
+async def planner(s): return await planner_node(s, llm)
+async def critic(s): return await critic_node(s, llm)
+async def communication(s): return await communication_node(s, llm)
+
+app = build_workflow(
+    triage, evidence, planner, critic,
+    communication, human_escalation_node,
+)
+
+async def main():
+    initial_state = {
+        "incident": {
+            "incident_id": "INC-1042",
+            "service": "checkout-api",
+            "description": "Latency and errors increased shortly after 10:10.",
+        },
+        "revision_count": 0,
+        "needs_human": False,
+        "trajectory": [],
+    }
+
+    result = await app.ainvoke(initial_state)
+
+    print("Trajectory:")
+    for step in result["trajectory"]:
+        print(" -", step)
+
+    print("Human review:", result.get("needs_human", False))
+    if result.get("stakeholder_message"):
+        print(result["stakeholder_message"])
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+</details>
+
+Run:
+
+```bash
+python app.py
+```
+
+# 17. Follow one incident
+
+```text
+INC-1042
+   ↓
+TRIAGE ───────────→ Telemetry MCP
+   ↓
+EVIDENCE ─────────→ Telemetry + Operations + Playbook MCP
+   ↓
+PLANNER
+   ↓
+CRITIC ───────────→ Playbook MCP
+   ├─ ACCEPT ─────→ Communication → END
+   ├─ REVISE ─────→ Planner
+   └─ ESCALATE ───→ Human → END
+```
+
+The workflow is dynamic, but the safety rules remain visible.
+
+# 18. Observation is not hypothesis is not decision
+
+```text
+OBSERVATION:
+Latency rose from about 220 ms to about 980 ms.
+
+OBSERVATION:
+Version 4.8 was deployed four minutes earlier.
+
+HYPOTHESIS:
+The deployment may be related.
+
+DECISION:
+Pause rollout and request rollback approval.
+```
+
+Never silently transform “after” into “because of.”
+
+$$
+\text{Evidence} \rightarrow \text{Hypothesis}
+\rightarrow \text{Reviewed Decision}
+$$
+
+# 19. Why MCP helps isolated teams
+
+
+<div class="graph-stage">
+<div style="text-align:center;font-weight:800;font-size:1.05rem">🤝 Isolated Teams, Stable MCP Contracts</div>
+<div class="architecture">
+  <div class="vbox purple"><span class="arch-label">Consumer</span>🧠 LangGraph Team<br><small>owns workflow</small></div>
+  <div class="arrow2">→</div>
+  <div class="stack">
+    <div class="vbox blue">📡 Observability Team<br><small>Telemetry MCP</small></div>
+    <div class="vbox green">🧰 Platform Team<br><small>Operations MCP</small></div>
+    <div class="vbox orange">🛡️ Governance Team<br><small>Playbook MCP</small></div>
+  </div>
+  <div class="arrow2">→</div>
+  <div class="stack">
+    <div class="vbox blue">📈 Telemetry Platform</div>
+    <div class="vbox green">🗄️ Deployment DB</div>
+    <div class="vbox orange">📚 Approved Policy</div>
+  </div>
+</div>
+</div>
+
+
+The graph consumes contracts. It need not own every storage implementation.
+
+# 20. Local today, remote tomorrow
+
+For learning:
+
+```text
+LangGraph → stdio → local MCP subprocess
+```
+
+For deployment:
+
+```text
+LangGraph service → authenticated HTTPS → remote MCP service
+```
+
+The current MCP client can connect to a URL:
+
+
+<div class="explain"><strong>🧩 What this code is — Remote MCP client</strong><br>Local stdio is ideal for learning. This snippet shows the architectural evolution: the graph can consume a remote MCP endpoint while keeping the same business workflow.</div>
+<div class="action"><strong>➡️ Your action:</strong> Use remote transport only after adding authentication, authorization, TLS, timeouts, and operational monitoring.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from mcp import Client
+
+async def list_remote_tools():
+    async with Client("https://mcp.example.com/mcp") as client:
+        return await client.list_tools()
+```
+
+</details>
+
+Transport changes without changing the business workflow.
+
+# 21. MCP is not automatic security
+
+Prefer:
+
+```text
+get_recent_deployments(service)
+search_playbook(query)
+get_customer_impact(service)
+```
+
+over:
+
+```text
+execute_any_sql(sql)
+read_any_file(path)
+run_shell(command)
+```
+
+Production systems still need authentication, authorization, TLS, read/write separation, audit logs, rate limits, timeouts, input validation, and human approval for consequential actions.
+
+**Protocol compatibility is not permission.**
+
+# 22. Handle MCP failure explicitly
+
+Do not convert:
+
+```text
+MCP unavailable
+```
+
+into:
+
+```text
+No evidence found
+```
+
+Those are different states.
+
+Extend state:
+
+
+<div class="explain"><strong>🧩 What this code is — Tool-health state</strong><br>A missing server is not the same as 'no evidence'. Adding explicit tool errors to state lets the graph preserve that distinction.</div>
+<div class="action"><strong>➡️ Your action:</strong> Add this field to the production state model if external MCP availability affects safe decisions.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+class ToolHealthState(TypedDict, total=False):
+    tool_errors: list[str]
+```
+
+</details>
+
+Then route safely:
+
+
+<div class="explain"><strong>🧩 What this code is — Tool-health route</strong><br>This route turns infrastructure uncertainty into a safe workflow action. If required evidence cannot be fetched, the graph escalates instead of letting the LLM guess.</div>
+<div class="action"><strong>➡️ Your action:</strong> Place this routing rule before planning in a production graph.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+def evidence_health_route(state):
+    if state.get("tool_errors"):
+        return "human_escalation"
+    return "planner"
+```
+
+</details>
+
+This is where LangGraph's explicit routing becomes especially valuable.
+
+# 23. Test MCP without the LLM
+
+Create `tests/test_mcp.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — MCP smoke test</strong><br>This test deliberately excludes LangGraph and the LLM. It answers one question only: can the MCP client discover and call the telemetry capability?</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>tests/test_mcp.py</code>. Run it before debugging agent reasoning.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+import anyio
+import sys
+from pathlib import Path
+from mcp import Client, StdioServerParameters
+
+ROOT = Path(__file__).resolve().parents[1]
+
+server = StdioServerParameters(
+    command=sys.executable,
+    args=[str(ROOT / "servers" / "telemetry_server.py")],
+)
+
+async def main():
+    async with Client(server) as client:
+        tools = await client.list_tools()
+        names = [tool.name for tool in tools.tools]
+        assert "summarize_service_metrics" in names
+
+        result = await client.call_tool(
+            "summarize_service_metrics",
+            {"service": "checkout-api"},
+        )
+        assert result.content
+        print("MCP smoke test passed.")
+
+if __name__ == "__main__":
+    anyio.run(main())
+```
+
+</details>
+
+# 24. Test routing without the LLM
+
+Create `tests/test_routing.py`:
+
+
+<div class="explain"><strong>🧩 What this code is — Routing unit tests</strong><br>These tests deliberately exclude MCP and the LLM. They prove that ACCEPT, approval-required, and ESCALATE decisions go to the expected destinations.</div>
+<div class="action"><strong>➡️ Your action:</strong> Create <code>tests/test_routing.py</code>. Hard workflow policy should be cheap and deterministic to test.</div>
+<details class="codebox"><summary>💻 View / copy code</summary>
+
+```python
+from graph.routing import route_after_critic
+
+def test_accept():
+    state = {
+        "critique": {"decision": "ACCEPT"},
+        "plan": {"requires_human_approval": False},
+        "revision_count": 0,
+    }
+    assert route_after_critic(state) == "communication"
+
+def test_approval():
+    state = {
+        "critique": {"decision": "ACCEPT"},
+        "plan": {"requires_human_approval": True},
+        "revision_count": 0,
+    }
+    assert route_after_critic(state) == "human_escalation"
+
+def test_escalation():
+    state = {
+        "critique": {"decision": "ESCALATE"},
+        "plan": {"requires_human_approval": False},
+        "revision_count": 0,
+    }
+    assert route_after_critic(state) == "human_escalation"
+```
+
+</details>
+
+Critical routing can therefore be tested without tokens or stochastic model output.
+
+# 25. Evaluate the system
+
+Use a compact test matrix:
+
+| Case | Situation | Expected behavior |
+|---|---|---|
+| A | strong consistent evidence | communicate reviewed plan |
+| B | ambiguous cause | revise or human |
+| C | high-impact action | human approval |
+| D | MCP outage | fail safely / human |
+| E | prompt injection in incident text | ignore malicious instruction |
+
+Measure task success, routing correctness, MCP tool correctness, evidence grounding, escalation correctness, unsupported claims, and latency.
+
+# 26. Part I → Part II → Part III
+
+
+<div class="series">
+  <div class="series-card blue"><span class="num">I</span><h3>🗺️ Part I</h3><b>LangGraph + Python</b><p>Learn explicit state, nodes, edges, routing, and deterministic control.</p><small>Application owns tool functions.</small></div>
+  <div class="arrow2">→</div>
+  <div class="series-card purple"><span class="num">II</span><h3>🚪 Part II</h3><b>CrewAI + MCP</b><p>Learn role/task collaboration and standardized capability access.</p><small>CrewAI organizes agents; MCP separates tools.</small></div>
+  <div class="arrow2">→</div>
+  <div class="series-card green"><span class="num">III</span><h3>🏗️ Part III</h3><b>LangGraph + MCP</b><p>Combine explicit workflow control with independently owned enterprise capabilities.</p><small>Control + interoperability.</small></div>
+</div>
+
+
+The series now answers three progressively different questions:
+
+```text
+Part I:
+How do I explicitly control a multi-agent workflow?
+
+Part II:
+How do role-based agents consume independently exposed capabilities?
+
+Part III:
+Can I retain explicit graph control AND use independent capability boundaries?
+
+Answer: Yes.
+```
+
+# 27. Three-way comparison
+
+| Dimension | LangGraph + Python | CrewAI + MCP | LangGraph + MCP |
+|---|---:|---:|---:|
+| explicit state | ★★★★★ | ★★★ | ★★★★★ |
+| explicit branching | ★★★★★ | ★★★ | ★★★★★ |
+| role/task simplicity | ★★★ | ★★★★★ | ★★★ |
+| prototype simplicity | ★★★★★ | ★★★ | ★★★ |
+| capability reuse | ★★ | ★★★★★ | ★★★★★ |
+| isolated-team ownership | ★★ | ★★★★★ | ★★★★★ |
+| deterministic safety routing | ★★★★★ | ★★★★ | ★★★★★ |
+| integration boundaries | ★★ | ★★★★★ | ★★★★★ |
+| moving parts | low | medium/high | high |
+| enterprise modularity | medium | high | high |
+
+These stars are design guidance for this scenario, not benchmark results.
+
+# 28. Which architecture should you choose?
+
+**Choose LangGraph + Python** when one team owns the application and integrations, tools are application-specific, deployment simplicity matters, and explicit routing is important.
+
+**Choose CrewAI + MCP** when role/task modeling matches the organization, rapid multi-agent collaboration matters, and reusable remote capabilities are important.
+
+**Choose LangGraph + MCP** when explicit state, branching, retries, and human approval matter **and** capabilities belong to isolated teams or need reuse across AI applications.
+
+# 29. Verdict for Northstar Cloud
+
+For the first prototype, I would start with:
+
+$$
+\boxed{\text{LangGraph + Python}}
+$$
+
+It teaches the mechanics with the fewest moving pieces.
+
+For a role-oriented agent team, Part II is elegant:
+
+$$
+\boxed{\text{CrewAI + MCP}}
+$$
+
+For the mature Northstar incident platform with independently owned observability, operations, and governance systems, I would lean toward:
+
+$$
+\boxed{\text{LangGraph + MCP}}
+$$
+
+The reason is structural:
+
+```text
+WHAT HAPPENS NEXT?          → LangGraph
+WHAT CAN THIS NODE ACCESS?  → MCP
+WHAT NEEDS JUDGMENT?        → LLM
+WHAT MUST BE GUARANTEED?    → deterministic code + human
+```
+
+# 30. No universal winner
+
+Part III also costs more. It adds server processes, client lifecycle, protocol boundaries, remote authentication, additional observability, and more failure modes.
+
+If one small team owns everything, MCP can be unnecessary ceremony.
+
+A useful rule is:
+
+$$
+\boxed{\text{Use MCP when the capability boundary is real—not merely fashionable.}}
+$$
+
+# 31. Final architecture lesson
+
+The three articles reveal that there are actually **three independent design questions**:
+
+1. **How should reasoning be decomposed?**  
+   Triage → Evidence → Plan → Critic → Communication.
+
+2. **How should workflow be orchestrated?**  
+   LangGraph graph/state/edges or CrewAI crew/tasks/flows.
+
+3. **How should external capabilities be exposed?**  
+   Local Python functions or MCP servers.
+
+Therefore the design space is larger than “LangGraph versus CrewAI”:
+
+```text
+LangGraph + Python
+LangGraph + MCP
+CrewAI + Python
+CrewAI + MCP
+other orchestrator + MCP
+```
+
+MCP does not replace orchestration.  
+LangGraph does not replace capability ownership.  
+CrewAI does not replace security policy.  
+An LLM does not replace deterministic engineering.
+
+# 32. Closing perspective
+
+Part I gave the agents a **map**.
+
+Part II gave agents **standard doors into independently owned systems**.
+
+Part III keeps the map **and** installs those doors.
+
+<div class="flow"><div class="track">
+<div class="node">Business Goal</div>→
+<div class="node">LangGraph State</div>→
+<div class="node">Specialist Nodes</div>→
+<div class="node">MCP Contracts</div>→
+<div class="node">Isolated Teams</div>
+</div></div>
+
+The final mental model is:
+
+$$
+\boxed{
+\text{LangGraph = orchestration}
++
+\text{MCP = capability boundary}
++
+\text{LLM = bounded judgment}
++
+\text{Python/Human = control}
+}
+$$
+
+That is the architectural conclusion of the three-part series.
