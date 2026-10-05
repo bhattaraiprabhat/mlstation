@@ -27,25 +27,257 @@ code-summary: "Show the code"
 .ts-compare>div{
   padding:.9rem 1rem;border:1px solid #e5e7eb;border-radius:15px;background:#fff
 }
+/* ------------------------------------------------------------
+   Production handoff: deliberately isolated visual system.
+   Every important foreground/background pair is explicit so the
+   section remains readable in both Quarto light and dark themes.
+   ------------------------------------------------------------ */
 .shipped-zone{
-  margin:2rem -.6rem 1.5rem;padding:1.35rem 1.25rem 1.5rem;
-  border-radius:22px;border:1px solid #334155;
+  --ship-bg:#0b1220;
+  --ship-panel:#111c2f;
+  --ship-panel-2:#17233a;
+  --ship-text:#f1f5f9;
+  --ship-muted:#cbd5e1;
+  --ship-heading:#ffffff;
+  --ship-link:#7dd3fc;
+  --ship-link-hover:#bae6fd;
+  --ship-code-bg:#1e293b;
+  --ship-code-text:#fef3c7;
+  --ship-border:#475569;
+  --ship-accent:#38bdf8;
+
+  margin:2rem -.6rem 1.5rem;
+  padding:1.35rem 1.25rem 1.5rem;
+  border-radius:22px;
+  border:1px solid var(--ship-border);
   background:
-    radial-gradient(circle at 95% 0%,rgba(56,189,248,.13),transparent 28%),
-    linear-gradient(180deg,#0f172a,#111827);
-  color:#e5e7eb;box-shadow:0 16px 40px rgba(15,23,42,.18)
+    radial-gradient(circle at 95% 0%,rgba(56,189,248,.16),transparent 30%),
+    linear-gradient(180deg,#0b1220,#111827);
+  color:var(--ship-text) !important;
+  box-shadow:0 16px 40px rgba(15,23,42,.20);
+  color-scheme:dark;
 }
-.shipped-zone h2,.shipped-zone h3{color:#f8fafc}
-.shipped-zone a{color:#7dd3fc}
-.shipped-zone code{color:#e0e7ff}
-.shipped-zone table{background:#f8fafc;color:#111827}
-.shipped-zone .callout{color:#111827}
+
+/* Prose and headings */
+.shipped-zone p,
+.shipped-zone li,
+.shipped-zone dd,
+.shipped-zone dt,
+.shipped-zone blockquote,
+.shipped-zone figcaption,
+.shipped-zone .figure-caption,
+.shipped-zone .caption,
+.shipped-zone small{
+  color:var(--ship-text) !important;
+}
+.shipped-zone h1,
+.shipped-zone h2,
+.shipped-zone h3,
+.shipped-zone h4,
+.shipped-zone h5,
+.shipped-zone h6,
+.shipped-zone strong,
+.shipped-zone b{
+  color:var(--ship-heading) !important;
+}
+.shipped-zone em{color:#e2e8f0 !important}
+.shipped-zone .text-muted,
+.shipped-zone .quarto-secondary-nav,
+.shipped-zone .description{
+  color:var(--ship-muted) !important;
+}
+
+/* Links */
+.shipped-zone a{
+  color:var(--ship-link) !important;
+  text-decoration-color:rgba(125,211,252,.65);
+}
+.shipped-zone a:hover,
+.shipped-zone a:focus{
+  color:var(--ship-link-hover) !important;
+}
+
+/* Inline code such as model.json and the artifact contract */
+.shipped-zone :not(pre)>code{
+  color:var(--ship-code-text) !important;
+  background:var(--ship-code-bg) !important;
+  border:1px solid #475569;
+  border-radius:.35rem;
+  padding:.08rem .32rem;
+  font-weight:650;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+
+/* Fenced code blocks */
+.shipped-zone pre,
+.shipped-zone div.sourceCode,
+.shipped-zone .sourceCode{
+  background:#020617 !important;
+  color:#e2e8f0 !important;
+  border-color:#475569 !important;
+}
+.shipped-zone pre code,
+.shipped-zone div.sourceCode code,
+.shipped-zone .sourceCode code{
+  color:#e2e8f0 !important;
+  background:transparent !important;
+}
+.shipped-zone .code-copy-button{
+  color:#e2e8f0 !important;
+}
+
+/* Tables */
+.shipped-zone table,
+.shipped-zone .table{
+  --bs-table-bg:#111c2f;
+  --bs-table-color:#f1f5f9;
+  --bs-table-border-color:#475569;
+  --bs-table-striped-bg:#17233a;
+  --bs-table-striped-color:#f8fafc;
+  --bs-table-hover-bg:#1e293b;
+  --bs-table-hover-color:#ffffff;
+  color:var(--ship-text) !important;
+  background:var(--ship-panel) !important;
+  border-color:var(--ship-border) !important;
+}
+.shipped-zone table th,
+.shipped-zone table td,
+.shipped-zone .table th,
+.shipped-zone .table td{
+  color:var(--ship-text) !important;
+  background:transparent !important;
+  border-color:var(--ship-border) !important;
+}
+.shipped-zone table th,
+.shipped-zone .table th{
+  color:#ffffff !important;
+  background:#17233a !important;
+}
+
+/* Quarto callouts need their own readable light panel. */
+.shipped-zone .callout{
+  color:#172033 !important;
+  background:#f8fafc !important;
+  border-color:#94a3b8 !important;
+}
+.shipped-zone .callout p,
+.shipped-zone .callout li,
+.shipped-zone .callout dd,
+.shipped-zone .callout dt,
+.shipped-zone .callout blockquote,
+.shipped-zone .callout figcaption,
+.shipped-zone .callout .callout-body,
+.shipped-zone .callout .callout-title-container{
+  color:#172033 !important;
+}
+.shipped-zone .callout h1,
+.shipped-zone .callout h2,
+.shipped-zone .callout h3,
+.shipped-zone .callout h4,
+.shipped-zone .callout h5,
+.shipped-zone .callout h6,
+.shipped-zone .callout strong,
+.shipped-zone .callout b{
+  color:#0f172a !important;
+}
+.shipped-zone .callout :not(pre)>code{
+  color:#312e81 !important;
+  background:#eef2ff !important;
+  border-color:#c7d2fe !important;
+}
+.shipped-zone .callout a{
+  color:#0369a1 !important;
+}
+
+/* Details / folded code */
+.shipped-zone details{
+  color:var(--ship-text) !important;
+  border-color:#475569 !important;
+}
+.shipped-zone details>summary{
+  color:#f8fafc !important;
+  background:#17233a !important;
+}
+
+/* Forms / interactive controls if any appear in the handoff */
+.shipped-zone label,
+.shipped-zone .form-label{
+  color:#f1f5f9 !important;
+}
+.shipped-zone input,
+.shipped-zone select,
+.shipped-zone button{
+  color:#0f172a;
+}
+
+/* Production badge */
 .shipped-badge{
-  display:inline-block;padding:.25rem .65rem;border-radius:999px;
-  background:#0ea5e9;color:white;font-size:.76rem;font-weight:800;
-  letter-spacing:.08em;text-transform:uppercase;margin-bottom:.45rem
+  display:inline-block;
+  padding:.25rem .65rem;
+  border-radius:999px;
+  background:#0284c7;
+  color:#ffffff !important;
+  font-size:.76rem;
+  font-weight:850;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  margin-bottom:.45rem;
 }
-@media(max-width:760px){.shipped-zone{margin-left:0;margin-right:0}}
+
+/* Explicit artifact contract: readable and visually distinct. */
+.shipped-contract{
+  margin:.85rem 0 1rem;
+  padding:.75rem .9rem;
+  border:1px solid #475569;
+  border-radius:12px;
+  background:#020617;
+  color:#fef3c7 !important;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:.92rem;
+  line-height:1.55;
+  overflow-x:auto;
+}
+
+/* Keep the same deliberate dark handoff in light/dark site themes.
+   These selectors also protect against Bootstrap theme overrides. */
+html[data-bs-theme="light"] .shipped-zone,
+html[data-bs-theme="dark"] .shipped-zone,
+body.quarto-light .shipped-zone,
+body.quarto-dark .shipped-zone{
+  color:var(--ship-text) !important;
+}
+
+@media(max-width:760px){
+  .shipped-zone{margin-left:0;margin-right:0}
+}
+
+/* Theme-safe text for the article's light teaching panels. */
+.ts-intuition,
+.ts-symbols,
+.ts-compare>div{
+  color:#1f2937;
+}
+.ts-intuition p,.ts-intuition li,.ts-intuition strong,.ts-intuition b,
+.ts-symbols p,.ts-symbols li,.ts-symbols strong,.ts-symbols b,
+.ts-compare>div p,.ts-compare>div li,.ts-compare>div strong,.ts-compare>div b{
+  color:#1f2937;
+}
+.ts-intuition :not(pre)>code,
+.ts-symbols :not(pre)>code,
+.ts-compare>div :not(pre)>code{
+  color:#312e81;
+  background:#eef2ff;
+}
+html[data-bs-theme="dark"] .ts-intuition,
+html[data-bs-theme="dark"] .ts-symbols,
+html[data-bs-theme="dark"] .ts-compare>div,
+body.quarto-dark .ts-intuition,
+body.quarto-dark .ts-symbols,
+body.quarto-dark .ts-compare>div{
+  color:#1f2937 !important;
+}
+
 </style>
 
 
@@ -1262,6 +1494,7 @@ Each release gets a new folder; promoting or rolling back a model is just moving
 
 ::: {.shipped-zone}
 <div class="shipped-badge">Production handoff · different role</div>
+<!-- shipped-zone uses explicit contrast-safe colors for both Quarto themes -->
 
 ## 🚚 9. Shipped: loading the model and forecasting
 
@@ -1274,7 +1507,7 @@ Everything above this point was about **learning a model**. This section is inte
 
 The serving application should not know how ARIMAX was trained. It should know only the **artifact contract**:
 
-`inputs → feature builder → released parameters → forecast → staffing output`
+<div class="shipped-contract">inputs → feature builder → released parameters → forecast → staffing output</div>
 
 This separation prevents accidental retraining, hidden notebook state and training-only features from leaking into production.
 :::
