@@ -1,0 +1,213 @@
+---
+title: "Model Deployment II — Docker, GitHub, and a Public Scalable Deployment"
+subtitle: "Containerizing the Flask API and Streamlit frontend from Part I"
+author: "MLStation"
+format:
+  html:
+    toc: true
+    code-fold: false
+    code-copy: true
+    smooth-scroll: true
+execute:
+  echo: true
+  warning: false
+  freeze: auto
+---
+
+> **Continuation of Part I.** We already have `artifacts/energy_model.joblib`, a Flask backend on port 8000, and a Streamlit frontend on port 8501. Now we make the environment reproducible and deployable.
+
+## 1. Why Docker?
+
+A container image packages application code, Python runtime and dependencies. The image is a reproducible recipe; a container is a running instance of that image. Docker does **not** make a model accurate or automatically scalable—it makes the runtime portable.
+
+```text
+Browser → Streamlit container → HTTP → Flask/Gunicorn container → model.joblib
+                :8501                         :8000
+```
+
+## 2. Backend container
+
+Create `backend/Dockerfile`:
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY artifacts ./artifacts
+COPY backend ./backend
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "2", "backend.app:app"]
+```
+
+Why Gunicorn? Flask's development server is for development. Gunicorn manages production WSGI worker processes. A simple starting concurrency is roughly
+
+$$C \approx W\times T,$$
+
+where $W$ is workers and $T$ threads/worker. This is a capacity knob, not a guarantee: CPU, memory, model latency and request mix still determine throughput.
+
+## 3. Frontend container
+
+Create `frontend/Dockerfile`:
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY frontend ./frontend
+EXPOSE 8501
+CMD ["streamlit", "run", "frontend/streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+```
+
+## 4. Compose the services
+
+Create `compose.yaml`:
+
+```yaml
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+```
+
+`backend` is a DNS name inside the Compose network. This is why the containerized frontend must not use `127.0.0.1:8000`: inside the frontend container, `127.0.0.1` means the frontend container itself.
+
+Run:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8501`. Test the API with `curl http://localhost:8000/health`.
+
+Stop with `docker compose down`.
+
+## 5. Add a `.dockerignore`
+
+```text
+.git
+.venv
+__pycache__
+*.pyc
+.ipynb_checkpoints
+.env
+.DS_Store
+```
+
+## 6. GitHub workflow and credentials
+
+Commit the container files:
+
+```bash
+git add backend/Dockerfile frontend/Dockerfile compose.yaml .dockerignore
+git commit -m "Containerize frontend and backend"
+git push
+```
+
+For normal GitHub use, prefer browser/OAuth login, SSH keys, GitHub CLI, or a fine-grained personal access token. A token belongs in a credential store or secret—not in a notebook cell or repository.
+
+### Optional GitHub CLI
+
+```bash
+gh auth login
+gh repo create energy-demand-deployment --public --source=. --remote=origin --push
+```
+
+## 7. Choosing a server
+
+For a small educational ML service, ask five questions: Does it run containers? Can it scale to zero? Is HTTPS automatic? How are secrets handled? What is the cost when idle?
+
+For this tutorial, **Google Cloud Run is the scalable reference deployment** because it runs containers, can scale with requests, and has a monthly free usage allowance. Render and Railway are easier PaaS alternatives; Part III compares them.
+
+## 8. Deploy the Flask backend to Cloud Run
+
+Prerequisites: a Google Cloud account/project, billing enabled, and the `gcloud` CLI installed/authenticated.
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com
+```
+
+From the repository root, deploy directly from source using the backend Dockerfile most predictably by first building an image with Cloud Build:
+
+```bash
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/energy-api -f backend/Dockerfile .
+gcloud run deploy energy-api \
+  --image gcr.io/YOUR_PROJECT_ID/energy-api \
+  --region us-central1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 512Mi \
+  --cpu 1 \
+  --min-instances 0 \
+  --max-instances 5 \
+  --port 8000
+```
+
+Cloud Run prints an HTTPS service URL. Verify:
+
+```bash
+curl https://YOUR_BACKEND_URL/health
+```
+
+### Scaling intuition
+
+If mean service time is $s$ seconds and one instance safely handles concurrency $c$, a rough service capacity is $c/s$ requests/second. Autoscaling adds instances as demand rises, but cold starts, CPU saturation, memory and downstream dependencies matter. Load testing—not algebra alone—sets production limits.
+
+## 9. Deploy the frontend
+
+### Path A — simplest educational frontend: Streamlit Community Cloud
+
+Push `frontend/streamlit_app.py` and dependencies to GitHub, create an app in Streamlit Community Cloud, and set `API_URL` to the public Cloud Run backend URL. If you store the URL as a Streamlit secret instead of an environment variable, adapt the Python code to read `st.secrets`.
+
+For a public educational project, this gives students a shareable Streamlit URL while Cloud Run serves the independently scalable API.
+
+### Path B — containerize Streamlit on Cloud Run too
+
+```bash
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/energy-ui -f frontend/Dockerfile .
+gcloud run deploy energy-ui \
+  --image gcr.io/YOUR_PROJECT_ID/energy-ui \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars API_URL=https://YOUR_BACKEND_URL \
+  --port 8501
+```
+
+Now both components are public containers and can scale independently.
+
+## 10. Production checklist
+
+Before calling a demo “production,” add authentication/authorization where needed, input schemas, request-size limits, structured logs, monitoring, model/data versioning, automated tests, CI/CD, rollback strategy, rate limiting, and a policy for retraining/drift. Never expose an author/admin route merely because it is named “author”; privileged actions require real authentication.
+
+## 11. The finished flow
+
+```text
+GitHub ──source──▶ build/container registry
+                    │
+                    ├──▶ Cloud Run Flask API ──▶ model artifact
+                    │          ▲
+                    │          │ HTTPS
+                    └──▶ Streamlit UI
+                               ▲
+                               │
+                             Browser
+```
+
+**Part III** asks a different question: if GitHub is source control rather than hosting, where can a learner cheaply host the application today, and when should each option be chosen?

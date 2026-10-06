@@ -1,0 +1,122 @@
+---
+title: "Model Deployment III — Where Should You Host an ML App?"
+subtitle: "Free and low-cost alternatives, architecture choices, and a practical decision guide"
+author: "MLStation"
+format:
+  html:
+    toc: true
+    code-fold: false
+    code-copy: true
+    smooth-scroll: true
+execute:
+  echo: true
+  warning: false
+  freeze: auto
+---
+
+> **Continuation of Parts I–II.** We have a Flask inference API, a Streamlit client, Dockerfiles, and a GitHub repository. This article separates four concepts that beginners often mix together: **source hosting, build systems, container registries, and runtime hosting**.
+
+## 1. GitHub is not the same thing as an application server
+
+GitHub is excellent for Git repositories, collaboration and CI/CD. GitHub Pages serves static sites. An ML API needs a Python process somewhere; a Streamlit app also needs a Python process. That “somewhere” is the runtime host.
+
+## 2. Hosting landscape (verify before publishing)
+
+Cloud pricing changes. Treat this table as a snapshot and verify provider pricing when you deploy.
+
+| Platform | Best fit | Free/cheap story | Docker | Main caveat |
+|---|---|---|---|---|
+| Streamlit Community Cloud | Streamlit teaching/demo UI | Free public app workflow | Not the main workflow | Streamlit-centric; backend architecture is limited if everything is bundled |
+| Render | Beginner-friendly web service/API | Free web services available for hobby/testing | Yes | Free services have limitations and are not for production |
+| Railway | Very easy multi-service projects | Free tier/credit, low-cost Hobby | Yes | Usage-based; watch monthly spend |
+| Google Cloud Run | Scalable container API/UI | Generous monthly free usage allowance | Yes | Requires cloud project/billing concepts |
+| Koyeb | Small container/web service | One constrained free instance; cheap Eco tiers | Yes | Free instance has low CPU/RAM and scales down |
+| Hugging Face Spaces | ML demos/community | CPU Basic has no hourly charge, **but new compute Spaces require a paid plan** | Docker supported | No longer universally “free to create” for compute Spaces |
+
+### Important Hugging Face update
+
+Older tutorials often say “Hugging Face Spaces is free.” The current documentation is more nuanced: CPU Basic itself has no hourly charge, but creating a new compute Space (Gradio or Docker) requires a paid plan; static Spaces remain free. That makes it less attractive as the universal zero-cost recommendation it once was.
+
+## 3. Recommendations for this series
+
+For **absolute beginners**, use **Streamlit Community Cloud** when the app can be a single Streamlit process. It is the shortest route from a GitHub repository to a public educational UI.
+
+For the **decoupled Flask + Streamlit architecture**, a strong teaching combination is **Cloud Run for Flask + Streamlit Community Cloud for the UI**. It demonstrates a real API boundary without requiring two always-on servers.
+
+For a **single-provider beginner deployment**, Render is attractive because a Python web service can be connected to a Git repository with little infrastructure work. For a low-cost hobby container, Railway and Koyeb are also worth comparing.
+
+For **scaling concepts**, use Cloud Run: container deployment, scale-to-zero, concurrency, revisions and max-instance controls map naturally to production ideas.
+
+## 4. Render: simple Flask deployment
+
+Add a production command:
+
+```bash
+gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 backend.app:app
+```
+
+In Render, create a Web Service from the GitHub repository, select the repository, choose Python or Docker, set the build/start commands, and deploy. If the frontend is a second service, set its `API_URL` environment variable to the backend's public HTTPS URL.
+
+Do not hard-code credentials. Add secrets/environment variables in the provider dashboard.
+
+## 5. Railway: convenient multi-service deployment
+
+A common structure is one Railway project with two services pointing at the same GitHub repository: one service builds `backend/Dockerfile`; the other builds `frontend/Dockerfile`. Give the frontend an `API_URL` variable containing the backend service URL.
+
+Railway is particularly convenient for learners who want less cloud infrastructure vocabulary than a hyperscaler, but the free/paid allowance is usage-based, so teach students to set limits and inspect usage.
+
+## 6. Koyeb: tiny free service or inexpensive Eco compute
+
+Koyeb can deploy a web service from GitHub or a container. Its free instance is appropriate for a small demo, not a serious production API. Because ML libraries can consume substantial RAM, check model size and startup memory before choosing a 512 MB instance.
+
+## 7. Cloud Run: when “scalable” matters
+
+A request-driven serverless container is a good match for stateless inference. Keep the model artifact inside the image for this tutorial. For larger models, use object storage/model registries and deliberately manage startup time and versioning.
+
+A useful cost model is
+
+$$\text{monthly cost}\approx \text{CPU-seconds}\,p_c + \text{GiB-seconds}\,p_m + \text{requests}\,p_r + \text{egress},$$
+
+minus any applicable free-tier allowances. Scale-to-zero is valuable for teaching sites because idle time need not imply an always-running VM.
+
+## 8. What about a VPS?
+
+A small virtual private server can be cheap and predictable, but you become responsible for OS patching, firewall rules, reverse proxy, TLS, process supervision, logs and scaling. It is excellent material **after** students understand managed deployment, not the first deployment path.
+
+## 9. Source-control alternatives to GitHub
+
+If by “alternative to GitHub” you literally mean **where the code repository lives**, GitLab and Bitbucket are mainstream choices. If you mean **where the application runs**, use the runtime hosts above. Keeping these two questions separate prevents a great deal of deployment confusion.
+
+## 10. A decision tree
+
+```text
+Do you only need a public Streamlit teaching demo?
+ └─ Yes → Streamlit Community Cloud
+ └─ No
+    Do you want the easiest managed web-service experience?
+     └─ Yes → Render / Railway
+     └─ No
+        Do you want serverless containers + scaling concepts?
+         └─ Yes → Google Cloud Run
+         └─ No
+            Is a tiny hobby service enough?
+             └─ Yes → Koyeb free/Eco
+             └─ No → paid managed service or VPS/Kubernetes, based on requirements
+```
+
+## 11. Dependable deployment means more than “the URL works”
+
+A mature system separates code version, model version and data version; validates inputs; records latency/error metrics; protects secrets; limits abuse; supports rollback; and monitors drift. A deployment tutorial should teach the reader to ask: **What happens when inputs are malformed, traffic doubles, the model changes, or the server restarts?**
+
+## 12. Suggested exercises
+
+1. Add schema validation and return HTTP 422 for invalid feature ranges.
+2. Add a `/metrics`-style latency summary without logging personal input data.
+3. Compare one large batch request with many single requests and measure latency.
+4. Add a second model version and implement a safe rollback.
+5. Load-test locally and explain where throughput stops scaling linearly.
+6. Deploy the same container to two providers and compare cold-start time and cost.
+
+## Series conclusion
+
+The central lesson is that model deployment is a **systems problem around a statistical object**. The model is only one artifact. A useful ML product also needs a stable feature contract, reproducible preprocessing, an inference interface, a client, environment isolation, source control, runtime infrastructure, observability and a safe update path.
