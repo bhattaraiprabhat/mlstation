@@ -1,5 +1,5 @@
 ---
-title: "Agentic AI with Multi-Agent Systems"
+title: "Agentic AI with Multi-Agent Systems — Part I"
 subtitle: "A Practical Guide to Designing an AI Incident-Control Team"
 description: "Learn how to design tools, agents, state, routing, review, and human escalation with LangGraph—without requiring the article itself to execute."
 format:
