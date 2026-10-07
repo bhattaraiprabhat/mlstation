@@ -1,58 +1,81 @@
 ---
 title: "Model Deployment I — From Data to a Working ML Product"
-subtitle: "Smart Building Energy Demand: EDA, Mathematics, Training, Flask API, and Streamlit UI"
+subtitle: "Smart Building Energy Demand: Simulated Data, EDA, XGBoost, Flask API, and Streamlit"
 author: "MLStation"
 format:
   html:
     toc: true
-    code-fold: false
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
     code-copy: true
     smooth-scroll: true
+    theme: cosmo
 execute:
   echo: true
   warning: false
+  message: false
   freeze: auto
+jupyter: python3
 ---
 
-> **Series map.** Part I builds a complete model and a decoupled application locally. Part II containerizes it and deploys it. Part III compares low-cost hosting alternatives and production trade-offs.
+<style>
+.hero {background:linear-gradient(135deg,#0b3d91,#6a11cb);color:white;padding:2rem;border-radius:18px;margin:1rem 0 1.5rem;box-shadow:0 8px 24px #0002}.hero h2{color:white;margin-top:0}.concept{border-left:6px solid #6a11cb;background:#f5f0ff;padding:1rem 1.2rem;border-radius:10px;margin:1rem 0}.action{border-left:6px solid #0077b6;background:#eef8ff;padding:1rem 1.2rem;border-radius:10px;margin:1rem 0}.result{border-left:6px solid #16a34a;background:#effcf3;padding:1rem 1.2rem;border-radius:10px;margin:1rem 0}.warningbox{border-left:6px solid #f59e0b;background:#fff8e7;padding:1rem 1.2rem;border-radius:10px;margin:1rem 0}.endpoint{display:inline-block;background:#0b3d91;color:white;padding:.25rem .55rem;border-radius:7px;font-family:monospace}.navbtn{display:inline-block;padding:.65rem 1rem;margin:.25rem;background:#6a11cb;color:white!important;text-decoration:none;border-radius:9px;font-weight:700}.pipeline{font-size:1.05rem;background:#0f172a;color:#e2e8f0;padding:1.1rem;border-radius:12px;overflow:auto}.smallnote{color:#475569;font-size:.92rem}
+</style>
 
-## What we are building
+<div class="hero">
+<h2>One model. Two applications. Three user-facing API endpoints.</h2>
+<p>We will build a complete machine-learning product that predicts the next hour's electricity demand of a commercial building. Nothing important is hidden behind “assume the API exists”: we generate the data, inspect it, train XGBoost, save the fitted pipeline, load it in Flask, expose an API, and build the complete Streamlit frontend.</p>
+</div>
 
-A model that predicts **next-hour electricity demand (kWh)** for a commercial building. Unlike a toy `model.predict()` demo, we will create the entire path
+<a class="navbtn" href="model-deployment-part-2.html">Continue to Part II → Docker & Cloud Deployment</a>
 
-`synthetic data → EDA → fitted preprocessing → model → serialized artifact → Flask API → Streamlit client`.
+## 1. What are we building?
 
-The use case is intentionally synthetic so the tutorial is reproducible and does not depend on a proprietary dataset.
-
-### Architecture
+<div class="concept">
+<strong>Frontend vs backend.</strong> The <strong>frontend</strong> is what a human sees and operates. Streamlit renders forms, buttons, tables and charts. The <strong>backend</strong> owns the trained model and business logic. Flask receives HTTP requests, validates them, calls the model, and returns JSON. The frontend never needs to know how XGBoost is implemented.
+</div>
 
 ```text
-                       ┌─────────────────────────────┐
-                       │      training/train.py      │
-                       │ data → pipeline → joblib    │
-                       └──────────────┬──────────────┘
-                                      │ model.joblib
-                                      ▼
-┌───────────────┐ HTTP/JSON  ┌──────────────────────┐
-│ Streamlit UI  │───────────▶│ Flask inference API  │
-│ :8501         │            │ :8000                │
-└───────────────┘            ├──────────────────────┤
-                             │ GET  /api/v1/meta    │ author/model metadata
-                             │ POST /api/v1/predict │ one observation
-                             │ POST /api/v1/predict-batch │ CSV batch
-                             │ GET  /health         │ operational health
-                             └──────────────────────┘
+                    TRAINING TIME
+ simulated CSV ──> preprocessing ──> XGBoost ──> SAVE fitted pipeline
+                                                │
+                                                ▼
+                               artifacts/energy_xgb_pipeline.joblib
+                                                │
+                    INFERENCE TIME              │ LOAD ONCE
+                                                ▼
+ User ──> Streamlit ──HTTP──> Flask API ──> fitted model ──> prediction
+              │                  │
+              │                  ├── GET  /api/v1/meta
+              │                  ├── POST /api/v1/predict
+              │                  └── POST /api/v1/predict-batch
+              └── renders prediction, tables and charts
 ```
 
-## 1. Reproducible project
+### The three endpoints
 
-Create this structure:
+| Endpoint | Intended user | What it does |
+|---|---|---|
+| <span class="endpoint">GET /api/v1/meta</span> | Author / developer / UI | Returns model name, version, features, units and training metrics. It lets the UI discover what model is serving predictions. |
+| <span class="endpoint">POST /api/v1/predict</span> | Individual user | Accepts one building observation as JSON and returns one next-hour energy prediction. |
+| <span class="endpoint">POST /api/v1/predict-batch</span> | Batch user / analyst | Accepts a CSV file containing many buildings and returns a CSV with predictions. |
+
+We also use `GET /health`. It is an **operational** endpoint for Docker/cloud health checks, not one of our three audience-facing endpoints.
+
+## 2. Project structure
 
 ```text
 energy-demand-deployment/
 ├── data/
+│   └── building_energy.csv
 ├── artifacts/
+│   ├── energy_xgb_pipeline.joblib
+│   ├── metrics.json
+│   └── test_predictions.csv
 ├── training/
+│   ├── simulate_data.py
 │   └── train.py
 ├── backend/
 │   └── app.py
@@ -62,12 +85,13 @@ energy-demand-deployment/
 └── README.md
 ```
 
-`requirements.txt`:
+<div class="action"><strong>New libraries.</strong> <code>xgboost</code> supplies our gradient-boosted trees; <code>joblib</code> serializes the complete fitted pipeline; <code>Flask</code> exposes Python functions over HTTP; <code>requests</code> lets Streamlit call Flask; <code>Plotly</code> gives interactive charts; and <code>Streamlit</code> builds the browser UI.</div>
 
-```text
+```{.text filename="requirements.txt"}
 pandas>=2.2,<3
 numpy>=2.0,<3
 scikit-learn>=1.6,<2
+xgboost>=3.0,<4
 joblib>=1.4,<2
 flask>=3.1,<4
 gunicorn>=23,<24
@@ -76,60 +100,74 @@ requests>=2.32,<3
 plotly>=6,<7
 ```
 
-Install with `python -m pip install -r requirements.txt`.
+Install once:
 
-## 2. Generate a new dataset
+```{.bash}
+python -m pip install -r requirements.txt
+```
 
-We simulate a physically plausible relationship. For observation $i$,
+## 3. Our simulated dataset
+
+<div class="warningbox"><strong>This dataset is simulated.</strong> It is deliberately generated for teaching. It does not contain real customer, utility or building records. Because we know the data-generating mechanism, we can create nonlinear relationships that make model choice meaningful.</div>
+
+Each row describes one building-hour. The target is `energy_kwh`: electricity expected during the **next hour**.
+
+| Column | Meaning | Type |
+|---|---|---|
+| `building_type` | office, school, retail, clinic | categorical |
+| `day_of_week` | Mon–Sun | categorical |
+| `hour` | hour of day, 0–23 | integer |
+| `floor_area_m2` | building floor area | numeric |
+| `outdoor_temp_c` | outdoor temperature | numeric |
+| `humidity_pct` | relative humidity | numeric |
+| `occupancy` | estimated people present | numeric |
+| `previous_hour_kwh` | most recent observed demand | numeric |
+| `energy_kwh` | **target:** next-hour demand | numeric |
+
+A simplified data-generating equation is
 
 $$
-y_i = 18 + 0.0045A_i + 1.8O_i + 0.55H_i + C_i + \epsilon_i,
+Y = 18 + 0.0045A + 1.8O + 0.55H + 0.38L + C_{type} + g(T) + h(t) + \epsilon,
 $$
 
-where $A$ is floor area, $O$ occupancy, $H$ humidity, and $C_i$ collects nonlinear cooling/heating, hour-of-day and building-type effects. Noise $\epsilon_i\sim\mathcal N(0,6^2)$ makes the task nontrivial.
+where $A$ is area, $O$ occupancy, $H$ humidity, $L$ previous-hour load, $g(T)$ is nonlinear heating/cooling demand, $h(t)$ is a daily-cycle effect, and $\epsilon\sim N(0,6^2)$.
 
-Save as `training/train.py`:
+### Generate the CSV
 
-```python
+The next program creates 6,000 synthetic observations, deliberately adds a small amount of missingness, and writes `data/building_energy.csv`.
+
+```{python}
+#| label: simulate-data
+#| code-fold: true
+#| code-summary: "Show code — simulate and save the teaching dataset"
 from pathlib import Path
-import json
-import joblib
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path.cwd()
 DATA = ROOT / "data"
-ART = ROOT / "artifacts"
 DATA.mkdir(exist_ok=True)
-ART.mkdir(exist_ok=True)
-RNG = np.random.default_rng(42)
+rng = np.random.default_rng(42)
 N = 6000
 
-hour = RNG.integers(0, 24, N)
-day = RNG.choice(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], N)
-building_type = RNG.choice(["office","school","retail","clinic"], N,
+hour = rng.integers(0, 24, N)
+day = rng.choice(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], N)
+building_type = rng.choice(["office","school","retail","clinic"], N,
                            p=[0.45,0.20,0.22,0.13])
-floor_area_m2 = np.round(RNG.lognormal(np.log(2200), .48, N), 1)
-outdoor_temp_c = np.clip(RNG.normal(22, 8, N), -5, 43)
-humidity_pct = np.clip(RNG.normal(55, 17, N), 15, 98)
+floor_area_m2 = np.round(rng.lognormal(np.log(2200), .48, N), 1)
+outdoor_temp_c = np.clip(rng.normal(22, 8, N), -5, 43)
+humidity_pct = np.clip(rng.normal(55, 17, N), 15, 98)
 weekday = np.isin(day, ["Mon","Tue","Wed","Thu","Fri"]).astype(int)
 open_hour = ((hour >= 7) & (hour <= 19)).astype(int)
-occupancy = np.maximum(0, (floor_area_m2/28) * weekday * open_hour + RNG.normal(4,8,N))
-occupancy = np.round(occupancy).astype(int)
-previous_hour_kwh = np.maximum(5, 22 + .004*floor_area_m2 + 1.5*occupancy + RNG.normal(0,10,N))
+occupancy = np.maximum(0, (floor_area_m2/28)*weekday*open_hour + rng.normal(4,8,N))
+occupancy = np.round(occupancy).astype(float)
+previous_hour_kwh = np.maximum(5, 22 + .004*floor_area_m2 + 1.5*occupancy + rng.normal(0,10,N))
 
 type_effect = pd.Series(building_type).map({"office":8,"school":3,"retail":13,"clinic":20}).to_numpy()
 cooling = 1.7*np.maximum(outdoor_temp_c-22, 0)**1.25
 heating = 1.1*np.maximum(15-outdoor_temp_c, 0)**1.18
-daily_cycle = 8*np.sin(2*np.pi*(hour-8)/24) * open_hour
-noise = RNG.normal(0, 6, N)
+daily_cycle = 8*np.sin(2*np.pi*(hour-8)/24)*open_hour
+noise = rng.normal(0, 6, N)
 energy_kwh = (18 + .0045*floor_area_m2 + 1.8*occupancy + .55*humidity_pct
               + .38*previous_hour_kwh + type_effect + cooling + heating
               + daily_cycle + noise)
@@ -143,166 +181,315 @@ df = pd.DataFrame({
     "previous_hour_kwh": np.round(previous_hour_kwh,2),
     "energy_kwh": np.round(energy_kwh,2)
 })
-# Deliberately introduce a little missingness to teach robust preprocessing.
 for c in ["humidity_pct", "occupancy"]:
-    df.loc[RNG.choice(N, int(.015*N), replace=False), c] = np.nan
+    df.loc[rng.choice(N, int(.015*N), replace=False), c] = np.nan
 
 df.to_csv(DATA / "building_energy.csv", index=False)
+print(f"Saved {len(df):,} simulated rows to {DATA / 'building_energy.csv'}")
+```
+
+### Look at the data before modeling
+
+```{python}
+#| label: show-data
+#| code-fold: true
+#| code-summary: "Show code — load the CSV and display sample rows"
+df = pd.read_csv("data/building_energy.csv")
+df.head(10)
+```
+
+<div class="result"><strong>Checkpoint.</strong> At this point the CSV exists independently of the model. That separation is intentional: data generation is one stage; model training is another.</div>
+
+## 4. Exploratory Data Analysis (EDA)
+
+EDA asks questions. Are values missing? Is the target skewed? Does demand change by building type, temperature and hour? Are relationships nonlinear?
+
+### 4.1 Data quality
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — dimensions, missing values and descriptive statistics"
+print("Shape:", df.shape)
+display(df.isna().sum().to_frame("missing_rows"))
+display(df.describe(include="all").T)
+```
+
+### 4.2 Target distribution
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — interactive histogram of next-hour demand"
+import plotly.express as px
+import plotly.graph_objects as go
+
+fig = px.histogram(df, x="energy_kwh", nbins=55, marginal="box",
+                   color_discrete_sequence=["#6a11cb"],
+                   title="Distribution of next-hour electricity demand")
+fig.update_layout(template="plotly_white", xaxis_title="Energy (kWh)", yaxis_title="Building-hours")
+fig.show()
+```
+
+### 4.3 Building types behave differently
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — vibrant box plot by building type"
+fig = px.box(df, x="building_type", y="energy_kwh", color="building_type",
+             points="outliers", title="Demand varies by building type")
+fig.update_layout(template="plotly_white", showlegend=False,
+                  xaxis_title="Building type", yaxis_title="Next-hour energy (kWh)")
+fig.show()
+```
+
+### 4.4 Temperature is nonlinear
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — temperature vs demand with interactive hover"
+sample = df.sample(1600, random_state=42)
+fig = px.scatter(sample, x="outdoor_temp_c", y="energy_kwh", color="building_type",
+                 opacity=.55, hover_data=["hour","occupancy","previous_hour_kwh"],
+                 title="Temperature and demand: one straight line is not enough")
+fig.update_layout(template="plotly_white", xaxis_title="Outdoor temperature (°C)",
+                  yaxis_title="Next-hour energy (kWh)")
+fig.show()
+```
+
+### 4.5 Daily demand cycle
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — mean hourly demand by building type"
+hourly = df.groupby(["hour","building_type"], as_index=False)["energy_kwh"].mean()
+fig = px.line(hourly, x="hour", y="energy_kwh", color="building_type", markers=True,
+              title="Average demand across the day")
+fig.update_layout(template="plotly_white", xaxis=dict(dtick=1),
+                  xaxis_title="Hour", yaxis_title="Mean next-hour energy (kWh)")
+fig.show()
+```
+
+<div class="concept"><strong>EDA → model choice.</strong> We see nonlinear temperature effects, interactions between occupancy/time/building type, and mixed numeric/categorical features. A tree ensemble is a natural candidate because trees partition feature space and naturally represent thresholds and interactions.</div>
+
+## 5. Why XGBoost?
+
+A regression tree partitions the feature space into leaves $R_1,\dots,R_J$ and predicts a constant within each leaf:
+
+$$f(x)=\sum_{j=1}^{J}w_j\,I(x\in R_j).$$
+
+Boosting builds an additive model,
+
+$$\hat y_i^{(K)}=\sum_{k=1}^{K} f_k(x_i),$$
+
+where each new tree corrects errors left by earlier trees. XGBoost minimizes a regularized objective of the form
+
+$$
+\mathcal L^{(t)}=\sum_i l(y_i,\hat y_i^{(t-1)}+f_t(x_i)) + \Omega(f_t),
+$$
+
+with a tree-complexity penalty commonly written
+
+$$\Omega(f)=\gamma T+\frac{1}{2}\lambda\sum_{j=1}^{T}w_j^2.$$
+
+`learning_rate` shrinks each tree's contribution; `max_depth` controls interaction complexity; `n_estimators` controls how many trees are added; subsampling can reduce variance.
+
+## 6. Train, evaluate, and **save the complete fitted pipeline**
+
+<div class="action"><strong>What this code does.</strong> It (1) loads the simulated CSV, (2) splits train/test data, (3) imputes missing numeric values and one-hot encodes categories, (4) fits XGBoost, (5) evaluates untouched test data, and (6) saves the <em>preprocessing + XGBoost model together</em>. Saving them together prevents training/serving preprocessing mismatch.</div>
+
+```{python}
+#| label: train-model
+#| code-fold: true
+#| code-summary: "Show code — train XGBoost, evaluate it, and SAVE the fitted pipeline"
+from pathlib import Path
+import json, joblib
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from xgboost import XGBRegressor
+
+ART = Path("artifacts")
+ART.mkdir(exist_ok=True)
+df = pd.read_csv("data/building_energy.csv")
 
 FEATURES = ["building_type","day_of_week","hour","floor_area_m2","outdoor_temp_c",
             "humidity_pct","occupancy","previous_hour_kwh"]
 TARGET = "energy_kwh"
-X, y = df[FEATURES], df[TARGET]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=42)
+NUMERIC = ["hour","floor_area_m2","outdoor_temp_c","humidity_pct","occupancy","previous_hour_kwh"]
+CATEGORICAL = ["building_type","day_of_week"]
 
-numeric = ["hour","floor_area_m2","outdoor_temp_c","humidity_pct","occupancy","previous_hour_kwh"]
-categorical = ["building_type","day_of_week"]
+X = df[FEATURES]
+y = df[TARGET]
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=.20, random_state=42
+)
+
 preprocess = ColumnTransformer([
-    ("num", Pipeline([("imputer", SimpleImputer(strategy="median")),
-                      ("scale", StandardScaler())]), numeric),
-    ("cat", Pipeline([("imputer", SimpleImputer(strategy="most_frequent")),
-                      ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]), categorical)
+    ("num", SimpleImputer(strategy="median"), NUMERIC),
+    ("cat", Pipeline([
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ]), CATEGORICAL)
 ])
-model = HistGradientBoostingRegressor(max_iter=300, learning_rate=.06,
-                                      max_leaf_nodes=25, l2_regularization=1.0,
-                                      random_state=42)
-pipeline = Pipeline([("preprocess", preprocess), ("model", model)])
+
+xgb = XGBRegressor(
+    objective="reg:squarederror",
+    n_estimators=500,
+    learning_rate=0.04,
+    max_depth=5,
+    min_child_weight=3,
+    subsample=0.85,
+    colsample_bytree=0.85,
+    reg_lambda=1.0,
+    random_state=42,
+    n_jobs=-1
+)
+
+pipeline = Pipeline([("preprocess", preprocess), ("model", xgb)])
 pipeline.fit(X_train, y_train)
 pred = pipeline.predict(X_test)
+
 metrics = {
     "mae": float(mean_absolute_error(y_test, pred)),
-    "rmse": float(mean_squared_error(y_test, pred)**0.5),
+    "rmse": float(np.sqrt(mean_squared_error(y_test, pred))),
     "r2": float(r2_score(y_test, pred)),
-    "n_train": len(X_train), "n_test": len(X_test)
+    "n_train": int(len(X_train)), "n_test": int(len(X_test)),
+    "model": "XGBRegressor", "version": "1.0.0"
 }
-joblib.dump(pipeline, ART / "energy_model.joblib")
+
+# ===== THE MODEL IS SAVED HERE =====
+MODEL_PATH = ART / "energy_xgb_pipeline.joblib"
+joblib.dump(pipeline, MODEL_PATH)
+# ===================================
+
 (ART / "metrics.json").write_text(json.dumps(metrics, indent=2))
 pd.DataFrame({"actual": y_test, "predicted": pred,
-              "residual": y_test-pred}).to_csv(ART / "test_predictions.csv", index=False)
+              "residual": y_test.to_numpy()-pred}).to_csv(
+                  ART / "test_predictions.csv", index=False)
+
 print(json.dumps(metrics, indent=2))
+print(f"SAVED fitted preprocessing + XGBoost pipeline -> {MODEL_PATH}")
 ```
 
-Run `python training/train.py`.
+<div class="result"><strong>Exactly what was saved?</strong> `joblib.dump(pipeline, ...)` serializes the fitted `ColumnTransformer` and fitted `XGBRegressor` as one object at <code>artifacts/energy_xgb_pipeline.joblib</code>. We do <em>not</em> retrain when the API starts.</div>
 
-## 3. EDA that asks questions
+### Metrics
 
-A useful EDA is not a gallery of plots. It asks whether the data support the modeling assumptions.
+For $n$ test observations:
 
-```python
-import pandas as pd
-import plotly.express as px
+$$MAE=\frac1n\sum_i|y_i-\hat y_i|,$$
 
-df = pd.read_csv("data/building_energy.csv")
-print(df.shape)
-print(df.isna().mean().sort_values(ascending=False))
-print(df.describe(include="all").T)
+$$RMSE=\sqrt{\frac1n\sum_i(y_i-\hat y_i)^2},$$
 
-fig = px.scatter(df, x="outdoor_temp_c", y="energy_kwh",
-                 color="building_type", opacity=.35,
-                 title="Energy demand vs outdoor temperature")
+$$R^2=1-\frac{\sum_i(y_i-\hat y_i)^2}{\sum_i(y_i-\bar y)^2}.$$
+
+MAE is easy to interpret in kWh; RMSE penalizes large misses more strongly; $R^2$ measures improvement relative to predicting the test-set mean.
+
+### Prediction quality visualization
+
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — actual vs predicted and residual diagnostics"
+res = pd.read_csv("artifacts/test_predictions.csv")
+fig = px.scatter(res, x="actual", y="predicted", opacity=.5,
+                 color="residual", color_continuous_scale="RdBu",
+                 title="Test set: actual vs predicted demand")
+lo = min(res.actual.min(), res.predicted.min()); hi = max(res.actual.max(), res.predicted.max())
+fig.add_trace(go.Scatter(x=[lo,hi], y=[lo,hi], mode="lines", name="perfect prediction",
+                         line=dict(dash="dash", color="black")))
+fig.update_layout(template="plotly_white", xaxis_title="Actual kWh", yaxis_title="Predicted kWh")
 fig.show()
-
-hourly = df.groupby("hour", as_index=False)["energy_kwh"].mean()
-px.line(hourly, x="hour", y="energy_kwh", markers=True,
-        title="Mean demand across the day").show()
 ```
 
-The temperature relationship is deliberately nonlinear: very hot and very cold conditions both increase load. A straight line therefore cannot represent the complete conditional mean well.
-
-## 4. What the model estimates
-
-For squared-error regression, the population-optimal predictor is
-
-$$f^*(x)=\mathbb E[Y\mid X=x].$$
-
-Empirically, a learner chooses $\hat f$ to approximately minimize
-
-$$\hat R(f)=\frac1n\sum_{i=1}^{n}(y_i-f(x_i))^2.$$
-
-We report three complementary quantities:
-
-$$\mathrm{MAE}=\frac1m\sum |y_i-\hat y_i|,$$
-
-$$\mathrm{RMSE}=\sqrt{\frac1m\sum(y_i-\hat y_i)^2},$$
-
-$$R^2=1-\frac{\sum(y_i-\hat y_i)^2}{\sum(y_i-\bar y)^2}.$$
-
-MAE is easy to interpret in kWh; RMSE penalizes large misses more strongly; $R^2$ measures improvement over the test-set mean baseline. None of them proves causal validity.
-
-### Why serialize the *pipeline*?
-
-Training actually learns $\hat f(T(x))$, where $T$ includes imputation, scaling and encoding. Saving only the final regressor risks using a different $T$ at inference. Saving the fitted pipeline makes preprocessing part of the model artifact.
-
-## 5. Interactive diagnostics
-
-```python
-import pandas as pd
-import plotly.express as px
-p = pd.read_csv("artifacts/test_predictions.csv")
-px.scatter(p, x="actual", y="predicted", opacity=.45,
-           title="Predicted vs actual kWh").show()
-px.scatter(p, x="predicted", y="residual", opacity=.4,
-           title="Residual diagnostic").show()
-px.histogram(p, x="residual", nbins=50, title="Residual distribution").show()
+```{python}
+#| code-fold: true
+#| code-summary: "Show code — residual distribution"
+fig = px.histogram(res, x="residual", nbins=50, marginal="box",
+                   color_discrete_sequence=["#0077b6"], title="Residuals = actual − predicted")
+fig.add_vline(x=0, line_dash="dash")
+fig.update_layout(template="plotly_white")
+fig.show()
 ```
 
-A residual is $e_i=y_i-\hat y_i$. Patterns in residuals can reveal unmodeled structure, heteroscedasticity, drift, or bad data. A point prediction is **not** automatically a prediction interval.
+## 7. Backend: Flask owns and loads the model
 
-## 6. Flask backend: three audience-facing endpoints
+<div class="concept"><strong>Backend responsibility.</strong> Flask is the gatekeeper between the outside world and the model. It loads the artifact once when the process starts, validates request structure, converts incoming data to the same feature schema used during training, calls <code>MODEL.predict()</code>, and returns machine-readable responses.</div>
 
-Save as `backend/app.py`:
+### **This is where the saved model is loaded**
 
-```python
+Save the following complete file as `backend/app.py`.
+
+```{.python filename="backend/app.py"}
 from pathlib import Path
-import io, json, joblib, pandas as pd
-from flask import Flask, jsonify, request
+import io, json
+import joblib
+import pandas as pd
+from flask import Flask, jsonify, request, Response
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = joblib.load(ROOT / "artifacts" / "energy_model.joblib")
-METRICS = json.loads((ROOT / "artifacts" / "metrics.json").read_text())
+MODEL_PATH = ROOT / "artifacts" / "energy_xgb_pipeline.joblib"
+METRICS_PATH = ROOT / "artifacts" / "metrics.json"
+
+# ===== THE SAVED MODEL IS LOADED HERE, ONCE AT API STARTUP =====
+MODEL = joblib.load(MODEL_PATH)
+# ==============================================================
+METRICS = json.loads(METRICS_PATH.read_text())
+
 FEATURES = ["building_type","day_of_week","hour","floor_area_m2","outdoor_temp_c",
             "humidity_pct","occupancy","previous_hour_kwh"]
 app = Flask(__name__)
 
+def validate_columns(frame):
+    missing = [c for c in FEATURES if c not in frame.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    return frame[FEATURES]
+
 @app.get("/health")
 def health():
-    return jsonify(status="ok")
+    return jsonify({"status":"ok", "model_loaded": True})
 
+# Endpoint 1: AUTHOR / METADATA
 @app.get("/api/v1/meta")
 def meta():
-    return jsonify(
-        author="MLStation",
-        model="Smart Building Next-Hour Energy Predictor",
-        version="1.0.0",
-        target="energy_kwh",
-        features=FEATURES,
-        test_metrics=METRICS
-    )
+    return jsonify({
+        "project":"Smart Building Energy Demand",
+        "model":"XGBoost regression pipeline",
+        "version":METRICS["version"],
+        "target":"next-hour energy_kwh",
+        "features":FEATURES,
+        "metrics":METRICS
+    })
 
+# Endpoint 2: INDIVIDUAL USER
 @app.post("/api/v1/predict")
 def predict_one():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify(error="Send one JSON object."), 400
-    missing = [c for c in FEATURES if c not in payload]
-    if missing:
-        return jsonify(error="Missing required features", missing=missing), 400
-    row = pd.DataFrame([{c: payload[c] for c in FEATURES}])
-    yhat = float(MODEL.predict(row)[0])
-    return jsonify(predicted_energy_kwh=round(yhat, 2), model_version="1.0.0")
+    try:
+        payload = request.get_json(force=True)
+        frame = validate_columns(pd.DataFrame([payload]))
+        prediction = float(MODEL.predict(frame)[0])
+        return jsonify({"prediction_kwh": round(prediction, 2)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
+# Endpoint 3: BATCH USER
 @app.post("/api/v1/predict-batch")
 def predict_batch():
-    if "file" not in request.files:
-        return jsonify(error="Upload a CSV using form field 'file'."), 400
-    df = pd.read_csv(io.BytesIO(request.files["file"].read()))
-    missing = [c for c in FEATURES if c not in df.columns]
-    if missing:
-        return jsonify(error="Missing CSV columns", missing=missing), 400
-    pred = MODEL.predict(df[FEATURES])
-    out = df.copy()
-    out["predicted_energy_kwh"] = pred.round(2)
-    return jsonify(records=out.to_dict(orient="records"), count=len(out))
+    try:
+        if "file" not in request.files:
+            raise ValueError("Upload a CSV using form field 'file'.")
+        frame = pd.read_csv(request.files["file"])
+        model_frame = validate_columns(frame.copy())
+        frame["predicted_energy_kwh"] = MODEL.predict(model_frame).round(2)
+        output = frame.to_csv(index=False)
+        return Response(output, mimetype="text/csv",
+                        headers={"Content-Disposition":"attachment; filename=predictions.csv"})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)
@@ -310,91 +497,184 @@ if __name__ == "__main__":
 
 Run it from the project root:
 
-```bash
+```{.bash}
 python backend/app.py
 ```
 
-Test it:
+### Test the API without Streamlit
 
-```bash
-curl http://127.0.0.1:8000/api/v1/meta
-curl -X POST http://127.0.0.1:8000/api/v1/predict \
+```{.bash}
+curl http://localhost:8000/api/v1/meta
+```
+
+```{.bash}
+curl -X POST http://localhost:8000/api/v1/predict \
   -H "Content-Type: application/json" \
-  -d '{"building_type":"office","day_of_week":"Tue","hour":14,"floor_area_m2":2500,"outdoor_temp_c":32,"humidity_pct":62,"occupancy":80,"previous_hour_kwh":210}'
+  -d '{"building_type":"office","day_of_week":"Tue","hour":14,"floor_area_m2":2500,"outdoor_temp_c":31,"humidity_pct":58,"occupancy":72,"previous_hour_kwh":165}'
 ```
 
-## 7. Streamlit frontend
+<div class="result"><strong>Separation achieved.</strong> The model artifact belongs to the backend. Streamlit will call HTTP endpoints; it will <em>not</em> import XGBoost or load the `.joblib` file.</div>
 
-Save as `frontend/streamlit_app.py`:
+## 8. Frontend: complete Streamlit application
 
-```python
-import os, requests, pandas as pd, plotly.express as px, streamlit as st
+<div class="concept"><strong>Frontend responsibility.</strong> Streamlit gathers human input, sends requests, handles success/error states, and visualizes returned results. This means the UI could later be replaced by React, a mobile app, or another client without retraining the model.</div>
 
-API = os.getenv("API_URL", "http://127.0.0.1:8000")
-st.set_page_config(page_title="Building Energy Predictor", page_icon="⚡", layout="wide")
-st.title("⚡ Smart Building Energy Predictor")
-st.caption("A decoupled Streamlit client calling a Flask inference API")
+Save this complete file as `frontend/streamlit_app.py`.
 
-tab1, tab2, tab3 = st.tabs(["Individual prediction", "Batch prediction", "Model card"])
+```{.python filename="frontend/streamlit_app.py"}
+import io, os
+import pandas as pd
+import plotly.express as px
+import requests
+import streamlit as st
+
+API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
+st.set_page_config(page_title="EnergyCast", page_icon="⚡", layout="wide")
+
+st.markdown("""
+<style>
+.block-container {padding-top: 2rem;}
+.hero {padding:1.4rem 1.7rem;border-radius:18px;background:linear-gradient(120deg,#0b3d91,#6a11cb);color:white;margin-bottom:1rem}
+.metric-card {padding:1rem;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff}
+</style>
+<div class="hero"><h1>⚡ EnergyCast</h1><p>Next-hour building energy prediction powered by XGBoost + Flask</p></div>
+""", unsafe_allow_html=True)
+
+@st.cache_data(ttl=60)
+def get_meta():
+    r = requests.get(f"{API_BASE}/api/v1/meta", timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+try:
+    meta = get_meta()
+    st.success(f"API connected • {meta['model']} • version {meta['version']}")
+except Exception as e:
+    st.error(f"Cannot reach backend at {API_BASE}: {e}")
+    st.stop()
+
+tab1, tab2, tab3 = st.tabs(["👤 Individual prediction", "📦 Batch prediction", "ℹ️ Model information"])
+
 with tab1:
-    c1,c2 = st.columns(2)
+    st.subheader("Describe one building-hour")
+    c1, c2, c3 = st.columns(3)
     with c1:
-        building_type=st.selectbox("Building type", ["office","school","retail","clinic"])
-        day=st.selectbox("Day", ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-        hour=st.slider("Hour",0,23,14)
-        area=st.number_input("Floor area (m²)",100.0,30000.0,2500.0)
+        building_type = st.selectbox("Building type", ["office","school","retail","clinic"])
+        day = st.selectbox("Day", ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"], index=1)
+        hour = st.slider("Hour", 0, 23, 14)
     with c2:
-        temp=st.slider("Outdoor temperature (°C)",-5.0,45.0,30.0)
-        humidity=st.slider("Humidity (%)",15.0,98.0,55.0)
-        occupancy=st.number_input("Occupancy",0,2000,80)
-        previous=st.number_input("Previous-hour demand (kWh)",0.0,5000.0,200.0)
-    if st.button("Predict next-hour demand", type="primary"):
-        payload={"building_type":building_type,"day_of_week":day,"hour":hour,
-                 "floor_area_m2":area,"outdoor_temp_c":temp,"humidity_pct":humidity,
-                 "occupancy":occupancy,"previous_hour_kwh":previous}
-        r=requests.post(f"{API}/api/v1/predict",json=payload,timeout=20)
-        if r.ok: st.metric("Predicted energy", f"{r.json()['predicted_energy_kwh']:.2f} kWh")
-        else: st.error(r.text)
+        area = st.number_input("Floor area (m²)", 100.0, 20000.0, 2500.0, 100.0)
+        temp = st.slider("Outdoor temperature (°C)", -5.0, 45.0, 31.0, .5)
+        humidity = st.slider("Humidity (%)", 15.0, 100.0, 58.0, 1.0)
+    with c3:
+        occupancy = st.number_input("Occupancy", 0, 1000, 72)
+        previous = st.number_input("Previous-hour demand (kWh)", 1.0, 2000.0, 165.0, 1.0)
+
+    payload = {"building_type":building_type,"day_of_week":day,"hour":hour,
+               "floor_area_m2":area,"outdoor_temp_c":temp,"humidity_pct":humidity,
+               "occupancy":occupancy,"previous_hour_kwh":previous}
+
+    if st.button("⚡ Predict next-hour demand", type="primary", use_container_width=True):
+        try:
+            r = requests.post(f"{API_BASE}/api/v1/predict", json=payload, timeout=15)
+            r.raise_for_status()
+            prediction = r.json()["prediction_kwh"]
+            st.metric("Predicted next-hour electricity", f"{prediction:,.2f} kWh",
+                      delta=f"{prediction-previous:+.2f} vs previous hour")
+            chart = pd.DataFrame({"period":["Previous hour","Predicted next hour"],
+                                  "kWh":[previous,prediction]})
+            fig = px.bar(chart, x="period", y="kWh", text_auto=".2f",
+                         color="period", title="Recent vs predicted demand")
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
+
 with tab2:
-    f=st.file_uploader("Upload CSV",type="csv")
-    if f and st.button("Run batch prediction"):
-        r=requests.post(f"{API}/api/v1/predict-batch",files={"file":(f.name,f.getvalue(),"text/csv")},timeout=60)
-        if r.ok:
-            out=pd.DataFrame(r.json()["records"]); st.dataframe(out,use_container_width=True)
-            st.plotly_chart(px.histogram(out,x="predicted_energy_kwh",nbins=30),use_container_width=True)
-            st.download_button("Download predictions",out.to_csv(index=False),"energy_predictions.csv","text/csv")
-        else: st.error(r.text)
+    st.subheader("Predict many rows from a CSV")
+    template = pd.DataFrame([payload])
+    st.download_button("⬇️ Download one-row CSV template", template.to_csv(index=False),
+                       "batch_template.csv", "text/csv")
+    uploaded = st.file_uploader("Upload CSV", type="csv")
+    if uploaded is not None:
+        preview = pd.read_csv(uploaded)
+        st.dataframe(preview.head(20), use_container_width=True)
+        uploaded.seek(0)
+        if st.button("📦 Run batch prediction", type="primary"):
+            files = {"file": (uploaded.name, uploaded.getvalue(), "text/csv")}
+            r = requests.post(f"{API_BASE}/api/v1/predict-batch", files=files, timeout=60)
+            if r.ok:
+                result = pd.read_csv(io.BytesIO(r.content))
+                st.success(f"Predicted {len(result):,} rows")
+                st.dataframe(result.head(50), use_container_width=True)
+                st.download_button("⬇️ Download predictions", r.content,
+                                   "predictions.csv", "text/csv")
+            else:
+                st.error(r.text)
+
 with tab3:
-    try:
-        meta=requests.get(f"{API}/api/v1/meta",timeout=10).json()
-        st.json(meta)
-    except requests.RequestException:
-        st.warning("Backend is not reachable yet.")
+    st.subheader("What model is serving this app?")
+    st.json(meta)
+    m = meta.get("metrics", {})
+    a,b,c = st.columns(3)
+    a.metric("Test MAE", f"{m.get('mae', float('nan')):.2f} kWh")
+    b.metric("Test RMSE", f"{m.get('rmse', float('nan')):.2f} kWh")
+    c.metric("Test R²", f"{m.get('r2', float('nan')):.3f}")
 ```
 
-In a second terminal:
+Run the frontend in a **second terminal**:
 
-```bash
+```{.bash}
 streamlit run frontend/streamlit_app.py
 ```
 
-The browser normally opens at `http://localhost:8501`; the frontend calls Flask at `http://127.0.0.1:8000`.
+Open the URL Streamlit prints, normally `http://localhost:8501`.
 
-## 8. Put the project in GitHub
+## 9. End-to-end request lifecycle
 
-GitHub stores source and version history; it is not the production runtime in this architecture.
+<div class="pipeline">
+1. User clicks <b>Predict</b> in Streamlit<br>
+2. Streamlit creates JSON from the form<br>
+3. requests.post(...) sends JSON to Flask<br>
+4. Flask validates columns<br>
+5. The already-loaded pipeline imputes + encodes the row<br>
+6. XGBoost predicts next-hour kWh<br>
+7. Flask returns JSON<br>
+8. Streamlit turns the response into a metric and chart
+</div>
 
-```bash
+## 10. Put Part I on GitHub
+
+GitHub stores and versions our **source code**. It is not yet running our Flask server.
+
+```{.bash}
 git init
 git add .
-git commit -m "Build end-to-end energy demand ML app"
+git commit -m "Part I: XGBoost energy prediction app"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/energy-demand-deployment.git
+git remote add origin https://github.com/YOUR-USERNAME/energy-demand-deployment.git
 git push -u origin main
 ```
 
-For HTTPS authentication, use a GitHub personal access token or a credential manager rather than placing a token in source code. Never commit `.env`, cloud keys, or access tokens.
+Do **not** commit passwords, cloud service-account keys, `.env` secrets, or private credentials. Add them to `.gitignore` and use the hosting platform's secret manager/environment variables.
 
-## 9. What Part II adds
+## 11. What Part I accomplished
 
-Part I intentionally leaves two processes running on your machine. **Part II** packages both services with Docker, connects them with Compose, uses a production WSGI server for Flask, pushes the container-ready repository to GitHub, and deploys the public application to a scalable serverless platform.
+You now have four independently understandable assets:
+
+1. `data/building_energy.csv` — simulated teaching data.
+2. `artifacts/energy_xgb_pipeline.joblib` — **saved fitted preprocessing + XGBoost model**.
+3. `backend/app.py` — **loads that model** and exposes HTTP inference.
+4. `frontend/streamlit_app.py` — calls the backend and provides the human interface.
+
+<div class="warningbox"><strong>But localhost is not deployment.</strong> If you close your laptop, nobody else can use the service. Part II packages both applications into Docker containers and publishes them to scalable cloud infrastructure.</div>
+
+<a class="navbtn" href="model-deployment-part-2.html">Part II → Docker, GitHub & Google Cloud Run</a>
+
+---
+
+### Series navigation
+
+**Part I:** Data → EDA → XGBoost → Flask → Streamlit  
+**Part II:** Docker → GitHub → Google Cloud Run  
+**Part III:** Hosting alternatives → decision framework → practical deployment choices

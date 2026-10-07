@@ -9,3 +9,4 @@ statsmodels
 seaborn
 bokeh
 plotly
+xgboost
